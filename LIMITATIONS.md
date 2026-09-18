@@ -321,9 +321,31 @@ calls that real data may overturn:
   in another. If a real benchmark numbers its conformers consistently, this refuses
   pairs it should have found - which is the safe direction, and still a cost.
 
+### Two pairing decisions that real data may argue with
+
+Both were deliberate, both are tested, and both are the sort of thing that only a
+real dataset can settle.
+
+**Stepped-field and single-field DTIMS count as two platforms.** One ion measured
+both ways is a matched set here. The case for it is that a primary value and a
+calibrated one are genuinely different measurements - the published
+reproducibility figures are separate numbers for the two - and that folding them
+together would hide the primary-versus-derived distinction from any later fit,
+whose DTIMS arm would then be regressing against a moving anchor. The case
+against it is that a benchmark reporting both would produce matched sets a reader
+expecting "DTIMS versus TWIMS" did not ask for. If that reading is wrong, the fix
+is one line in `matching._platform_of`, and a mutation will tell you the moment
+somebody changes it by accident.
+
+**Conformer indices are never paired across sources.** A matched set carrying a
+conformer index is built and then refused, because conformer numbering is
+source-local and nothing establishes that conformer 1 in one paper is conformer 1
+in another. If a real benchmark numbers its conformers consistently, this refuses
+pairs it should have found. That is the safe direction and it is still a cost.
+
 ### The fixture corpus is not a benchmark
 
-Sixteen cases, chosen to exercise one rule each. It says nothing about how often
+Eighteen cases, chosen to exercise one rule each. It says nothing about how often
 these situations occur, and no number computed over it describes anything. Its
 only claim is that each rule fires when it should and stays quiet when it should
 not.
@@ -333,7 +355,7 @@ not.
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 137 mutations against nine modules. It is smaller than the
+- the catalogue holds 138 mutations against nine modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;
