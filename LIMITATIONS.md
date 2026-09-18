@@ -343,6 +343,21 @@ source-local and nothing establishes that conformer 1 in one paper is conformer 
 in another. If a real benchmark numbers its conformers consistently, this refuses
 pairs it should have found. That is the safe direction and it is still a cost.
 
+### A protein's sequence atom carries its subunit label
+
+`ProteinAnalyte.identity_atoms()` spells its sequence atom
+`sequence:<sequence>|<subunit>`, so two records with one sequence and different
+subunit labels do not share an atom and will not be merged by matched-ion
+construction. That matches `identity_key()`, which holds them apart.
+
+There is a real argument the other way: an identical sequence IS the same
+molecule, and a subunit label is only naming. If a real dataset shows that
+laboratories label the same chain inconsistently, this refuses merges it should
+have made, and the fix is one line. It is the conservative direction - it costs a
+merge a person can still make by hand, rather than making one nobody asked for -
+and it was chosen because two identity surfaces that can contradict each other
+are a latent bug whose only symptom is a pair nobody can explain.
+
 ### The fixture corpus is not a benchmark
 
 Eighteen cases, chosen to exercise one rule each. It says nothing about how often
@@ -355,7 +370,7 @@ not.
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 138 mutations against nine modules. It is smaller than the
+- the catalogue holds 147 mutations against nine modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;
