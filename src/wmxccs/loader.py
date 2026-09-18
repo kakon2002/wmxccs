@@ -66,7 +66,7 @@ from typing import Mapping
 
 from .identity import ANALYTE_TYPES, AnalyteKind
 from .licensing import LicenceGateError, ReuseStatus, TrainingGateError, UnbackedClaimError, assert_trainable
-from .models import CCSMeasurement, CalibrationReference
+from .models import CCSMeasurement, CalibrationReference, CyclicSettings
 from .readiness import MatchedIonSet, Readiness
 
 # The analyte's fields, flattened under a prefix. `analyte_source` and
@@ -87,6 +87,13 @@ ANALYTE_COLUMNS = (
     "analyte_modifications",
     "analyte_accession",
     "analyte_subunit",
+    # glycopeptide: the glycan half, prefixed, because a glycopeptide carries the
+    # peptide fields above as well and the two must not collide
+    "analyte_attachment_site",
+    "analyte_glycan_composition",
+    "analyte_glycan_wurcs",
+    "analyte_glycan_glytoucan_ac",
+    "analyte_glycan_iupac_condensed",
     # glycan
     "analyte_composition",
     "analyte_wurcs",
@@ -113,6 +120,19 @@ ANALYTE_COLUMNS = (
 # intact-antibody and ADC variants, and duplicating its validation would let the
 # two drift apart.
 ANTIBODY_COLUMNS = ("analyte_inn", "analyte_accession", "analyte_sequence")
+
+# Cyclic IMS, stored apart from single-pass travelling wave. The prefix is
+# stripped to give the field name, so a column here maps one-for-one onto a
+# CyclicSettings field and a typo cannot land silently on a neighbouring one.
+CYCLIC_COLUMNS = (
+    "cyclic_passes",
+    "cyclic_pass_mode",
+    "cyclic_effective_path_length_m",
+    "cyclic_tw_velocity_m_per_s",
+    "cyclic_tw_height_v",
+    "cyclic_arrival_time_correction",
+    "cyclic_wrap_around",
+)
 
 CALIBRATION_REFERENCE_COLUMNS = (
     "calref_reference_set",
@@ -147,7 +167,7 @@ MEASUREMENT_COLUMNS = (
 # Read by the loader and never passed to a record: a reason a person wants the
 # row reviewed before it may train. Free text; any non-blank value holds the row.
 LOADER_COLUMNS = ("curation_flag",)
-COLUMNS = ANALYTE_COLUMNS + CALIBRATION_REFERENCE_COLUMNS + MEASUREMENT_COLUMNS + LOADER_COLUMNS
+COLUMNS = ANALYTE_COLUMNS + CYCLIC_COLUMNS + CALIBRATION_REFERENCE_COLUMNS + MEASUREMENT_COLUMNS + LOADER_COLUMNS
 
 # Without these a row cannot even be attempted. Everything else is optional and
 # falls to the model's own defaults, which for the licence means "unverified",
@@ -164,9 +184,21 @@ REQUIRED_COLUMNS = (
     "source",
 )
 
-_BOOLEAN_COLUMNS = frozenset({"analyte_has_unresolved_linkage", "analyte_has_unresolved_anomericity"})
-_INTEGER_COLUMNS = frozenset({"charge", "replicates", "conformer", "conformers_total", "analyte_dar"})
-_FLOAT_COLUMNS = frozenset({"ccs", "ccs_uncertainty"})
+_BOOLEAN_COLUMNS = frozenset(
+    {"analyte_has_unresolved_linkage", "analyte_has_unresolved_anomericity", "cyclic_wrap_around"}
+)
+_INTEGER_COLUMNS = frozenset(
+    {"charge", "replicates", "conformer", "conformers_total", "analyte_dar", "cyclic_passes"}
+)
+_FLOAT_COLUMNS = frozenset(
+    {
+        "ccs",
+        "ccs_uncertainty",
+        "cyclic_effective_path_length_m",
+        "cyclic_tw_velocity_m_per_s",
+        "cyclic_tw_height_v",
+    }
+)
 _DATE_COLUMNS = frozenset({"measured_on"})
 _STATUS_COLUMNS = frozenset({"reuse_status", "analyte_reuse_status"})
 # Semicolon-separated, because a comma is the field separator and a modification
@@ -556,7 +588,7 @@ def load_measurements(text: str, *, label: str = "measurements") -> MeasurementL
             _note(failures, failure_examples, WRONG_CELL_COUNT, f"{where}: {row.fault}")
             continue  # no cell can be trusted to be in its column, so nothing is read from it
         try:
-            analyte_fields, calref_fields, measurement_fields, flag = _coerce(row.cells)
+            analyte_fields, cyclic_fields, calref_fields, measurement_fields, flag = _coerce(row.cells)
         except _Coercion as exc:
             _note(failures, failure_examples, exc.reason, f"{where}: {exc}")
             failed.append(_as_failed(where, row.cells))
@@ -575,6 +607,8 @@ def load_measurements(text: str, *, label: str = "measurements") -> MeasurementL
             failed.append(_as_failed(where, row.cells))
             continue
         try:
+            if cyclic_fields:
+                measurement_fields["cyclic"] = CyclicSettings(**cyclic_fields)
             if calref_fields:
                 measurement_fields["calibration_reference"] = CalibrationReference(**calref_fields)
             record = CCSMeasurement(analyte=analyte, **measurement_fields)
@@ -795,6 +829,10 @@ def _as_failed(where: str, cells: Mapping[str, str]) -> _Failed:
         ("analyte_accession", "accession"),
         ("analyte_sequence", "sequence"),
         ("analyte_inn", "inn"),
+        ("analyte_glycan_composition", "glycan_composition"),
+        ("analyte_glycan_wurcs", "glycan_wurcs"),
+        ("analyte_glycan_glytoucan_ac", "glycan_glytoucan"),
+        ("analyte_glycan_iupac_condensed", "glycan_iupac"),
     ):
         if value := cells.get(column):
             atoms.add(f"{namespace}:{value}")
@@ -804,7 +842,9 @@ def _as_failed(where: str, cells: Mapping[str, str]) -> _Failed:
 # --- one row ---------------------------------------------------------------------------
 
 
-def _coerce(cells: Mapping[str, str]) -> tuple[dict[str, object], dict[str, object], dict[str, object], str | None]:
+def _coerce(
+    cells: Mapping[str, str],
+) -> tuple[dict[str, object], dict[str, object], dict[str, object], dict[str, object], str | None]:
     """Split one row into the analyte's fields, the calibration reference's, the measurement's, and a flag.
 
     A blank cell is absent, so the model's default applies. Numbers, booleans and
@@ -813,6 +853,7 @@ def _coerce(cells: Mapping[str, str]) -> tuple[dict[str, object], dict[str, obje
     refused there with its own message, which is where a reader will look for it.
     """
     analyte: dict[str, object] = {}
+    cyclic: dict[str, object] = {}
     calref: dict[str, object] = {}
     measurement: dict[str, object] = {}
     flag: str | None = None
@@ -849,6 +890,8 @@ def _coerce(cells: Mapping[str, str]) -> tuple[dict[str, object], dict[str, obje
 
         if column in ANALYTE_COLUMNS:
             analyte[column[len(ANALYTE_PREFIX) :]] = value
+        elif column in CYCLIC_COLUMNS:
+            cyclic[column[len("cyclic_") :]] = value
         elif column in CALIBRATION_REFERENCE_COLUMNS:
             calref[column[len("calref_") :]] = value
         elif column in MEASUREMENT_COLUMNS:
@@ -856,7 +899,7 @@ def _coerce(cells: Mapping[str, str]) -> tuple[dict[str, object], dict[str, obje
         elif column == "curation_flag":
             flag = text
         # an unrecognised column was already reported from the header; its cells are ignored
-    return analyte, calref, measurement, flag
+    return analyte, cyclic, calref, measurement, flag
 
 
 def _first_line(exc: BaseException) -> str:

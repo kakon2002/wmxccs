@@ -27,6 +27,9 @@ Sections:
   [S] sources.py    - the registry and the claim checks
   [D] loader.py     - reading a file without losing or inventing a row
   [K] readiness.py  - what refuses and what merely warns
+  [C] models.py     - cyclic ion mobility (M1)
+  [G] identity.py   - the glycopeptide (M1)
+  [X] matching.py   - matched-ion construction (M2)
 """
 
 from __future__ import annotations
@@ -602,6 +605,171 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="loader.py",
         find='        for atom in atoms or (f"unidentified:{where}",):',
         replace='        for atom in atoms or ("unidentified",):',
+    ),
+    # --- [C] models.py: cyclic ion mobility (M1) -------------------------------
+    Mutation(
+        label="[C] a cyclic record may omit its cyclic settings, so it cannot be told from single-pass TWIMS",
+        file="models.py",
+        find="        if self.ims_type is IMSType.CYCLIC and self.cyclic is None:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[C] cyclic settings are accepted on a platform that has no passes",
+        file="models.py",
+        find="        if self.ims_type is not IMSType.CYCLIC and self.cyclic is not None:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[C] the pass count leaves the calibration group, so six passes pool with one",
+        file="models.py",
+        find="            None if self.cyclic is None else (self.cyclic.passes, str(self.cyclic.pass_mode)),",
+        replace="            None,",
+    ),
+    Mutation(
+        label="[C] a pass count and a pass mode that contradict each other are accepted",
+        file="models.py",
+        find="        if self.pass_mode is not PassMode.UNSTATED and self.pass_mode is not expected:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[C] a multipass value that never says whether ions lapped stops blocking training",
+        file="models.py",
+        find="        if self.is_multipass and self.wrap_around is None:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[C] wrap-around with no correction recorded stops blocking training",
+        file="models.py",
+        find="        if self.wrap_around is True and self.arrival_time_correction is None:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[C] a cyclic record stops reporting its cyclic settings' blockers",
+        file="models.py",
+        find='        cyclic = getattr(self, "cyclic", None)\n        if cyclic is not None:',
+        replace='        cyclic = getattr(self, "cyclic", None)\n        if False:',
+    ),
+    Mutation(
+        label="[C] a single pass is read as multipass",
+        file="models.py",
+        find="            return self.passes > 1",
+        replace="            return self.passes >= 1",
+    ),
+    # --- [G] identity.py: the glycopeptide (M1) --------------------------------
+    Mutation(
+        label="[G] a glycopeptide's key drops the attachment site, pooling two sites of one backbone",
+        file="identity.py",
+        find="            self.modifications,\n            self.attachment_site,\n            *self._glycan_key(),",
+        replace="            self.modifications,\n            *self._glycan_key(),",
+    ),
+    Mutation(
+        label="[G] a glycopeptide's key drops the glycan, pooling every glycoform of one backbone",
+        file="identity.py",
+        find="            self.attachment_site,\n            *self._glycan_key(),\n        )",
+        replace="            self.attachment_site,\n        )",
+    ),
+    Mutation(
+        label="[G] a glycopeptide emits a bare peptide atom, so it merges with its own backbone",
+        file="identity.py",
+        find='        stem = f"glycopeptide:{self.sequence}|{\'+\'.join(self.modifications)}|{self.attachment_site or \'\'}"',
+        replace='        stem = f"peptide:{self.sequence}|{\'+\'.join(self.modifications)}"',
+    ),
+    Mutation(
+        label="[G] a glycopeptide with no glycan at all is accepted",
+        file="identity.py",
+        find="            self.glycan_composition is None\n            and self.glycan_wurcs is None",
+        replace="            False\n            and self.glycan_wurcs is None",
+    ),
+    # --- [X] matching.py: matched-ion construction (M2) ------------------------
+    Mutation(
+        label="[X] a matched set counts measurements rather than platforms, so replicates become matches",
+        file="matching.py",
+        find="        return len(self.platforms) >= 2",
+        replace="        return len(self.measurements) >= 2",
+    ),
+    Mutation(
+        label="[X] deduplication keys on the DOI, so one measurement republished becomes two",
+        file="matching.py",
+        find="    return (\n        getattr(record, \"matched_ion_key\", None),\n        _platform_of(record),",
+        replace="    return (\n        getattr(record, \"matched_ion_key\", None),\n        _doi_of(record),\n        _platform_of(record),",
+    ),
+    Mutation(
+        label="[X] deduplication drops the platform, so two laboratories agreeing are read as one measurement",
+        file="matching.py",
+        find="        _platform_of(record),\n        getattr(record, \"ccs\", None),",
+        replace="        getattr(record, \"ccs\", None),",
+    ),
+    Mutation(
+        label="[X] deduplication drops the conformer index, so two conformers collapse into one",
+        file="matching.py",
+        find='        getattr(record, "ccs", None),\n        getattr(record, "conformer", None),\n    )',
+        replace='        getattr(record, "ccs", None),\n    )',
+    ),
+    Mutation(
+        label="[X] grouping drops the conformer index, so two conformers become one matched set",
+        file="matching.py",
+        find="        group_key = (key, conformer)",
+        replace="        group_key = (key,)",
+    ),
+    Mutation(
+        label="[X] an ion whose charge carrier is unstated is allowed to pair",
+        file="matching.py",
+        find='        if key is not None and not getattr(key, "matchable", True):',
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[X] a synthetic matched set may be quoted as a result",
+        file="matching.py",
+        find="        return not self.synthetic_groups",
+        replace="        return True",
+    ),
+    Mutation(
+        label="[X] assert_quotable stops refusing a synthetic report",
+        file="matching.py",
+        find="        raise NotQuotableError(refusal)",
+        replace="        pass",
+    ),
+    Mutation(
+        label="[X] a set counts only its outermost synthetic declarations",
+        file="matching.py",
+        find="        return sum(1 for m in self.measurements if declares_synthetic(m.record))",
+        replace="        return sum(1 for m in self.measurements if str(getattr(m.record, 'reuse_status', '')) == 'synthetic_fixture' and False)",
+    ),
+    Mutation(
+        label="[X] a member nobody may use stops blocking its matched set",
+        file="matching.py",
+        find="            elif not can_train_commercial(status):",
+        replace="            elif False:",
+    ),
+    Mutation(
+        label="[X] a member with an unreadable status is waved through instead of refused",
+        file="matching.py",
+        find="            if status is None:",
+        replace="            if False:",
+    ),
+    Mutation(
+        label="[X] conformer indices are paired across sources as though they corresponded",
+        file="matching.py",
+        find="        if self.conformer is not None and self.is_cross_platform:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[X] the report calls itself quotable when only its matched sets are real",
+        file="matching.py",
+        find="        return tuple(group for group in self.all_groups if group.declares_synthetic)",
+        replace="        return tuple(group for group in self.matched if group.declares_synthetic)",
+    ),
+    Mutation(
+        label="[X] a blocked matched set is reported as usable",
+        file="matching.py",
+        find="        return tuple(group for group in self.matched if group.usable)",
+        replace="        return self.matched",
+    ),
+    Mutation(
+        label="[X] the republished citations are dropped rather than kept beside the measurement",
+        file="matching.py",
+        find="                also_published_as=tuple((_source_of(other), _doi_of(other)) for other in rest),",
+        replace="                also_published_as=(),",
     ),
     # --- [K] readiness: what refuses and what merely warns ---------------------
     Mutation(

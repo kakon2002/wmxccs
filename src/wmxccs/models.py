@@ -148,6 +148,131 @@ def _platform_label(ims_type: IMSType, dtims_method: DTIMSMethod | None) -> str:
     return str(ims_type) if dtims_method is None else f"{ims_type}/{dtims_method}"
 
 
+# --- cyclic ion mobility ----------------------------------------------------------------
+
+
+class PassMode(StrEnum):
+    """Whether the reported cyclic value came from one pass of the array or several."""
+
+    SINGLE_PASS = "single_pass"
+    MULTIPASS = "multipass"
+    # The source reports a cyclic measurement without saying which. Spelt like
+    # DriftGas.UNSTATED and for the same reason: a positive record of what the
+    # paper does not say, not a filler. It blocks training, because a value that
+    # does not say how far the ion travelled cannot be compared with one that does.
+    UNSTATED = "UNSTATED"
+
+
+UNDEFINED_PASS_MODES = frozenset({PassMode.UNSTATED})
+
+
+class CyclicSettings(_Record):
+    """What a cyclic IMS measurement did to the ion, held apart from single-pass TWIMS.
+
+    A cyclic device sends ions round a closed path any number of times. More
+    passes means more separation, and it also means a longer flight in which the
+    fastest ions can catch and lap the slowest. So a cyclic value is not simply a
+    TWIMS value from a fancier instrument: it carries its own conditions, and the
+    ones below decide whether two cyclic values were produced the same way.
+
+    PASS NUMBER IS PART OF THE CALIBRATION GROUP, NOT METADATA. A six-pass value
+    and a single-pass value of the same ion are not interchangeable: the
+    calibration that converts arrival time to CCS is specific to the path the ion
+    took, and pooling them would average two quantities that were measured
+    against different effective lengths. They are the SAME ION, so they share a
+    matched-ion key - that is what lets them be compared - but they are not the
+    same measurement, so they never pool.
+
+    Nothing here is required beyond the pass count and the mode. The wave
+    settings and the path length are recorded where a source states them and left
+    null where it does not; guessing a travelling-wave velocity from what is
+    usual would be inventing an instrument setting.
+    """
+
+    passes: int | None = Field(
+        default=None,
+        strict=True,
+        ge=1,
+        description="How many times round the array the reported value is for, counting from one."
+        " Null where the source reports a multipass value without saying how many.",
+    )
+    pass_mode: PassMode = Field(
+        default=PassMode.UNSTATED,
+        description="Single-pass or multipass. Stated separately from the count because a source may report"
+        " one without the other, and because it is what decides pooling when the count is null.",
+    )
+    effective_path_length_m: float | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        allow_inf_nan=False,
+        description="The path the ion actually travelled, in metres. Units are in the field name on purpose:"
+        " a length recorded in centimetres and read as metres is the same class of silent error as a"
+        " two-standard-deviation spread read as one.",
+    )
+    tw_velocity_m_per_s: float | None = Field(
+        default=None, strict=True, gt=0, allow_inf_nan=False, description="Travelling-wave velocity, m/s."
+    )
+    tw_height_v: float | None = Field(
+        default=None, strict=True, gt=0, allow_inf_nan=False, description="Travelling-wave height, volts."
+    )
+    arrival_time_correction: _Text | None = Field(
+        default=None,
+        description="How the arrival time was corrected for the time ions spend outside the separation"
+        " region, as the source describes it. FREE TEXT DELIBERATELY, and it is not in the calibration"
+        " group. It should be an enum, like every other controlled vocabulary here, and it is not one"
+        " because no real cyclic dataset has been read in this repository yet. Inventing the members"
+        " from what is usual would be exactly the kind of plausible detail this project refuses. When a"
+        " real dataset arrives, read the methods and make this an enum from what is actually there.",
+    )
+    wrap_around: bool | None = Field(
+        default=None,
+        strict=True,
+        description="Whether faster ions lapped slower ones, so that arrival time no longer orders mobility."
+        " Null where the source does not say. On a multipass value that silence is a gap, not a no: the"
+        " longer the flight, the likelier the lap.",
+    )
+
+    @model_validator(mode="after")
+    def the_count_and_the_mode_agree(self) -> Self:
+        if self.passes is None:
+            return self
+        expected = PassMode.SINGLE_PASS if self.passes == 1 else PassMode.MULTIPASS
+        if self.pass_mode is not PassMode.UNSTATED and self.pass_mode is not expected:
+            raise ValueError(
+                f"{self.passes} pass(es) is {expected.value}, but pass_mode says {self.pass_mode.value};"
+                " one of the two is wrong and guessing which would change what the value means"
+            )
+        return self
+
+    @property
+    def is_multipass(self) -> bool:
+        """True where the value is known to be multipass, by count or by mode."""
+        if self.passes is not None:
+            return self.passes > 1
+        return self.pass_mode is PassMode.MULTIPASS
+
+    def training_blockers(self) -> list[str]:
+        blockers = super().training_blockers()
+        if is_one_of(getattr(self, "pass_mode", None), UNDEFINED_PASS_MODES) and self.passes is None:
+            blockers.append(
+                "a cyclic value that states neither a pass count nor a pass mode does not say how far the"
+                " ion travelled, so it cannot be pooled with any other cyclic value"
+            )
+        if self.is_multipass and self.wrap_around is None:
+            blockers.append(
+                "a multipass cyclic value does not say whether wrap-around occurred; if faster ions lapped"
+                " slower ones the arrival time no longer orders mobility, and the value may not be of the"
+                " species it is assigned to. Read the source's methods rather than assuming it did not happen"
+            )
+        if self.wrap_around is True and self.arrival_time_correction is None:
+            blockers.append(
+                "wrap-around is reported and no arrival-time correction is recorded, so the reported value"
+                " rests on an ordering that had already broken down"
+            )
+        return blockers
+
+
 # --- calibration reference lineage ------------------------------------------------------
 
 
@@ -248,17 +373,26 @@ class CalibrationGroup(NamedTuple):
     calibrant: str | None
     adduct: str
     structural_state: tuple
+    # How far the ion travelled, for a cyclic measurement, and None for every
+    # other platform. IN THE GROUP, not metadata: a six-pass value and a
+    # single-pass value of one ion were calibrated against different effective
+    # path lengths and do not pool. They still share a matched-ion KEY, which is
+    # what lets them be compared; this is what stops them being averaged.
+    cyclic_passes: tuple | None = None
 
     def __str__(self) -> str:
         # "-" cannot collide with a real calibrant: it is rejected as a placeholder.
         state = ",".join("" if part is None else str(part) for part in self.structural_state)
-        parts = (
+        parts = [
             _platform_label(self.ims_type, self.dtims_method),
             self.drift_gas,
             self.calibrant or "-",
             self.adduct,
             state,
-        )
+        ]
+        if self.cyclic_passes is not None:
+            passes, mode = self.cyclic_passes
+            parts.append(f"{'?' if passes is None else passes} pass/{mode}")
         return "|".join(str(part) for part in parts)
 
 
@@ -378,6 +512,11 @@ class CCSMeasurement(MeasurementConditions):
         " the CCS value refers to, decides pooling. Null if not reported. For a primary (stepped-field DTIMS)"
         " value the two must be the same gas.",
     )
+    cyclic: CyclicSettings | None = Field(
+        default=None,
+        description="Cyclic-specific conditions. Required for a CYCLIC record and refused on every other"
+        " platform, so a pass count can never be recorded against an instrument that has no passes.",
+    )
     instrument: _Text | None = None
     source: _Text
     # Provenance per value. `source` is free text and cannot be verified to be a
@@ -449,6 +588,14 @@ class CCSMeasurement(MeasurementConditions):
             )
         if self.conformer is not None and self.conformers_total is not None and self.conformer > self.conformers_total:
             raise ValueError(f"conformer {self.conformer} of {self.conformers_total}: the index exceeds the total")
+        if self.ims_type is IMSType.CYCLIC and self.cyclic is None:
+            raise ValueError(
+                "a cyclic record must state its cyclic settings: how far the ion travelled is part of what"
+                " the value means, and a cyclic value without a pass count cannot be told apart from a"
+                " single-pass travelling-wave value"
+            )
+        if self.ims_type is not IMSType.CYCLIC and self.cyclic is not None:
+            raise ValueError(f"cyclic settings apply only to CYCLIC records, not {self.ims_type.value}")
         if self.calibration_reference is not None and not self.ccs_is_calibrated:
             raise ValueError(
                 "a primary CCS has no calibrant, so it cannot have a calibration reference"
@@ -501,6 +648,7 @@ class CCSMeasurement(MeasurementConditions):
             self.calibrant,
             self.adduct,
             self.analyte.structural_state(),
+            None if self.cyclic is None else (self.cyclic.passes, str(self.cyclic.pass_mode)),
         )
 
     @property
@@ -521,7 +669,15 @@ class CCSMeasurement(MeasurementConditions):
         return self.calibration_reference.traces_to_primary
 
     def component_records(self) -> tuple:
-        """Records this one is built from. The training gate checks them as well."""
+        """Records this one is built from. The training gate checks them as well.
+
+        The cyclic settings are NOT here, deliberately. They carry no licence of
+        their own - they are conditions of this measurement, not a separately
+        sourced record - and the gate refuses anything in this tuple that cannot
+        state a reuse status. That mistake closed the whole biopharmaceutical
+        layer once already, with AntibodyIdentity. Their training blockers are
+        folded into this record's own instead.
+        """
         parts: list = [self.analyte]
         nested = getattr(self.analyte, "component_records", None)
         if nested is not None:
@@ -553,6 +709,12 @@ class CCSMeasurement(MeasurementConditions):
                     " depends on whether those charges are protons or sodium, and so does its cross section."
                     " Resolving it means reading the source's methods, never assuming protons"
                 )
+        cyclic = getattr(self, "cyclic", None)
+        if cyclic is not None:
+            try:
+                blockers.extend(f"cyclic settings: {blocker}" for blocker in cyclic.training_blockers())
+            except Exception as exc:  # fail closed, as everywhere else in this method
+                blockers.append(f"cyclic settings could not be checked ({type(exc).__name__}: {exc})")
         kind = self.uncertainty_type
         if kind is not None and not is_one_of(kind, TRAINABLE_UNCERTAINTY_TYPES):
             blockers.append(

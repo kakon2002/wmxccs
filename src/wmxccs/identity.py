@@ -569,6 +569,7 @@ class AnalyteKind(StrEnum):
     SMALL_MOLECULE = "small_molecule"
     PEPTIDE = "peptide"
     GLYCAN = "glycan"
+    GLYCOPEPTIDE = "glycopeptide"
     PROTEIN = "protein"
     INTACT_ANTIBODY = "intact_antibody"
     ADC = "adc"
@@ -954,6 +955,151 @@ class GlycanAnalyte(_Analyte):
         return [] if problem is None else [problem]
 
 
+
+class GlycopeptideAnalyte(_Analyte):
+    """A glycan attached to a peptide, which is neither of the two on its own.
+
+    A glycopeptide is a different molecule from its bare peptide backbone and a
+    different molecule from the free glycan, with a mass that is neither and a
+    cross section that is neither. It is its own kind, not a peptide carrying a
+    modification and not a glycan with a tail, and its key says so.
+
+    THE ATTACHMENT SITE IS PART OF THE IDENTITY. One glycan on Asn297 and the
+    same glycan on a different asparagine of the same backbone are different
+    molecules with different shapes, and a great deal of biopharmaceutical
+    analysis is about exactly that difference, so it cannot be metadata.
+
+    The glycan identifiers are spelt out here with a `glycan_` prefix rather than
+    by nesting a GlycanAnalyte. Nesting one would make it a component record with
+    a licence and a source of its own, and the gate refuses a component that
+    cannot state a reuse status - which is what closed the biopharmaceutical
+    layer once already. The glycan half of a glycopeptide was not sourced
+    separately from the peptide half: they are one assignment, and this record
+    carries one source and one reuse status for the whole of it.
+    """
+
+    kind_tag: Literal[AnalyteKind.GLYCOPEPTIDE] = AnalyteKind.GLYCOPEPTIDE
+    sequence: _Sequence
+    modifications: _Modifications = Field(
+        default=(), description="Non-glycan modifications of the backbone, in canonical order."
+    )
+    attachment_site: _Text | None = Field(
+        default=None,
+        description="Where the glycan sits, as the source names it, e.g. 'N297'. Part of the identity."
+        " Null where the source does not localise it, which keys apart from any stated site: a"
+        " glycopeptide of unknown site is not known to be the same molecule as one of a stated site.",
+    )
+    glycan_composition: CompositionField | None = None
+    glycan_wurcs: Annotated[str, StringConstraints(strip_whitespace=True), AfterValidator(_check_wurcs)] | None = None
+    glycan_glytoucan_ac: Annotated[_Text, AfterValidator(_warn_on_glytoucan_format)] | None = None
+    glycan_iupac_condensed: Annotated[_Text, StringConstraints(pattern=r"^\S+$")] | None = None
+    derivatisation: Derivatisation = Field(
+        default=Derivatisation.UNKNOWN,
+        description="Whole-molecule modification. Part of the structural state, and 'unknown' blocks"
+        " training, exactly as for a free glycan.",
+    )
+
+    @model_validator(mode="after")
+    def states_a_glycan(self) -> Self:
+        if (
+            self.glycan_composition is None
+            and self.glycan_wurcs is None
+            and self.glycan_glytoucan_ac is None
+            and self.glycan_iupac_condensed is None
+        ):
+            raise ValueError(
+                "a glycopeptide needs a glycan: give a composition, a WURCS, a GlyTouCan accession or an"
+                " IUPAC-condensed structure for the glycan half. Without one this is a peptide record"
+                " claiming to be a glycopeptide, and it would key as a molecule nobody has identified"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def derivatisation_fits_the_composition(self) -> Self:
+        if self.derivatisation in SIALIC_ACID_DERIVATISATIONS and self.glycan_composition is None:
+            raise ValueError(
+                f"derivatisation {str(self.derivatisation)!r} names a sialic acid and this record gives no"
+                " glycan composition, so whether there is one to act on cannot be checked"
+            )
+        if (
+            self.derivatisation in SIALIC_ACID_DERIVATISATIONS
+            and self.glycan_composition is not None
+            and self.glycan_composition.neuac + self.glycan_composition.neugc == 0
+        ):
+            raise ValueError(
+                f"derivatisation {str(self.derivatisation)!r} needs a sialic acid to act on, and"
+                f" {self.glycan_composition.canonical} has no NeuAc or NeuGc"
+            )
+        return self
+
+    def _glycan_key(self) -> tuple[str, str]:
+        """The finest glycan identifier stated, in the order a free glycan uses."""
+        if self.glycan_wurcs is not None:
+            return ("wurcs", self.glycan_wurcs)
+        if self.glycan_glytoucan_ac is not None and _glytoucan_format_problem(self.glycan_glytoucan_ac) is None:
+            return ("glytoucan", self.glycan_glytoucan_ac)
+        if self.glycan_iupac_condensed is not None and _IUPAC_LINKAGE.search(self.glycan_iupac_condensed) is not None:
+            return ("iupac", self.glycan_iupac_condensed)
+        if self.glycan_composition is not None:
+            return ("composition", self.glycan_composition.canonical)
+        if self.glycan_glytoucan_ac is not None:
+            return ("glytoucan_unverified_form", self.glycan_glytoucan_ac)
+        return ("iupac_no_linkage_stated", str(self.glycan_iupac_condensed))
+
+    def identity_key(self) -> tuple:
+        return (
+            AnalyteKind.GLYCOPEPTIDE.value,
+            "sequence",
+            self.sequence,
+            self.modifications,
+            self.attachment_site,
+            *self._glycan_key(),
+        )
+
+    def identity_atoms(self) -> frozenset[str]:
+        """Composite atoms only.
+
+        A glycopeptide shares no identity atom with its bare backbone or with the
+        free glycan, because it is neither of them. Emitting a plain
+        "sequence:NLTK" atom here would let matched-ion construction merge a
+        glycopeptide with the unmodified peptide as one molecule.
+        """
+        kind, value = self._glycan_key()
+        stem = f"glycopeptide:{self.sequence}|{'+'.join(self.modifications)}|{self.attachment_site or ''}"
+        atoms = {f"{stem}|{kind}:{value}"}
+        if self.glycan_composition is not None:
+            atoms.add(f"{stem}|composition:{self.glycan_composition.canonical}")
+        if self.glycan_wurcs is not None:
+            atoms.add(f"{stem}|wurcs:{self.glycan_wurcs}")
+        if self.glycan_glytoucan_ac is not None:
+            atoms.add(f"{stem}|glytoucan:{self.glycan_glytoucan_ac}")
+        if self.glycan_iupac_condensed is not None:
+            atoms.add(f"{stem}|iupac:{self.glycan_iupac_condensed}")
+        return frozenset(atoms)
+
+    def structural_state(self) -> tuple:
+        return (str(self.derivatisation),)
+
+    def training_blockers(self) -> list[str]:
+        blockers = super().training_blockers()
+        derivatisation = self.derivatisation
+        if is_one_of(derivatisation, SIALIC_ACID_DERIVATISATIONS):
+            blockers.append(
+                f"derivatisation is {str(derivatisation)!r}, an open bucket covering chemistries of"
+                " different mass; add a specific value to Derivatisation instead"
+            )
+        elif not is_one_of(derivatisation, TRAINABLE_DERIVATISATIONS):
+            blockers.append(f"derivatisation is {str(derivatisation)!r}, so the measured analyte is not defined")
+        return blockers
+
+    @property
+    def validation_warnings(self) -> list[str]:
+        if self.glycan_glytoucan_ac is None:
+            return []
+        problem = _glytoucan_format_problem(self.glycan_glytoucan_ac)
+        return [] if problem is None else [problem]
+
+
 class _FoldedAnalyte(_Analyte):
     """Shared by the three kinds whose conformation is part of what was measured.
 
@@ -1198,6 +1344,7 @@ Analyte = Annotated[
         SmallMoleculeAnalyte,
         PeptideAnalyte,
         GlycanAnalyte,
+        GlycopeptideAnalyte,
         ProteinAnalyte,
         IntactAntibodyAnalyte,
         ADCAnalyte,
@@ -1209,6 +1356,7 @@ ANALYTE_TYPES: dict[AnalyteKind, type[_Analyte]] = {
     AnalyteKind.SMALL_MOLECULE: SmallMoleculeAnalyte,
     AnalyteKind.PEPTIDE: PeptideAnalyte,
     AnalyteKind.GLYCAN: GlycanAnalyte,
+    AnalyteKind.GLYCOPEPTIDE: GlycopeptideAnalyte,
     AnalyteKind.PROTEIN: ProteinAnalyte,
     AnalyteKind.INTACT_ANTIBODY: IntactAntibodyAnalyte,
     AnalyteKind.ADC: ADCAnalyte,

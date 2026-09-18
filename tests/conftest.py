@@ -27,7 +27,7 @@ from wmxccs.identity import (
     ProteinAnalyte,
     SmallMoleculeAnalyte,
 )
-from wmxccs.models import CCSMeasurement, IMSType
+from wmxccs.models import CCSMeasurement, CyclicSettings, IMSType, PassMode
 from wmxccs.reuse import ReuseStatus
 
 FIXTURE = ReuseStatus.SYNTHETIC_FIXTURE
@@ -90,6 +90,25 @@ def adc(**overrides) -> ADCAnalyte:
     )
     fields.update(overrides)
     return ADCAnalyte(**fields)
+
+
+def cyclic_settings(**overrides) -> CyclicSettings:
+    """A single-pass cyclic run with wrap-around explicitly ruled out.
+
+    Single pass and wrap_around=False on purpose: both are the states that do NOT
+    block training, so a test that wants a blocker has to ask for one rather than
+    getting it by accident from the default.
+    """
+    fields = dict(passes=1, pass_mode=PassMode.SINGLE_PASS, wrap_around=False)
+    fields.update(overrides)
+    return CyclicSettings(**fields)
+
+
+def cyclic_measurement(**overrides) -> CCSMeasurement:
+    """A cyclic measurement. Cyclic records MUST state their cyclic settings."""
+    fields = dict(ims_type=IMSType.CYCLIC, calibrant="dextran", cyclic=cyclic_settings())
+    fields.update(overrides)
+    return measurement(**fields)
 
 
 def measurement(**overrides) -> CCSMeasurement:

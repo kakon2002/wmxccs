@@ -31,6 +31,7 @@ from conftest import (
     OTHER_INCHIKEY,
     adc,
     antibody,
+    cyclic_settings,
     glycan,
     measurement,
     peptide,
@@ -60,7 +61,8 @@ from wmxccs.models import (
 PLATFORMS = {
     "twims": dict(ims_type=IMSType.TWIMS, calibrant="dextran"),
     "tims": dict(ims_type=IMSType.TIMS, calibrant="dextran"),
-    "cyclic": dict(ims_type=IMSType.CYCLIC, calibrant="dextran"),
+    # A cyclic record must state its cyclic settings, so the platform table does.
+    "cyclic": dict(ims_type=IMSType.CYCLIC, calibrant="dextran", cyclic=cyclic_settings()),
     "dtims_single_field": dict(
         ims_type=IMSType.DTIMS, dtims_method=DTIMSMethod.SINGLE_FIELD, calibrant="dextran"
     ),
@@ -299,11 +301,18 @@ def test_a_dtims_record_must_say_whether_it_is_stepped_field_or_single_field():
     assert measurement(**PLATFORMS["dtims_single_field"]).dtims_method is DTIMSMethod.SINGLE_FIELD
 
 
-@pytest.mark.parametrize("ims_type", [IMSType.TWIMS, IMSType.TIMS, IMSType.CYCLIC])
-def test_only_a_dtims_record_may_state_a_dtims_method(ims_type):
+NON_DTIMS_PLATFORMS = ["twims", "tims", "cyclic"]
+
+
+@pytest.mark.parametrize("platform", NON_DTIMS_PLATFORMS, ids=NON_DTIMS_PLATFORMS)
+def test_only_a_dtims_record_may_state_a_dtims_method(platform):
+    # Built from the platform table rather than from a bare ims_type, because a
+    # cyclic record must also state its cyclic settings and this test is not
+    # about that rule.
+    fields = PLATFORMS[platform]
     with pytest.raises(ValidationError, match="applies only to DTIMS"):
-        measurement(ims_type=ims_type, dtims_method=DTIMSMethod.STEPPED_FIELD)
-    assert measurement(ims_type=ims_type).dtims_method is None
+        measurement(**{**fields, "dtims_method": DTIMSMethod.STEPPED_FIELD})
+    assert measurement(**fields).dtims_method is None
 
 
 @pytest.mark.parametrize("platform", CALIBRATED_PLATFORMS, ids=CALIBRATED_PLATFORMS)

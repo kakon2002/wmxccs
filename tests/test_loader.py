@@ -625,6 +625,11 @@ KIND_ROWS = {
     AnalyteKind.SMALL_MOLECULE: {"analyte_inchikey": INCHIKEY},
     AnalyteKind.PEPTIDE: {"analyte_sequence": "PEPTIDE"},
     AnalyteKind.GLYCAN: {"analyte_composition": "Hex5HexNAc2"},
+    AnalyteKind.GLYCOPEPTIDE: {
+        "analyte_sequence": "NLTK",
+        "analyte_glycan_composition": "Hex5HexNAc2",
+        "analyte_attachment_site": "N297",
+    },
     AnalyteKind.PROTEIN: {"analyte_accession": "P01857", "analyte_folding_state": "native"},
     AnalyteKind.INTACT_ANTIBODY: {"analyte_inn": "trastuzumab", "analyte_folding_state": "native"},
     AnalyteKind.ADC: {
