@@ -31,6 +31,7 @@ Sections:
   [G] identity.py   - the glycopeptide (M1)
   [B] identity.py   - antibody, ADC and protein subunit identity (M1)
   [X] matching.py   - matched-ion construction (M2)
+  [T] statistics.py - cross-platform statistics (M3)
 """
 
 from __future__ import annotations
@@ -834,6 +835,151 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="matching.py",
         find="                also_published_as=tuple((_source_of(other), _doi_of(other)) for other in rest),",
         replace="                also_published_as=(),",
+    ),
+    # --- [T] statistics.py: cross-platform statistics (M3) ---------------------
+    Mutation(
+        label="[T] a platform pair with several calibration strata gets a pooled figure anyway",
+        file="statistics.py",
+        find="        return self.strata[0] if len(self.strata) == 1 else None",
+        replace="        return self.strata[0]",
+    ),
+    Mutation(
+        label="[T] the pooling refusal stops firing, so strata are silently merged",
+        file="statistics.py",
+        find="        return None if len(self.strata) <= 1 else POOLED_REFUSED.format(strata=len(self.strata))",
+        replace="        return None",
+    ),
+    Mutation(
+        label="[T] outliers are measured from zero rather than from their own pair's offset",
+        file="statistics.py",
+        find="        return abs(self.difference_percent - centre) > OUTLIER_MARGIN_PERCENT",
+        replace="        return abs(self.difference_percent) > OUTLIER_MARGIN_PERCENT",
+    ),
+    Mutation(
+        label="[T] the outlier centre is the mean, so badly transferring ions hide behind themselves",
+        file="statistics.py",
+        find="        return median([point.difference_percent for point in self.points]) if self.points else 0.0",
+        replace="        return fmean([point.difference_percent for point in self.points]) if self.points else 0.0",
+    ),
+    Mutation(
+        label="[T] outliers are dropped from the comparison instead of reported",
+        file="statistics.py",
+        find="        centre = self.centre_percent\n        return tuple(point for point in self.points if point.is_outlier_against(centre))",
+        replace="        centre = self.centre_percent\n        return tuple(point for point in self.points if False and point.is_outlier_against(centre))",
+    ),
+    Mutation(
+        label="[T] a Deming slope is computed from too few points",
+        file="statistics.py",
+        find="    if n < MIN_POINTS_FOR_DEMING:",
+        replace="    if False:",
+    ),
+    Mutation(
+        label="[T] a correlation is computed from two points, where r is always plus or minus one",
+        file="statistics.py",
+        find="    if n < MIN_POINTS_FOR_CORRELATION:\n        return Association(",
+        replace="    if False:\n        return Association(",
+    ),
+    Mutation(
+        label="[T] limits of agreement are quoted from a standard deviation too small to support them",
+        file="statistics.py",
+        find="    if n >= MIN_POINTS_FOR_LIMITS_OF_AGREEMENT and bias_sd is not None:",
+        replace="    if bias_sd is not None:",
+    ),
+    Mutation(
+        label="[T] the Deming fit becomes ordinary least squares by fixing lambda at zero",
+        file="statistics.py",
+        find="    if lam <= 0:\n        raise ValueError",
+        replace="    if False:\n        raise ValueError",
+    ),
+    Mutation(
+        label="[T] the Deming slope loses its lambda weighting entirely",
+        file="statistics.py",
+        find="    discriminant = (syy - lam * sxx) ** 2 + 4 * lam * sxy**2",
+        replace="    discriminant = (syy - sxx) ** 2 + 4 * sxy**2",
+    ),
+    Mutation(
+        label="[T] an assumed lambda is reported as though it had been measured",
+        file="statistics.py",
+        find='    return 1.0, "ASSUMED EQUAL:',
+        replace='    return 1.0, "measured from the reported uncertainties of both platforms"  # "ASSUMED EQUAL:',
+    ),
+    Mutation(
+        label="[T] a two-standard-deviation spread is read as one standard deviation",
+        file="statistics.py",
+        find="    if kind is UncertaintyType.TWO_SD:\n        return float(spread) / 2",
+        replace="    if kind is UncertaintyType.TWO_SD:\n        return float(spread)",
+    ),
+    Mutation(
+        label="[T] a standard error is converted without the replicate count it needs",
+        file="statistics.py",
+        find="        if not replicates:\n            return None",
+        replace="        if not replicates:\n            return float(spread)",
+    ),
+    Mutation(
+        label="[T] a 95 per cent interval is guessed to be a half-width and converted",
+        file="statistics.py",
+        find="        return float(spread) * math.sqrt(replicates)\n    return None",
+        replace="        return float(spread) * math.sqrt(replicates)\n    if kind is UncertaintyType.CI95:\n        return float(spread) / 1.96\n    return None",
+    ),
+    Mutation(
+        label="[T] Lin's concordance becomes Pearson correlation, so bias stops lowering it",
+        file="statistics.py",
+        find="    denominator = var_x + var_y + (mx - my) ** 2",
+        replace="    denominator = var_x + var_y",
+    ),
+    Mutation(
+        label="[T] the difference is taken against the pair mean rather than the reference",
+        file="statistics.py",
+        find="        return 100.0 * self.difference / self.reference_ccs",
+        replace="        return 100.0 * self.difference / ((self.reference_ccs + self.other_ccs) / 2)",
+    ),
+    Mutation(
+        label="[T] a calibrated platform is chosen as the reference over a primary one",
+        file="statistics.py",
+        find="    if len(primary) == 1:\n        reference = primary[0]",
+        replace="    if False:\n        reference = primary[0]",
+    ),
+    Mutation(
+        label="[T] an ion with replicates on one side is averaged in rather than held",
+        file="statistics.py",
+        find="    if len(on_reference) != 1 or len(on_other) != 1:\n        return None",
+        replace="    if not on_reference or not on_other:\n        return None",
+    ),
+    Mutation(
+        label="[T] a matched set nobody may use is compared anyway",
+        file="statistics.py",
+        find="        if blocking:\n            unusable.append(str(ion.key))\n            continue",
+        replace="        if False:\n            unusable.append(str(ion.key))\n            continue",
+    ),
+    Mutation(
+        label="[T] synthetic statistics may be quoted as a result",
+        file="statistics.py",
+        find="        return not self.synthetic",
+        replace="        return True",
+    ),
+    Mutation(
+        label="[T] assert_quotable stops refusing a synthetic statistics report",
+        file="statistics.py",
+        find="    refusal = report.refusal()\n    if refusal is not None:\n        raise NotQuotableError(refusal)",
+        replace="    refusal = report.refusal()\n    if False:\n        raise NotQuotableError(refusal)",
+    ),
+    Mutation(
+        label="[T] a corpus with nothing to compare stops saying why",
+        file="statistics.py",
+        find="    reason = None\n    if not pairs:",
+        replace="    reason = None\n    if False:",
+    ),
+    Mutation(
+        label="[T] r squared is reported as a regression fit rather than a squared correlation",
+        file="statistics.py",
+        find="        return None if self.pearson_r is None else self.pearson_r**2",
+        replace="        return None if self.pearson_r is None else abs(self.pearson_r)",
+    ),
+    Mutation(
+        label="[T] coverage counts ions outside the band as inside it",
+        file="statistics.py",
+        find="        band: 100.0 * sum(1 for p in percents if abs(p) <= band) / n for band in COVERAGE_BANDS_PERCENT",
+        replace="        band: 100.0 * sum(1 for p in percents if abs(p) >= band) / n for band in COVERAGE_BANDS_PERCENT",
     ),
     # --- [K] readiness: what refuses and what merely warns ---------------------
     Mutation(

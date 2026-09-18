@@ -52,6 +52,9 @@ CAFFEINE = "RYYVLZVUVIJVGH-UHFFFAOYSA-N"
 GLUCOSE = "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"
 
 
+_DIGITS_AS_LETTERS = str.maketrans("0123456789", "ABCDEFGHIJ")
+
+
 def synthetic_inchikey(tag: str) -> str:
     """A well-formed InChIKey that is obviously not a real one, distinct per tag.
 
@@ -65,7 +68,15 @@ def synthetic_inchikey(tag: str) -> str:
     The middle block is FIXTUREAAA so that a real InChIKey can never be confused
     with one of these, in a log line or in a bug report.
     """
-    letters = "".join(character for character in tag.upper() if character.isalpha())
+    # Digits are MAPPED onto letters, not stripped. An InChIKey is letters only,
+    # and the first version of this filtered digits out - which silently turned
+    # "bench00" through "bench23" into one key, collapsed twenty-four ions into
+    # one, and produced a corpus with nothing to compare. Anything that
+    # distinguishes two tags has to survive into the key or the tags do not
+    # distinguish anything.
+    letters = "".join(
+        character for character in tag.upper().translate(_DIGITS_AS_LETTERS) if character.isalpha()
+    )
     body = (letters + "XXXXXXXXXXXXXX")[:14]
     return f"{body}-FIXTUREAAA-N"
 
@@ -422,6 +433,108 @@ def two_glycans_of_one_composition() -> tuple[CCSMeasurement, ...]:
         ),
     )
 
+
+
+# --- a synthetic benchmark, with the answer known in advance ------------------------------
+#
+# The case builders above each exercise ONE rule and hold two or three records,
+# which is too thin to exercise arithmetic: a Deming slope needs more points than
+# a pairing rule does. This corpus exists so the statistics can be computed at all
+# and, more usefully, so they can be checked against an answer chosen in advance
+# rather than against whatever the code happens to produce.
+#
+# NOTHING HERE IS MEASURED. The biases below were picked to be recoverable, and
+# they are stated in the constants rather than hidden in the numbers. They are
+# roughly the shape of the published interplatform envelope - TIMS nearer to DTIMS
+# than TWIMS, with a small tail of ions much further out - because a corpus shaped
+# unlike the real problem would exercise the arithmetic on a case that never
+# arises. That resemblance is a convenience and is not evidence of anything, and
+# no figure computed from these records describes any instrument.
+
+# The systematic offsets injected into each platform, relative to the DTIMS value.
+TWIMS_BIAS_PERCENT = 2.0
+TIMS_BIAS_PERCENT = 1.0
+# A handful of ions that do not transfer, the feature the outlier reporting exists
+# for. The published work finds a small fraction disagreeing by as much as seven
+# per cent while the bulk sit inside two.
+OUTLIER_BIAS_PERCENT = 7.0
+OUTLIER_EVERY = 11  # every eleventh ion, so there are two in twenty-four
+
+BENCHMARK_IONS = 24
+
+
+def _wobble(index: int) -> float:
+    """A small deterministic scatter, so the points are not perfectly collinear.
+
+    Deterministic and not random: a corpus that changed between runs would make
+    every statistic irreproducible, and a test asserting a recovered slope would
+    become flaky rather than wrong.
+    """
+    return ((index * 37) % 11 - 5) / 100.0
+
+
+def benchmark_corpus() -> tuple[CCSMeasurement, ...]:
+    """Twenty-four ions on DTIMS, TWIMS and TIMS, with a bias chosen in advance.
+
+    Every ion is measured on all three platforms, so each pair yields a full set
+    of points and the three-way matching is exercised at scale as well.
+    """
+    records: list[CCSMeasurement] = []
+    for index in range(BENCHMARK_IONS):
+        analyte = small_molecule(synthetic_inchikey(f"bench{index:02d}"))
+        reference_ccs = 150.0 + index * 10.0
+        twims_bias = OUTLIER_BIAS_PERCENT if index % OUTLIER_EVERY == 0 else TWIMS_BIAS_PERCENT
+        records.append(
+            measurement(analyte=analyte, platform="dtims", ccs=reference_ccs, source="fixture DTIMS", doi=DOI_A)
+        )
+        records.append(
+            measurement(
+                analyte=analyte,
+                platform="twims",
+                ccs=round(reference_ccs * (1 + twims_bias / 100.0) + _wobble(index), 4),
+                source="fixture TWIMS",
+                doi=DOI_B,
+            )
+        )
+        records.append(
+            measurement(
+                analyte=analyte,
+                platform="tims",
+                ccs=round(reference_ccs * (1 + TIMS_BIAS_PERCENT / 100.0) + _wobble(index + 5), 4),
+                source="fixture TIMS",
+                doi="10.9999/fixture.c",
+            )
+        )
+    return tuple(records)
+
+
+def benchmark_corpus_with_two_calibrants() -> tuple[CCSMeasurement, ...]:
+    """The benchmark, with the TWIMS half split across two calibrants.
+
+    Exercises the rule that a platform pair holding more than one
+    calibration-group stratum gets no pooled figure. Both halves are the same
+    comparison in every respect except the calibrant, which is exactly the
+    difference that must not be averaged away.
+    """
+    records: list[CCSMeasurement] = []
+    for index in range(BENCHMARK_IONS):
+        analyte = small_molecule(synthetic_inchikey(f"twocal{index:02d}"))
+        reference_ccs = 150.0 + index * 10.0
+        calibrant = "polyalanine" if index % 2 == 0 else "dextran"
+        records.append(
+            measurement(analyte=analyte, platform="dtims", ccs=reference_ccs, source="fixture DTIMS", doi=DOI_A)
+        )
+        records.append(
+            measurement(
+                analyte=analyte,
+                platform="twims",
+                ccs=round(reference_ccs * (1 + TWIMS_BIAS_PERCENT / 100.0) + _wobble(index), 4),
+                calibrant=calibrant,
+                source="fixture TWIMS",
+                doi=DOI_B,
+            )
+        )
+    return tuple(records)
 
 # Every case, by what it demonstrates. The corpus is the union.
 CASES = {
