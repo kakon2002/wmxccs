@@ -62,6 +62,14 @@ _BODY_LENGTH = 14
 def synthetic_inchikey(tag: str) -> str:
     """A well-formed InChIKey that is obviously not a real one, distinct per tag.
 
+    SCAR: THIS FUNCTION HAS SILENTLY MERGED TWO MOLECULES INTO ONE TWICE. First by
+    stripping digits, so bench00 to bench23 became one ion; then by truncating to
+    fourteen letters, so any two tags agreeing in their first fourteen did the
+    same. Both times nothing failed - a count was simply wrong, and only somebody
+    reading it noticed. Digits are mapped and long tags are sha256-folded for that
+    reason and no other. If you change how a tag becomes a key, the thing to check
+    is that two tags that differ still produce two keys.
+
     EVERY CASE BELOW GETS ITS OWN MOLECULE, and that is not decoration. The cases
     live in one corpus, and two cases sharing a molecule share a matched-ion key:
     the two-way match and the three-way match would merge into one five-way set,
