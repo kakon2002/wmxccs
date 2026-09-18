@@ -458,7 +458,7 @@ TIMS_BIAS_PERCENT = 1.0
 # for. The published work finds a small fraction disagreeing by as much as seven
 # per cent while the bulk sit inside two.
 OUTLIER_BIAS_PERCENT = 7.0
-OUTLIER_EVERY = 11  # every eleventh ion, so there are two in twenty-four
+OUTLIER_EVERY = 11  # indices 0, 11 and 22, so three of the twenty-four
 
 BENCHMARK_IONS = 24
 
