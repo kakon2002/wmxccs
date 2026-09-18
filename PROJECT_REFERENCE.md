@@ -8,7 +8,7 @@ re-researching anything.
 ## 1. Project history
 
 **12 to 17 September 2026.** Built a glycan isomer and CCS prediction platform for
-Wellmatix. Repo `Project2`, package `wmxglycan`, 1,796 tests, milestones M0 to M3
+Wellmatix. Repo `Project2`, package `wmxglycan`, 1,868 tests, milestones M0 to M3
 complete. Candidate generation and ranking worked on real data. The CCS model was
 never trained because no licence-clean training data existed at sufficient scale.
 
@@ -18,6 +18,12 @@ integrated into the glycan work. Deadline 25 September, 27 at the latest.
 
 **The glycan repo must not be deleted** until the port is complete. Roughly 40
 percent of its code carries over.
+
+> Corrected 18 September, from the repository: 1,868 is the collected test count
+> (705 test functions); "1,796" appears nowhere in that repo. The 40 percent figure
+> is low as an import fact - the transitive closure of the port set is 15 of the 20
+> package modules, four of them on the do-not-port list, so cutting the glycan core
+> out is most of the porting work rather than a tidy-up afterwards.
 
 ---
 
@@ -171,7 +177,7 @@ same antibody are different matched ions.
 | Is this platform internal research or commercial? | Which data sources are usable, and therefore whether a benchmark set exists | Kang |
 | Which licence does the steroid study carry? | The benchmark dataset | Shawon, one page read |
 | Is there internal cIMS instrument access? | The cIMS layer, a stated differentiator with almost no public data | Kang |
-| Which gas were the dextran references in, for Struwe 2015? | 89 stored records stay blocked until known. Check Hofmann 2014, Anal Chem 86:10789 | Shawon |
+| Which gas were the dextran references in, for Struwe 2015? | One of TWO blockers on those 89 records; resolving it alone unblocks nothing. Check Hofmann 2014, Anal Chem 86:10789 | Shawon |
 
 ---
 
@@ -181,9 +187,20 @@ These do not block the new platform but were never closed:
 
 - Figure 1 of Analyst 2015 holds the seven high-mannose structures needed to
   unblock those 89 records.
+- **Corrected 18 September: the drift gas is only HALF of what blocks those 89
+  rows.** Every one of them also carries `uncertainty_type = unknown` with no
+  spread, which is an independent training blocker. Reading Hofmann 2014 and
+  resolving the gas would unblock zero records on its own. Both must be resolved,
+  and there is now a test pinning both so that whoever resolves the gas is told
+  about the second one rather than discovering it afterwards.
 - Four rows in the 2016 dataset are held pending curation: human milk LNH and LNnH
   share identical values for [M+H]+ (228.9) and [M+Cl]- (245.0), almost certainly
   one unresolved peak reported against both compounds.
+- **Corrected 18 September: those four rows are not marked as held anywhere in the
+  CSV.** The hold is DERIVED by the loader's shared-peak detector, from exact CCS
+  equality within one calibration group across differing analyte identity. It is a
+  result, not data. A port that dropped the detector would clear all 28 rows and
+  report a clean run.
 - A curated glycosyltransferase list with citations was needed before the ranking
   layer shipped. glycowork carries no EC numbers or CAZy references, so it cannot
   be derived from shipped data.

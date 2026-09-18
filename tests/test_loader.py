@@ -677,15 +677,9 @@ def test_a_kind_the_union_does_not_hold_is_refused_and_the_message_names_the_kin
         assert kind.value in example
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SUSPECTED SOURCE DEFECT, loader.py. _build_analyte raises _Coercion(UNKNOWN_ANALYTE_KIND, ...)"
-    " for a kind the union does not hold, but its call site in load_measurements catches bare Exception and"
-    " notes ANALYTE_REJECTED, so the UNKNOWN_ANALYTE_KIND constant is never used and a wrong analyte_kind is"
-    " counted as a failed validation. The _coerce call site above it does catch _Coercion and use exc.reason;"
-    " this one does not. The row is still refused and the detail still reaches the example, so nothing is"
-    " lost or invented - the bucket is wrong, which makes a wrong column harder to tell from bad data.",
-)
+# Was an xfail against a real defect: the call site caught bare Exception, so a
+# row naming a kind the union does not hold was counted as failed validation
+# rather than under its own reason. _Coercion is now caught separately.
 @pytest.mark.parametrize("named", ["", "protein_complex"])
 def test_an_analyte_kind_the_union_does_not_hold_is_counted_under_its_own_reason(named):
     report = load(table(analyte_row(named, analyte_composition="Hex5HexNAc2")))
@@ -716,3 +710,39 @@ def test_a_native_and_a_denatured_ion_of_one_antibody_are_two_matched_ions_in_on
     report = load(text)
     assert report.records_built == 2, report.failure_counts
     assert report.matched_ion_keys_held == 2
+
+
+# --- ions that can never pair -----------------------------------------------------------
+#
+# Added after the first mutation sweep, with the behaviour itself.
+
+
+def test_records_whose_charge_carrier_is_unstated_are_counted_apart_from_matched_ions():
+    # Folded into the matched-ion count they would read as ions waiting for a
+    # partner. A native-MS protein file would then report hundreds of distinct
+    # matched ions and no possible pair, which reads as a puzzle rather than as
+    # the one-line problem it is.
+    unstated = analyte_row(
+        "protein",
+        analyte_accession="P01857",
+        analyte_folding_state="native",
+        adduct="[M+24?]24+",
+        charge="24",
+        polarity="positive",
+        ccs="7000.0",
+    )
+    named = analyte_row(
+        "protein",
+        analyte_accession="P01857",
+        analyte_folding_state="native",
+        adduct="[M+24H]24+",
+        charge="24",
+        polarity="positive",
+        ccs="7000.0",
+    )
+    report = load(table(unstated, named))
+    assert report.records_built == 2
+    assert report.unmatchable_held == 1
+    # The named-carrier record is the only one that counts as a matched ion.
+    assert report.matched_ion_keys_held == 1
+    assert "UNMATCHABLE" in report.summary()

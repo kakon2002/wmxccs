@@ -176,8 +176,10 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[I] an antibody's structural state drops the CIU state",
         file="identity.py",
-        find="    def structural_state(self) -> tuple:\n        return (str(self.folding_state), self.ciu_state)\n\n    def component_records(self) -> tuple[_Record, ...]:\n        return (self.antibody,)\n\n\nclass ADCAnalyte",
-        replace="    def structural_state(self) -> tuple:\n        return (str(self.folding_state),)\n\n    def component_records(self) -> tuple[_Record, ...]:\n        return (self.antibody,)\n\n\nclass ADCAnalyte",
+        # Re-anchored once already: component_records was removed from the two
+        # antibody variants when it was found to refuse every antibody record.
+        find="    def structural_state(self) -> tuple:\n        return (str(self.folding_state), self.ciu_state)\n\n\nclass ADCAnalyte",
+        replace="    def structural_state(self) -> tuple:\n        return (str(self.folding_state),)\n\n\nclass ADCAnalyte",
     ),
     Mutation(
         label="[I] the analyte union loses its discriminator, so an arm can silently change",
@@ -207,14 +209,23 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[M] the matched-ion key drops the structural state, pooling native with denatured",
         file="models.py",
-        find="            state=self.analyte.structural_state(),\n        )",
-        replace="            state=(),\n        )",
+        # Re-anchored once already: the key gained its `unmatchable` component.
+        find="            state=self.analyte.structural_state(),\n            unmatchable=unmatchable,",
+        replace="            state=(),\n            unmatchable=unmatchable,",
     ),
     Mutation(
         label="[M] the calibration group carries the analyte, so the shared-peak check can never fire",
         file="models.py",
+        # Rewritten after the first sweep, where this survived for a reason that
+        # had nothing to do with test coverage: it read
+        # `self.analyte.identity_key() and self.ims_type`, and since an identity
+        # key is always a non-empty tuple that expression just returns ims_type.
+        # The text changed and the behaviour did not, so the harness called it
+        # applied. Anchor.INERT catches a mutation that leaves the FILE
+        # unchanged; nothing catches one that leaves the BEHAVIOUR unchanged,
+        # which is worth knowing when writing a replacement that looks clever.
         find="        return CalibrationGroup(\n            self.ims_type,",
-        replace="        return CalibrationGroup(\n            self.analyte.identity_key() and self.ims_type,",
+        replace="        return CalibrationGroup(\n            self.analyte.identity_key(),",
     ),
     Mutation(
         label="[M] the calibration group drops the calibrant",
@@ -656,8 +667,52 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[K] the matched-ion count is taken from keys held rather than keys on two platforms",
         file="readiness.py",
-        find="            matched_ions_multi_platform=sum(1 for measured_on in keys.values() if len(measured_on) > 1),",
-        replace="            matched_ions_multi_platform=len(keys),",
+        # Re-anchored once already: the count runs over matchable keys only.
+        find="            matched_ions_multi_platform=sum(1 for measured_on in matchable.values() if len(measured_on) > 1),",
+        replace="            matched_ions_multi_platform=len(matchable),",
+    ),
+    # --- added after the first sweep, for behaviour that did not exist then ----
+    Mutation(
+        label="[I] two ions whose charge carrier is unstated silently match each other",
+        file="identity.py",
+        find="        return self.unmatchable is None",
+        replace="        return True",
+    ),
+    Mutation(
+        label="[M] an unstated charge carrier no longer makes its key unique to its record",
+        file="models.py",
+        find="        if adduct_carrier_is_unstated(self.adduct):",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[I] a glycan with no keyable identifier crashes instead of keying on what it states",
+        file="identity.py",
+        find='        if self.glytoucan_ac is not None:\n            return (AnalyteKind.GLYCAN.value, "glytoucan_unverified_form", self.glytoucan_ac)',
+        replace='        if False:\n            return (AnalyteKind.GLYCAN.value, "glytoucan_unverified_form", self.glytoucan_ac)',
+    ),
+    Mutation(
+        label="[S] a bare string is coerced into one piece of evidence per character",
+        file="sources.py",
+        find="            if isinstance(getattr(self, name), str):",
+        replace="            if False:",
+    ),
+    Mutation(
+        label="[D] an analyte kind the union does not hold is counted as bad data",
+        file="loader.py",
+        find="        except _Coercion as exc:\n            # Its own bucket.",
+        replace="        except () as exc:\n            # Its own bucket.",
+    ),
+    Mutation(
+        label="[D] a fully held file stops saying what its uncertainty types are",
+        file="loader.py",
+        find="        return _uncertainty_tally(self.records)",
+        replace="        return {}",
+    ),
+    Mutation(
+        label="[D] unmatchable records are folded back into the held matched-ion count",
+        file="loader.py",
+        find="        return len({record.matched_ion_key for record in self.records if record.matched_ion_key.matchable})",
+        replace="        return len({record.matched_ion_key for record in self.records})",
     ),
     Mutation(
         label="[K] the maturity stamp reports a validated result",

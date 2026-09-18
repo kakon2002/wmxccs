@@ -467,12 +467,29 @@ class CCSMeasurement(MeasurementConditions):
         """
         from .identity import MatchedIonKey
 
+        # An ion whose charge carrier the source never named cannot be matched
+        # with anything, including another record of the same shape, so its key
+        # carries its own provenance and is unique to it. See MatchedIonKey.
+        # Derived from the record rather than generated, so the key is stable
+        # across runs and a report is reproducible.
+        unmatchable = None
+        if adduct_carrier_is_unstated(self.adduct):
+            unmatchable = (
+                "charge carrier not stated",
+                self.source,
+                self.doi,
+                self.source_locator,
+                self.ccs,
+                self.conformer,
+            )
+
         return MatchedIonKey(
             analyte=self.analyte.identity_key(),
             adduct=self.adduct,
             charge=self.charge,
             drift_gas=self.drift_gas,
             state=self.analyte.structural_state(),
+            unmatchable=unmatchable,
         )
 
     @property

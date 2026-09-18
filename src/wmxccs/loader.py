@@ -373,7 +373,21 @@ class MeasurementLoadReport:
 
     @property
     def matched_ion_keys_held(self) -> int:
-        return len({record.matched_ion_key for record in self.records})
+        """Distinct matched ions the file holds, EXCLUDING ones that can never pair."""
+        return len({record.matched_ion_key for record in self.records if record.matched_ion_key.matchable})
+
+    @property
+    def unmatchable_held(self) -> int:
+        """Records whose charge carrier the source never named.
+
+        Counted apart, because each carries a key unique to itself and can never
+        pair with anything - including another record of the same shape. Folded
+        into matched_ion_keys_held they would read as ions waiting for a partner,
+        and a native-MS protein file would report hundreds of distinct matched
+        ions and no possible pair, which reads as a puzzle rather than as the
+        one-line problem it is.
+        """
+        return sum(1 for record in self.records if not record.matched_ion_key.matchable)
 
     @property
     def calibration_groups_held(self) -> int:
@@ -398,12 +412,18 @@ class MeasurementLoadReport:
     @property
     def uncertainty_types(self) -> Mapping[str, int]:
         """Cleared records by what their reported spread is, with 'not reported' counted."""
-        return dict(
-            Counter(
-                str(record.uncertainty_type) if record.uncertainty_type is not None else "not reported"
-                for record in self.cleared
-            )
-        )
+        return _uncertainty_tally(self.cleared)
+
+    @property
+    def uncertainty_types_held(self) -> Mapping[str, int]:
+        """The same tally over everything the file holds, cleared or not.
+
+        The fifth of the `_held` figures, and it was missing. A file where nothing
+        clears said nothing at all about its spreads - and for the 2015 seed an
+        uncertainty type of 'unknown' is one of the two things blocking all 89
+        rows, so the report was silent about half of its own headline.
+        """
+        return _uncertainty_tally(self.records)
 
     def summary(self) -> str:
         lines = [
@@ -441,6 +461,14 @@ class MeasurementLoadReport:
             lines += [
                 "  in the file, cleared or not:",
                 f"    distinct matched ions   {self.matched_ion_keys_held}",
+                *(
+                    [
+                        f"    UNMATCHABLE             {self.unmatchable_held}  (charge carrier not stated;"
+                        " can never pair, not even with each other)"
+                    ]
+                    if self.unmatchable_held
+                    else []
+                ),
                 f"    calibration groups      {self.calibration_groups_held}",
             ]
             if self.platforms_held:
@@ -460,6 +488,11 @@ class MeasurementLoadReport:
                 lines.append(
                     "    gas                     " + ", ".join(f"{g} x{n}" for g, n in sorted(self.gas_split_held.items()))
                 )
+            if self.uncertainty_types_held:
+                lines.append(
+                    "    uncertainty reported as "
+                    + ", ".join(f"{k} x{n}" for k, n in sorted(self.uncertainty_types_held.items()))
+                )
         if self.unknown_columns:
             lines.append(f"  columns not recognised    {', '.join(self.unknown_columns)}  (ignored, and reported)")
         if self.readiness is not None:
@@ -475,6 +508,15 @@ class _Failed:
     where: str
     ccs: float | None
     atoms: frozenset[str]
+
+
+def _uncertainty_tally(records) -> Mapping[str, int]:
+    return dict(
+        Counter(
+            str(record.uncertainty_type) if record.uncertainty_type is not None else "not reported"
+            for record in records
+        )
+    )
 
 
 def _gas_pair(record: CCSMeasurement) -> str:
@@ -521,6 +563,13 @@ def load_measurements(text: str, *, label: str = "measurements") -> MeasurementL
             continue
         try:
             analyte = _build_analyte(analyte_fields)
+        except _Coercion as exc:
+            # Its own bucket. A row naming a kind the union does not hold is a
+            # wrong COLUMN, and counting it as failed validation makes it read as
+            # bad data, which is a different fix by a different person.
+            _note(failures, failure_examples, exc.reason, f"{where}: {exc}")
+            failed.append(_as_failed(where, row.cells))
+            continue
         except Exception as exc:
             _note(failures, failure_examples, ANALYTE_REJECTED, f"{where}: {_first_line(exc)}")
             failed.append(_as_failed(where, row.cells))

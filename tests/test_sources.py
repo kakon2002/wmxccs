@@ -308,20 +308,30 @@ def test_notes_passed_as_a_list_are_held_as_a_tuple():
     hash(entry)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SUSPECTED DEFECT in sources.py __post_init__: evidence is coerced with tuple(), so a bare"
-    " string is exploded into one entry per character. 'RSCarticlepage' is held as seven one-character"
-    " pieces of evidence and passes every check; a string with spaces is refused with 'records no"
-    " evidence', which is the wrong reason. Either outcome is silent corruption of the one field the"
-    " registry exists to hold. Refusing a bare string, or wrapping it as a single item, both fix it.",
-)
-def test_evidence_given_as_one_bare_string_is_not_exploded_into_one_entry_per_character():
-    try:
-        entry = licence_record(evidence="RSCarticlepage")
-    except ValueError:
-        return  # refusing a bare string outright is a perfectly good answer
-    assert entry.evidence == ("RSCarticlepage",)
+# Was an xfail against a real defect: evidence was coerced with tuple(), so a
+# bare string became one piece of evidence per character and the entry read as
+# thoroughly evidenced while holding nothing. A bare string is now refused.
+def test_evidence_given_as_one_bare_string_is_refused_rather_than_split_into_characters():
+    # Both spellings must be refused, and for the SAME reason. A string with no
+    # spaces used to pass every check as one piece of evidence per character,
+    # leaving the entry reading as thoroughly evidenced while holding nothing;
+    # a string with spaces failed for the wrong reason, "records no evidence",
+    # which points the reader at a missing field rather than a wrong type.
+    for spelling in ("RSCarticlepage", "RSC article page"):
+        with pytest.raises(ValueError, match="not one string"):
+            licence_record(evidence=spelling)
+
+
+def test_notes_given_as_one_bare_string_are_refused_the_same_way():
+    with pytest.raises(ValueError, match="not one string"):
+        licence_record(notes="settled on the publisher's page")
+
+
+def test_evidence_given_as_a_list_is_still_coerced_to_a_tuple():
+    # The coercion itself is worth keeping: a frozen record holding a mutable,
+    # unhashable field trips every later membership test.
+    entry = licence_record(evidence=["RSC article page", "the issue listing"])
+    assert entry.evidence == ("RSC article page", "the issue listing")
 
 
 @pytest.mark.parametrize("dataset", list(sources.DATASETS.values()), ids=lambda d: d.provenance)

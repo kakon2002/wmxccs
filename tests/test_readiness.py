@@ -480,18 +480,9 @@ def test_a_pair_at_the_fold_floor_draws_no_in_sample_warning():
 # --- what does not fit yet ----------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "SUSPECTED SOURCE DEFECT, and not in readiness.py."
-        " IntactAntibodyAnalyte.component_records() returns an AntibodyIdentity, which carries no"
-        " reuse_status, so licensing._collect refuses it with 'cannot tell the reuse status of a"
-        " AntibodyIdentity'. No antibody or ADC measurement can therefore enter a MatchedIonSet,"
-        " and readiness cannot report on the two analyte kinds the union was widened for. Either"
-        " AntibodyIdentity needs a reuse_status, or it should not be listed as a component record."
-    ),
-    raises=LicenceGateError,
-    strict=True,
-)
+# Was an xfail against a real defect: no antibody or ADC measurement could enter
+# a MatchedIonSet, because the nested AntibodyIdentity was offered to the gate as
+# a component record and carries no reuse status.
 def test_an_antibody_ion_can_be_held_in_a_matched_ion_set_and_reported_on():
     from conftest import antibody
 

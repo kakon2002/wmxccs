@@ -891,7 +891,24 @@ class GlycanAnalyte(_Analyte):
             return (AnalyteKind.GLYCAN.value, "glytoucan", self.glytoucan_ac)
         if self.iupac_condensed is not None and _IUPAC_LINKAGE.search(self.iupac_condensed) is not None:
             return (AnalyteKind.GLYCAN.value, "iupac", self.iupac_condensed)
-        return (AnalyteKind.GLYCAN.value, "composition", self.composition.canonical)
+        if self.composition is not None:
+            return (AnalyteKind.GLYCAN.value, "composition", self.composition.canonical)
+        # Neither a keyable structure identifier nor a composition, and yet the
+        # record validated: states_an_identifier accepts any of the four fields,
+        # and two of them are not evidence of structure. A GlyTouCan accession
+        # that does not match the expected form is kept with a warning, because
+        # that form is not itself verified; an IUPAC string naming no linkage is
+        # kept because it may still name the molecule. Both are identity, so both
+        # key - on what they actually say, tagged with WHY they are weak, so the
+        # key can never be read as a resolved structure.
+        #
+        # This branch exists because the alternative was worse: the record loaded,
+        # cleared the gate, sat in the corpus, and raised AttributeError the first
+        # time anything asked for its key - in M2, over real data, in a traceback
+        # naming neither the record nor the file it came from.
+        if self.glytoucan_ac is not None:
+            return (AnalyteKind.GLYCAN.value, "glytoucan_unverified_form", self.glytoucan_ac)
+        return (AnalyteKind.GLYCAN.value, "iupac_no_linkage_stated", self.iupac_condensed)
 
     def identity_atoms(self) -> frozenset[str]:
         atoms = set()
@@ -1017,6 +1034,16 @@ class AntibodyIdentity(_Record):
     for an intact monoclonal it is very often the only identifier a paper gives.
     It is held in its own field, and lower-cased, so that it can be an identity
     without `display_name` ever becoming one.
+
+    DELIBERATELY NOT A COMPONENT RECORD, and it carries no licence of its own.
+    The licence gate walks into `component_records()` and refuses anything it
+    finds there that cannot state a reuse status - correctly, and fail-closed.
+    This is not such a thing: it is the structured form of the enclosing
+    analyte's identity, not a separately sourced record, and the analyte's own
+    `source` and `reuse_status` already say where that identity came from and on
+    what terms. Listing it as a component made the gate refuse every intact
+    antibody and every ADC measurement, whatever its licence, which would have
+    closed the biopharmaceutical layer entirely.
     """
 
     inn: _Text | None = Field(
@@ -1097,9 +1124,6 @@ class IntactAntibodyAnalyte(_FoldedAnalyte):
     def structural_state(self) -> tuple:
         return (str(self.folding_state), self.ciu_state)
 
-    def component_records(self) -> tuple[_Record, ...]:
-        return (self.antibody,)
-
 
 class ADCAnalyte(_FoldedAnalyte):
     """An antibody-drug conjugate: an antibody, a payload class, and how much of it is attached.
@@ -1161,9 +1185,6 @@ class ADCAnalyte(_FoldedAnalyte):
 
     def structural_state(self) -> tuple:
         return (str(self.folding_state), self.ciu_state)
-
-    def component_records(self) -> tuple[_Record, ...]:
-        return (self.antibody,)
 
 
 # The tagged union. Discriminated EXPLICITLY on kind_tag, never left to
@@ -1237,8 +1258,34 @@ class MatchedIonKey(NamedTuple):
     charge: int
     drift_gas: DriftGas
     state: tuple
+    # None for every ion whose charge carrier the source named, which is every
+    # ordinary record and which leaves the key behaving exactly as the five
+    # components above describe.
+    #
+    # For an ion written [M+24?]24+ this holds the record's own provenance, which
+    # makes the key UNIQUE TO THAT RECORD and therefore incapable of matching
+    # anything, including another unstated-carrier record.
+    #
+    # That is the point, and it is structural rather than a rule somebody
+    # downstream has to remember. Two papers both reporting "the 24+ ion" of one
+    # protein have not reported the same ion: one may be twenty-four protons and
+    # the other twenty-four ammonium adducts, which differ by 408 Da and do not
+    # have the same cross section. Letting the two land on one key would pair
+    # them, and the pipeline would report the difference between two different
+    # ions as inter-platform bias - silently, and most often in exactly the
+    # native-MS protein data the biopharmaceutical layer is built on, where the
+    # carrier is very often not stated.
+    unmatchable: tuple | None = None
+
+    @property
+    def matchable(self) -> bool:
+        """Whether this key may ever pair with another. False when the carrier is unstated."""
+        return self.unmatchable is None
 
     def __str__(self) -> str:
         analyte = ":".join("" if part is None else str(part) for part in self.analyte)
         state = ",".join("" if part is None else str(part) for part in self.state)
-        return f"{analyte} | {self.adduct} | {self.charge:+d} | {self.drift_gas} | {state}"
+        rendered = f"{analyte} | {self.adduct} | {self.charge:+d} | {self.drift_gas} | {state}"
+        if self.unmatchable is not None:
+            rendered += "  [unmatchable: charge carrier not stated by the source]"
+        return rendered

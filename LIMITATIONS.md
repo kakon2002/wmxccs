@@ -106,13 +106,54 @@ anchor test that runs on every pytest invocation covers the case in practice.
 
 With no mutations, `python -m tools.mutation` prints "no mutation label contains
 any of []" and exits 1, which describes a filter that matched nothing rather than
-an empty catalogue. Latent only: the catalogue holds 103. Same reasoning as 4.3.
+an empty catalogue. Latent only: the catalogue holds 110. Same reasoning as 4.3.
+
+**Do not "fix" this by falling back to running everything.** That change was made
+during M0, by an agent writing tests, and it is worth recording because of how it
+failed. Replacing the refusal with `chosen = list(MUTATIONS)` made one test pass
+and turned a filter typo into a full sweep - which is precisely what the comment
+three lines above it warns against ("Selecting on the remaining arguments and
+ignoring the rest would quietly start a full sweep in answer to a typo - this
+tool's own failure mode, turned on itself"). The consequence was a test suite that
+ran for two hours and thirty-eight minutes instead of three seconds, because a test
+calling the CLI with a non-matching filter now kicked off a complete mutation sweep,
+each mutation of which ran the whole suite again. It was found by timing, not by a
+failing test. The line is restored, and `tools/mutation` is byte-identical to the
+original again apart from the package name.
+
+### 4.5 Two agents mutating one working tree can make a mutation permanent
+
+Also from M0, also worth recording. Two agents ran mutation checks against the same
+checkout at the same time; one read a file its sibling had already mutated, took
+that as the pristine text, and wrote the mutation back. It was caught because the
+anchor check independently proves every `find` string is present and every `replace`
+string absent, and because a second agent noticed the source did not match what it
+had read earlier. There was no git history to recover from, which is the part that
+made it dangerous rather than merely annoying.
+
+The harness itself is not at fault: it copies the package to a temporary directory
+and never writes the repository. The hazard is in doing mutation work by hand over a
+shared tree. Serialise such runs, or give each worker its own worktree, and commit
+before starting.
+
+## 4A. Defects found during M0 and fixed
+
+Recorded because each was a real hole, and because the test that found it is the
+test that keeps it shut. None of these is outstanding.
+
+| What was wrong | Consequence had it shipped |
+|---|---|
+| `AntibodyIdentity` was listed in `component_records()` and carries no reuse status | The gate refused EVERY intact-antibody and ADC measurement whatever its licence, closing the biopharmaceutical layer entirely - the platform's stated differentiator |
+| `GlycanAnalyte.identity_key` fell through to `self.composition.canonical` on a record whose composition is null | A glycan stating only an unverified-form accession, or a structure naming no linkage, loaded, cleared the gate, sat in the corpus, and raised `AttributeError` the first time anything asked for its key - in M2, over real data, naming neither the record nor its file |
+| `SourceLicence` coerced `evidence` with `tuple()` | A bare string became one piece of evidence per character. "RSCarticlepage" passed every check as seven pieces of evidence, leaving the entry reading as thoroughly evidenced while holding nothing |
+| The loader caught bare `Exception` around `_build_analyte` | A row naming an analyte kind the union does not hold was counted as failed validation rather than under its own reason, making a wrong column indistinguishable from bad data |
+| `MeasurementLoadReport` had no `uncertainty_types_held` | A file where nothing clears said nothing at all about its spreads. For the 2015 seed an uncertainty type of `unknown` is one of the two things blocking all 89 rows, so the report was silent about half its own headline |
 
 ## 5. Where this repository departs from CONTEXT.md, and why
 
-CONTEXT.md was written before this repository existed. These are the places its
-instructions could not be followed exactly. Each was a judgement call and each is
-reversible.
+CONTEXT.md has since been corrected in place for the factual errors listed in
+section 6. These are the remaining places where its instructions could not be
+followed exactly. Each was a judgement call and each is reversible.
 
 | CONTEXT.md says | What was done | Why |
 |---|---|---|
@@ -132,11 +173,23 @@ Two further decisions that CONTEXT.md does not cover:
   no composition and are identified by their structure, which is finer anyway.
 - **`[M+24?]24+`** is a new adduct form meaning "twenty-four charges, carrier not
   stated". Native-MS papers routinely report a charge state without saying whether
-  the carriers are protons, sodium or ammonium. Without this the adduct is
-  mandatory and its charge must match, so such a record could not be built at all;
-  writing `[M+24H]24+` instead would assert protons, which the paper does not say.
-  It keys apart from every named carrier and blocks training, following the
+  the carriers are protons, sodium or ammonium, and the Bush Lab protein data is
+  expected to be full of them, so this is the common case rather than the exotic
+  one. Without this the adduct is mandatory and its charge must match, so such a
+  record could not be built at all; writing `[M+24H]24+` instead would assert
+  protons, which the paper does not say. It blocks training, following the
   `DriftGas.UNSTATED` precedent exactly.
+
+  It also does one thing that precedent does not. **Its matched-ion key is made
+  unique to its own record**, so two unstated-carrier records can never match each
+  other. Two papers both reporting "the 24+ ion" of one protein have not reported
+  the same ion: one may be twenty-four protons and the other twenty-four ammonium
+  adducts, which differ by 408 Da and do not have the same cross section. Letting
+  the two land on one key would pair them, and the pipeline would report the
+  difference between two different ions as inter-platform bias. The protection is
+  structural rather than a rule downstream code has to remember: the key carries
+  the record's own provenance, so it is equal to nothing but itself. The loader
+  counts such records apart from its matched-ion figures, under `unmatchable_held`.
 
 ## 6. Corrections to CONTEXT.md
 
@@ -192,7 +245,7 @@ Stated plainly because CONTEXT.md is the document everyone reads first.
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 103 mutations against seven modules. It is smaller than the
+- the catalogue holds 110 mutations against seven modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;

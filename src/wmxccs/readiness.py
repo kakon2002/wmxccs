@@ -269,6 +269,18 @@ class Readiness:
     matched_ions_multi_platform: int
     platforms: tuple[str, ...]
     distinct_sources: int
+    # Records whose charge carrier the source never named. Each holds a key unique
+    # to itself and can never pair with anything, so they are counted apart from
+    # matched_ion_keys rather than inflating it.
+    #
+    # ZERO HERE TODAY, AND DELIBERATELY KEPT ANYWAY. An unstated carrier is a
+    # training blocker, so the gate refuses such a record before it can reach a
+    # MatchedIonSet, and this figure is a second line of defence rather than the
+    # only one. The place the count actually bites is the loader's held figures,
+    # where such records ARE present: see MeasurementLoadReport.unmatchable_held.
+    # If the blocker is ever relaxed, this reports the consequence instead of the
+    # corpus quietly gaining keys that can never pair.
+    unmatchable_records: int = 0
     by_platform: Mapping[str, int] = field(default_factory=dict)
     by_pair: Mapping[str, PairCount] = field(default_factory=dict)
     # Each record's OWN status, so this tally sums to records_cleared. A status
@@ -322,6 +334,13 @@ class Readiness:
                 f"{self.distinct_sources} source(s): under {MIN_SOURCES_FOR_CROSS_STUDY} no cross-study claim"
                 " can be made, so every number is a within-study number"
             )
+        if self.unmatchable_records:
+            notes.append(
+                f"{self.unmatchable_records} of {self.records_cleared} records do not name the charge carrier"
+                " of their ion, so none of them can be matched with anything, including each other: two"
+                " sources both reporting a 24+ ion may mean protons and ammonium, which are not the same ion."
+                " Resolving them means reading each source's methods, never assuming protons"
+            )
         for name, count in sorted(self.by_pair.items()):
             if count.matched_ions and not count.scorable:
                 notes.append(
@@ -367,6 +386,14 @@ class Readiness:
         lines += [
             f"  cleared the licence gate  {self.records_cleared}",
             f"  distinct matched ions     {self.matched_ion_keys}",
+            *(
+                [
+                    f"  UNMATCHABLE               {self.unmatchable_records}  (charge carrier not stated by"
+                    " the source; each can never pair with anything, including another such record)"
+                ]
+                if self.unmatchable_records
+                else []
+            ),
             f"  measured on >1 platform   {self.matched_ions_multi_platform}"
             f"  (of {TARGET_MATCHED_IONS} before the number is worth quoting)",
             f"  platforms represented     {len(self.platforms)}  (of {MIN_PLATFORMS} needed for any pair"
@@ -458,7 +485,13 @@ class MatchedIonSet:
         return len(self.records)
 
     def by_key(self) -> dict[object, set[str]]:
-        """Matched-ion key -> the set of platforms it was measured on."""
+        """Matched-ion key -> the set of platforms it was measured on.
+
+        Unmatchable keys are included here, because they are held and a caller
+        asking what the corpus contains should see them. They are counted apart
+        in the readiness report, and no pair can ever form from one: each carries
+        its own record's provenance, so it is equal to nothing but itself.
+        """
         found: dict[object, set[str]] = {}
         for record in self.records:
             key = getattr(record, "matched_ion_key", None)
@@ -482,12 +515,14 @@ class MatchedIonSet:
             status = str(getattr(record, "reuse_status", "unknown"))
             statuses[status] = statuses.get(status, 0) + 1
         sources = {_provenance_atom(record) for record in self.records}
+        matchable = {key: seen for key, seen in keys.items() if getattr(key, "matchable", True)}
         return Readiness(
             records_held=len(self.records),
             # Every record here has already cleared the gate, by construction.
             records_cleared=len(self.records),
-            matched_ion_keys=len(keys),
-            matched_ions_multi_platform=sum(1 for measured_on in keys.values() if len(measured_on) > 1),
+            matched_ion_keys=len(matchable),
+            unmatchable_records=len(keys) - len(matchable),
+            matched_ions_multi_platform=sum(1 for measured_on in matchable.values() if len(measured_on) > 1),
             platforms=tuple(sorted(platforms)),
             distinct_sources=len(sources),
             by_platform=dict(platforms),

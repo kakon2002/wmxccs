@@ -307,15 +307,9 @@ def test_the_loaders_own_report_of_the_2015_hold_names_both_blockers_and_not_jus
         )
 
 
-@pytest.mark.xfail(
-    reason="SUSPECTED DEFECT in loader.MeasurementLoadReport: uncertainty_types is computed over `cleared`"
-    " only, and there is no uncertainty_types_held beside adducts_held, gas_split_held, platforms_held and"
-    " analyte_kinds_held. The 2015 seed clears nothing, so its summary says nothing at all about the spreads"
-    " it holds - and an uncertainty type of 'unknown' is one of the two things blocking all 89 rows. The"
-    " report's own docstring says the _held four exist 'so that a report of a fully held file still says what"
-    " is in it'; this is the fifth, and it is missing.",
-    strict=True,
-)
+# Was an xfail against a real gap: uncertainty_types was computed over the
+# cleared records only, so a fully held file said nothing about the spreads that
+# were part of why it was held. uncertainty_types_held is the fifth _held figure.
 def test_the_summary_of_a_fully_held_file_says_what_its_values_uncertainty_types_are(report_2015):
     # Every one of the 89 records reports an uncertainty type, and it is one of
     # the two reasons none of them may train.

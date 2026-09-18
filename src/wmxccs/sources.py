@@ -91,6 +91,19 @@ class SourceLicence:
     notes: tuple[str, ...] = ()  # discrepancies met and how they were settled; what is still awaited
 
     def __post_init__(self) -> None:
+        # A bare string is refused rather than coerced. tuple("RSC article page")
+        # is seventeen one-character pieces of evidence, every one of which passes
+        # the non-blank check below, and the entry then reads as thoroughly
+        # evidenced while holding nothing. A string with spaces fails instead, for
+        # the wrong reason ("records no evidence"). Both are silent corruption of
+        # the single field this registry exists to hold, so the type is checked
+        # before anything is coerced.
+        for name in ("evidence", "notes"):
+            if isinstance(getattr(self, name), str):
+                raise ValueError(
+                    f"{name} is a sequence of separate statements, not one string; wrap it as a tuple,"
+                    f' as in {name}=("...",). A bare string would be split into one entry per character'
+                )
         # Coerce before checking, so a list cannot leave a frozen record holding
         # a mutable, unhashable field that every later `in` test then trips on.
         object.__setattr__(self, "evidence", tuple(self.evidence))

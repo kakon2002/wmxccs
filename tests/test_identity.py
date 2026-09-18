@@ -17,6 +17,8 @@ invalid case raises with a message a human can act on.
 
 from __future__ import annotations
 
+import warnings
+
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
@@ -497,28 +499,44 @@ def test_a_record_with_a_structure_identifier_may_claim_resolved_linkage(identif
     assert resolved.has_unresolved_linkage is False
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SUSPECTED SOURCE DEFECT in identity.py. states_an_identifier accepts a glycan that states ANY"
-    " of the four identifier fields, but identity_key accepts only a WURCS, a well-formed GlyTouCan"
-    " accession or an IUPAC string that states its linkages, and otherwise falls through to"
-    " self.composition.canonical. A glycan whose only identifier is an accession of an unverified form,"
-    " or a structure string with no linkage in it, therefore validates and then raises AttributeError"
-    " ('NoneType' object has no attribute 'canonical') the moment it is asked for its matched-ion key."
-    " Both inputs are real: the accession form is documented as not yet verified, and composition is"
-    " optional by design. Either the record should be refused at validation, or the key should fall back"
-    " to the identifier as written; it should not be buildable and keyless.",
-)
+# Was an xfail against a real defect: a glycan stating only an accession of an
+# unverified form, or a structure naming no linkage, validated and then raised
+# AttributeError the moment anything asked for its key. identity_key now keys on
+# what such a record actually states, tagged with why it is weak.
 @pytest.mark.parametrize(
-    "identifiers",
+    "identifiers, expected",
     [
-        pytest.param({"glytoucan_ac": "GXX"}, id="accession_of_unverified_form"),
-        pytest.param({"iupac_condensed": "ManManGlcNAc"}, id="structure_with_no_linkage_stated"),
+        pytest.param(
+            {"glytoucan_ac": "GXX"},
+            ("glycan", "glytoucan_unverified_form", "GXX"),
+            id="accession_of_unverified_form",
+        ),
+        pytest.param(
+            {"iupac_condensed": "ManManGlcNAc"},
+            ("glycan", "iupac_no_linkage_stated", "ManManGlcNAc"),
+            id="structure_with_no_linkage_stated",
+        ),
     ],
 )
-def test_a_glycan_that_can_be_built_always_has_a_matched_ion_key(identifiers):
-    keyless = glycan(composition=None, **identifiers)
-    assert keyless.identity_key()
+def test_a_glycan_that_can_be_built_always_has_a_matched_ion_key(identifiers, expected):
+    # The key must name WHAT THE RECORD ACTUALLY STATES, not merely be non-empty.
+    # Asserting only that a key exists lets a key built from the wrong field pass:
+    # a record identified by an accession would key on a null structure string,
+    # which is a key every such record would share.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UnverifiedFormatWarning)
+        keyless = glycan(composition=None, **identifiers)
+    assert keyless.identity_key() == expected
+    # And it is tagged, so it can never be read as a resolved structure.
+    assert "unverified" in expected[1] or "no_linkage" in expected[1]
+
+
+def test_two_glycans_identified_only_by_different_weak_identifiers_still_key_apart():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UnverifiedFormatWarning)
+        one = glycan(composition=None, glytoucan_ac="GXX")
+        other = glycan(composition=None, glytoucan_ac="GYY")
+    assert one.identity_key() != other.identity_key()
 
 
 def test_a_glytoucan_accession_of_an_unexpected_form_warns_rather_than_being_refused():

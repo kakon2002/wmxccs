@@ -35,7 +35,7 @@ roughly two days.
 | Conformer handling: two values for one ion is legitimate | Section 8 and the cIMS conformer index |
 | Refuse to fit when evaluation is impossible, warn when weak | Section 10, honest confidence |
 | Grouped splitting so one analyte never spans train and test | Section 12, cross-validation |
-| Mutation testing harness, 136 curated mutations | Verifying the guards actually bite |
+| Mutation testing harness, 154 curated mutations | Verifying the guards actually bite |
 
 What does not carry over: everything glycan-specific. Isomer enumeration,
 biosynthetic rules, the structure database, glycan graph features.

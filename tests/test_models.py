@@ -25,6 +25,8 @@ from datetime import date, datetime
 import pytest
 from pydantic import ValidationError
 
+from wmxccs.licensing import TrainingGateError, assert_trainable
+
 from conftest import (
     OTHER_INCHIKEY,
     adc,
@@ -211,18 +213,9 @@ def test_a_display_name_is_in_no_key_so_a_compound_name_alone_never_makes_a_matc
     assert two_names_one_molecule[0].matched_ion_key == two_names_one_molecule[1].matched_ion_key
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="SUSPECTED DEFECT in identity.py GlycanAnalyte.identity_key: the four branches end with"
-    " self.composition.canonical, which is reached whenever a glycan states an identifier that is not"
-    " a key. states_an_identifier accepts a glycan whose only identifier is an IUPAC-condensed string"
-    " with no linkage in it, or a GlyTouCan accession that does not match the expected form (that one"
-    " is accepted with a warning, on purpose). Both then raise AttributeError: 'NoneType' object has no"
-    " attribute 'canonical' the first time anything asks for the key. The record loads, passes the"
-    " licence gate and sits in the corpus; the crash arrives in M2, at pairing, in a traceback that"
-    " names neither the record nor the file it came from. Either build a composition-free key for such"
-    " a record, or refuse it at construction where the message can say which column is missing.",
-)
+# Was an xfail against a real defect in identity.py GlycanAnalyte.identity_key,
+# which fell through to self.composition.canonical on a record whose composition
+# is None. Every record the package accepts can now produce its key.
 def test_every_record_the_package_accepts_can_produce_its_matched_ion_key():
     # A structure string stating no linkages is a real shape in published tables:
     # the source names a residue and nothing about how anything is joined.
@@ -524,11 +517,39 @@ def test_component_records_offers_the_analyte_to_the_licence_gate(glycan_measure
 
 
 @pytest.mark.parametrize("build", [antibody, adc], ids=["intact_antibody", "adc"])
-def test_component_records_also_offers_the_nested_antibody_identity(build):
+def test_the_nested_antibody_identity_is_not_offered_as_a_separately_licensed_record(build):
+    # It was, and the consequence was severe enough to be worth a test of its own.
+    # AntibodyIdentity carries no reuse status, the gate refuses anything in
+    # component_records() that cannot state one, and so EVERY intact-antibody and
+    # ADC measurement was refused whatever its licence - closing the whole
+    # biopharmaceutical layer, which is the platform's stated differentiator.
+    #
+    # It is the structured form of the enclosing analyte's identity, not a record
+    # sourced from somewhere else, and the analyte's own source and reuse_status
+    # already say where that identity came from and on what terms.
     analyte = build()
     parts = measurement(analyte=analyte, ccs=7000.0).component_records()
-    assert analyte in parts
-    assert analyte.antibody in parts
+    assert parts == (analyte,)
+    assert analyte.antibody not in parts
+
+
+@pytest.mark.parametrize("build", [antibody, adc], ids=["intact_antibody", "adc"])
+def test_an_antibody_measurement_can_clear_the_licence_gate(build):
+    # The negative direction of the test above, and the one that would have caught
+    # the defect: it is not enough that the nested identity is absent from the
+    # tuple, the record has to actually pass the gate.
+    #
+    # The folding state has to be stated for it to pass, which is the point of
+    # the other guard and not an inconvenience: an ion of unrecorded conformation
+    # is not defined well enough to train on.
+    analyte = build(folding_state=FoldingState.NATIVE)
+    assert_trainable(measurement(analyte=analyte, ccs=7000.0))
+
+
+@pytest.mark.parametrize("build", [antibody, adc], ids=["intact_antibody", "adc"])
+def test_an_antibody_whose_folding_state_is_unstated_is_still_refused(build):
+    with pytest.raises(TrainingGateError, match="folding_state"):
+        assert_trainable(measurement(analyte=build(), ccs=7000.0))
 
 
 def test_a_measurement_reports_its_analytes_warnings_without_blocking_on_them():
@@ -620,3 +641,79 @@ def test_a_bare_set_of_conditions_is_held_to_the_same_rules_as_a_measurement():
         conditions(adduct="[M+2H]2+")
     with pytest.raises(ValidationError, match="no calibrant enters the value"):
         conditions(ims_type=IMSType.DTIMS, dtims_method=DTIMSMethod.STEPPED_FIELD)
+
+
+# --- an ion whose charge carrier the source never named ---------------------------------
+#
+# Added after the first mutation sweep, which is when this behaviour was added.
+# Native-MS papers routinely report a charge state and nothing else - "the 24+
+# ion" - without saying whether those charges are protons, sodium or ammonium.
+# The Bush Lab protein data is expected to be full of them, so this is the common
+# case in the biopharmaceutical layer rather than an exotic one.
+
+
+def unstated_carrier_ion(**overrides):
+    fields = dict(
+        analyte=protein(folding_state=FoldingState.NATIVE),
+        adduct="[M+24?]24+",
+        charge=24,
+        ccs=7000.0,
+    )
+    fields.update(overrides)
+    return measurement(**fields)
+
+
+def test_an_ion_whose_charge_carrier_is_unstated_can_be_recorded_at_all():
+    # The alternative to this form is writing [M+24H]24+, which asserts protons,
+    # which the paper does not say. Refusing to record the measurement and
+    # inventing the chemistry are both worse than recording the ambiguity.
+    record = unstated_carrier_ion()
+    assert record.adduct == "[M+24?]24+"
+    assert record.charge == 24
+
+
+def test_an_unstated_charge_carrier_blocks_training_like_the_other_unknowns():
+    blockers = unstated_carrier_ion().training_blockers()
+    assert any("charge carrier" in blocker for blocker in blockers)
+    with pytest.raises(TrainingGateError, match="charge carrier"):
+        assert_trainable(unstated_carrier_ion())
+
+
+def test_two_ions_whose_charge_carrier_is_unstated_do_not_match_each_other():
+    # THE POINT OF THE WHOLE FORM. Two papers both reporting "the 24+ ion" of one
+    # protein have not reported the same ion: one may be twenty-four protons and
+    # the other twenty-four ammonium adducts, which differ by 408 Da and do not
+    # have the same cross section. Pairing them would report the difference
+    # between two different ions as inter-platform bias.
+    one = unstated_carrier_ion(source="one laboratory", ccs=7000.0)
+    other = unstated_carrier_ion(source="another laboratory", ccs=7010.0)
+    assert one.matched_ion_key != other.matched_ion_key
+    assert not one.matched_ion_key.matchable
+    assert not other.matched_ion_key.matchable
+    assert "unmatchable" in str(one.matched_ion_key)
+
+
+def test_an_unstated_carrier_ion_does_not_match_the_same_ion_with_a_named_carrier():
+    named = measurement(
+        analyte=protein(folding_state=FoldingState.NATIVE), adduct="[M+24H]24+", charge=24, ccs=7000.0
+    )
+    assert unstated_carrier_ion().matched_ion_key != named.matched_ion_key
+
+
+def test_an_ion_whose_carrier_IS_named_keeps_an_ordinary_matchable_key():
+    # The negative direction: the unmatchable component must be null for every
+    # ordinary record, or nothing would ever pair with anything.
+    named = measurement(
+        analyte=protein(folding_state=FoldingState.NATIVE), adduct="[M+24H]24+", charge=24, ccs=7000.0
+    )
+    assert named.matched_ion_key.matchable
+    assert named.matched_ion_key.unmatchable is None
+    elsewhere = measurement(
+        analyte=protein(folding_state=FoldingState.NATIVE),
+        adduct="[M+24H]24+",
+        charge=24,
+        ccs=7100.0,
+        source="another laboratory",
+        ims_type=IMSType.TIMS,
+    )
+    assert named.matched_ion_key == elsewhere.matched_ion_key

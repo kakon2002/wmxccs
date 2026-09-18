@@ -472,13 +472,10 @@ def test_the_statuses_are_importable_from_the_gate_and_are_the_same_objects() ->
 # --- a refusal this file believes is wrong -----------------------------------------------
 
 
-@pytest.mark.xfail(
-    raises=LicenceGateError,
-    reason="AntibodyIdentity carries no reuse_status, and IntactAntibodyAnalyte and ADCAnalyte both"
-    " offer it to the gate as a component record, so the gate refuses EVERY intact-antibody and ADC"
-    " measurement with 'cannot tell the reuse status of a AntibodyIdentity' whatever its licence is."
-    " Not strict: a fix should show up as an unexpected pass, not as a failure.",
-)
+# Was an xfail against a real defect: AntibodyIdentity was listed as a component
+# record and carries no reuse status, so the gate refused every antibody and ADC
+# measurement whatever its licence. It is the structured form of the enclosing
+# analyte's identity, not a separately sourced record, and is no longer offered.
 def test_a_native_antibody_measurement_that_declares_itself_synthetic_may_enter_training() -> None:
     """The biopharmaceutical layer is the platform's differentiator and no record
     in it can currently pass the gate. Reported as a suspected defect in identity.py
