@@ -230,8 +230,16 @@ STRUWE_2015 = SourceLicence(
         " were in. It is NOT inferred from the same group's 2016 paper. Resolving it means reading the"
         " calibration reference the owner names: Hofmann 2014, Anal. Chem. 86, 10789.",
         "Resolving the gas alone unblocks NOTHING. Every one of the 89 rows also carries uncertainty_type"
-        " 'unknown' with no spread, which is an independent training blocker. Both must be resolved before"
-        " any of these rows can train.",
+        " 'unknown' with no spread, which is an independent training blocker. Both would have to be"
+        " resolved before any of these rows could train.",
+        "And the second one probably cannot be resolved from this paper. The owner reports, on"
+        " 2026-09-19, that the Analyst ESI carries no uncertainty column at all. If so, 'unknown' is not"
+        " a transcription gap awaiting a more careful reading: it is a correct and complete record of"
+        " what the source states, and these 89 rows are not pending curation. Unblocking them needs"
+        " either a different source reporting a spread for the same ions, which would be different"
+        " records with their own provenance, or an explicit decision that a value with no reported"
+        " spread may be used for some purpose that does not need one. Never by defaulting the"
+        " uncertainty type to something usable.",
         "No structure strings were transcribed. The table names compounds (Man5 and so on) and the structures"
         " sit in the paper's Figure 1, which nobody has read here; the owner did not fill them in from memory."
         " The composition column is therefore taken as transcribed rather than derived from a structure.",

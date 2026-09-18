@@ -193,7 +193,14 @@ Two further things this table did not say, both of which matter:
 - **NONE of the 89 rows in the 2015 file clears the gate, and the drift gas is only
   half the reason.** Every one of them also carries `uncertainty_type = unknown`
   with no spread, which is an independent blocker. Resolving the gas alone, by
-  reading Hofmann 2014, unblocks nothing at all. Both must be resolved.
+  reading Hofmann 2014, unblocks nothing at all.
+- **And the second half is probably permanent.** The owner reports, 19 September
+  2026, that the Analyst ESI carries no uncertainty column at all. If so, `unknown`
+  is a correct and complete record of what the source states, not a transcription
+  gap, and **these 89 rows are not pending curation**. Do not put them on a list.
+  Unblocking them needs a different source, or an explicit decision that a value
+  with no reported spread is usable for some purpose that does not need one - never
+  a default. See LIMITATIONS.md section 7.1.
 
 ### Named in the objective, licence unverified or blocking
 

@@ -91,22 +91,14 @@ summary. **Whatever computes a prediction interval in M4 must call
 down here because an uncalled guard is the failure shape this project keeps
 meeting.
 
-### 4.3 The mutation runner crashes rather than reporting STALE on a missing file
-
-`runner.sweep` builds its pristine map by reading every distinct `Mutation.file`
-with no error handling, and the `--check` path does the same. A mutation naming a
-file that does not exist raises `FileNotFoundError` instead of being reported as
-STALE, which is what the harness's own design says should happen.
-
-Not fixed, deliberately: `tools/mutation` was ported byte-for-byte apart from the
-package name, and that faithfulness is worth more right now than the fix. The
-anchor test that runs on every pytest invocation covers the case in practice.
-
-### 4.4 The mutation CLI is unhelpful on an empty catalogue
+### 4.3 The mutation CLI is unhelpful on an empty catalogue
 
 With no mutations, `python -m tools.mutation` prints "no mutation label contains
 any of []" and exits 1, which describes a filter that matched nothing rather than
-an empty catalogue. Latent only: the catalogue holds 110. Same reasoning as 4.3.
+an empty catalogue. Latent only: the catalogue holds 110, so nothing reaches it.
+Left alone because it is cosmetic and unreachable, not because the harness is
+untouchable: see the entry in section 4A for a case where the opposite call was
+made.
 
 **Do not "fix" this by falling back to running everything.** That change was made
 during M0, by an agent writing tests, and it is worth recording because of how it
@@ -118,10 +110,11 @@ tool's own failure mode, turned on itself"). The consequence was a test suite th
 ran for two hours and thirty-eight minutes instead of three seconds, because a test
 calling the CLI with a non-matching filter now kicked off a complete mutation sweep,
 each mutation of which ran the whole suite again. It was found by timing, not by a
-failing test. The line is restored, and `tools/mutation` is byte-identical to the
-original again apart from the package name.
+failing test. The line is restored. `tools/mutation` is otherwise the original,
+byte for byte apart from the package name and the one deliberate change recorded
+in section 4A.
 
-### 4.5 Two agents mutating one working tree can make a mutation permanent
+### 4.4 Two agents mutating one working tree can make a mutation permanent
 
 Also from M0, also worth recording. Two agents ran mutation checks against the same
 checkout at the same time; one read a file its sibling had already mutated, took
@@ -148,6 +141,19 @@ test that keeps it shut. None of these is outstanding.
 | `SourceLicence` coerced `evidence` with `tuple()` | A bare string became one piece of evidence per character. "RSCarticlepage" passed every check as seven pieces of evidence, leaving the entry reading as thoroughly evidenced while holding nothing |
 | The loader caught bare `Exception` around `_build_analyte` | A row naming an analyte kind the union does not hold was counted as failed validation rather than under its own reason, making a wrong column indistinguishable from bad data |
 | `MeasurementLoadReport` had no `uncertainty_types_held` | A file where nothing clears said nothing at all about its spreads. For the 2015 seed an uncertainty type of `unknown` is one of the two things blocking all 89 rows, so the report was silent about half its own headline |
+| `runner.sweep` and the `--check` path read every target file with no error handling | A mutation naming a module that had gone away raised `FileNotFoundError`, taking the whole run down before a single mutation was judged and losing every other verdict with it |
+
+**The runner fix is the one place `tools/mutation` deliberately departs from the
+original.** The port was byte-for-byte apart from the package name, and that
+faithfulness was the right default: it is what made the removed guard in section
+4.3 detectable by a one-line diff. It was the wrong default here. A module can
+vanish exactly as a line can - renamed, split or dropped between milestones - and
+both are the same failure the harness exists to make loud: a mutation that has
+silently stopped applying. Crashing named neither the mutation nor the remedy and
+cost every other result in the run, which is loss of coverage in its purest form,
+inside the tool built to catch loss of coverage. It now reports STALE and says the
+module went away rather than that a line moved. Two tests hold it, one of which
+asserts that a missing file costs exactly one result and not the other 109.
 
 ## 5. Where this repository departs from CONTEXT.md, and why
 
@@ -227,6 +233,7 @@ Stated plainly because CONTEXT.md is the document everyone reads first.
   DTCCS and never says which gas. Recorded as `UNSTATED`, not inferred from the
   same group's 2016 paper. Resolving it means reading Hofmann 2014, Anal. Chem.
   86, 10789.
+
 - The platform the calibration references were measured on, for both files.
   "DTCCS" in the 2015 cell plainly suggests a drift tube, and that is a reading of
   an abbreviation rather than of a paper, so `calref_platform` is null on both and
@@ -239,6 +246,36 @@ Stated plainly because CONTEXT.md is the document everyone reads first.
   paper, which nobody here has read. The composition column is taken as
   transcribed rather than derived from a structure, so a composition typo in that
   file cannot be caught the way a structure would catch one.
+
+### 7.1 The 2015 uncertainty type is probably not resolvable at all
+
+All 89 rows of the Struwe 2015 file are blocked by **two** independent things:
+`drift_gas = UNSTATED` and `uncertainty_type = unknown`. Reading Hofmann 2014 and
+settling the gas unblocks **zero** records on its own.
+
+The second one is very likely permanent. **The owner reports, on 19 September
+2026, that the Analyst ESI carries no uncertainty column at all.** If that is so,
+`unknown` is not a transcription gap waiting on a more careful reading; it is a
+correct and complete record of what the source states, and no amount of going back
+to that paper will change it.
+
+**So do not treat these 89 records as pending curation.** They are not a task on
+anybody's list. Unblocking them needs one of:
+
+- a different source reporting a spread for the same ions, in which case those are
+  different records with their own provenance, not a repair of these; or
+- a decision that a CCS value with no reported spread may be used for some purpose
+  that does not need one. That is a modelling decision for whoever builds the
+  harmonization model, and it must be made explicitly, in the open, and never by
+  quietly defaulting the uncertainty type to something usable.
+
+The uncertainty type is not droppable, for the reason the field exists: a spread
+of unknown kind is read as whatever the reader assumes, and a two-standard-
+deviation figure loaded into a field read as one standard deviation halves every
+interval built on it with nothing downstream able to detect it.
+
+This corrects the reference documents, which listed the gas as the single blocker
+on these records. Both `CONTEXT.md` and `PROJECT_REFERENCE.md` have been amended.
 
 ## 8. Scope of the test suite
 

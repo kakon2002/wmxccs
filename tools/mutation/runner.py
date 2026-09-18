@@ -22,6 +22,20 @@ the decision logic can be tested in milliseconds without starting pytest. That
 matters here more than usual, because this tool's whole job is to notice when
 something silently stops working, and a tool with no tests of its own would be
 the least defensible thing in the repository.
+
+PORTED FROM THE GLYCAN PLATFORM, WITH ONE DELIBERATE CHANGE.
+Everything else here is the original, byte for byte apart from the package name.
+The change: a mutation naming a file that is not in the package used to raise
+FileNotFoundError, from `sweep` while building its pristine map and from the
+`--check` path alike. It now reports STALE, like any other anchor that matches
+nothing, and says that the module went away rather than that a line moved.
+
+That was worth breaking a faithful port for. A module can vanish exactly as a
+line can - renamed, split, or dropped between milestones - and both are the same
+failure this tool exists to make loud: a mutation that has silently stopped
+applying. Crashing instead named neither the mutation nor the remedy, and took
+every other result down with it, which is the silent loss of coverage in its
+purest form. See LIMITATIONS.md.
 """
 
 from __future__ import annotations
@@ -80,6 +94,11 @@ class Outcome:
     verdict: Verdict | None = None  # None when the mutation was never applied
     killer: str = ""  # the first FAILED line, so a false kill can be spotted
     exit_code: int | None = None  # pytest's own, so a crash can be told from a failure
+    # The target file is not in the package at all. Still STALE - the anchor
+    # matches nothing, because there is nothing to match against - but the remedy
+    # is different enough to be worth saying: a module that went away is
+    # re-anchored against whatever replaced it, not moved a few lines.
+    missing_file: bool = False
 
     @property
     def ok(self) -> bool:
@@ -88,6 +107,12 @@ class Outcome:
     @property
     def problem(self) -> str | None:
         """Why this outcome fails the run, or None if it is fine."""
+        if self.anchor is Anchor.STALE and self.missing_file:
+            return (
+                f"{self.mutation.file} is not in the package, so the anchor matches nothing: the module"
+                " was renamed, split or dropped. Re-anchor it against whatever replaced it, or delete it"
+                " and say what now covers its intent"
+            )
         if self.anchor is Anchor.STALE:
             return (
                 f"anchor matches nothing in {self.mutation.file}: the guard moved or went away."
@@ -117,6 +142,23 @@ class Outcome:
 
 
 # --- the shadow ---------------------------------------------------------------------
+
+
+def read_source(path: Path) -> str | None:
+    """The file's text, or None if it is not there.
+
+    A mutation can name a module that has gone away exactly as it can name a line
+    that has gone away: renamed, split, or dropped between milestones. Both are
+    the same failure - a mutation that has silently stopped applying - and this
+    tool exists to make that loud rather than to fall over. Reading the file
+    without this check raised FileNotFoundError, which took the whole run down
+    before a single mutation was judged, named neither the mutation nor what to
+    do about it, and lost every other result with it.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
 
 
 def shadow_of(src: Path, into: Path) -> Path:
@@ -246,9 +288,15 @@ def sweep(
     with tempfile.TemporaryDirectory(prefix="wmx-mutation-") as temporary:
         shadow = verified_shadow(src, Path(temporary)) if verify else shadow_of(src, Path(temporary))
         package = shadow / src.name
-        pristine = {name: (package / name).read_text(encoding="utf-8") for name in {m.file for m in mutations}}
+        pristine = {name: read_source(package / name) for name in {m.file for m in mutations}}
         for mutation in mutations:
             original = pristine[mutation.file]
+            if original is None:
+                outcome = Outcome(mutation=mutation, anchor=Anchor.STALE, missing_file=True)
+                outcomes.append(outcome)
+                log(_line(Anchor.STALE.value.upper(), mutation.label))
+                log(_detail(outcome.problem))
+                continue
             anchor = mutation.anchor_in(original)
             if anchor is not Anchor.OK:
                 outcome = Outcome(mutation=mutation, anchor=anchor)
@@ -355,7 +403,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Anchors only: no suite, no copy, about a second.
         problems = 0
         for mutation in chosen:
-            anchor = mutation.anchor_in((SRC / mutation.file).read_text(encoding="utf-8"))
+            source = read_source(SRC / mutation.file)
+            if source is None:
+                problems += 1
+                print(_line(Anchor.STALE.value.upper(), mutation.label))
+                print(_detail(Outcome(mutation=mutation, anchor=Anchor.STALE, missing_file=True).problem))
+                continue
+            anchor = mutation.anchor_in(source)
             if anchor is not Anchor.OK:
                 problems += 1
                 print(_line(anchor.value.upper(), mutation.label))

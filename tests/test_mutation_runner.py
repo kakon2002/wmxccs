@@ -228,17 +228,10 @@ def test_the_old_behaviour_of_taking_the_first_match_is_gone(src):
     assert (src / "thing.py").read_text(encoding="utf-8") == before
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "sweep reads every target file with no try/except while building `pristine`, so a mutation"
-        " naming a module that is not there raises FileNotFoundError and takes the whole run down"
-        " before a single mutation is judged. The catalogue is supposed to fail LOUDLY and"
-        " READABLY on a target that went away, the same as it does on an anchor that went away:"
-        " the anchor tests call that STALE and say re-anchor it or say what covers its intent."
-        " A traceback says neither, and it loses the other 102 results with it."
-    ),
-)
+# Was an xfail against a real defect: sweep built its pristine map by reading
+# every target file with no error handling, so a mutation naming a module that
+# had gone away raised FileNotFoundError and took the whole run down before a
+# single mutation was judged. It reports STALE now.
 def test_a_mutation_naming_a_file_that_is_not_there_is_stale_rather_than_a_crash(src):
     # A module can vanish the same way a line can: renamed, split, or dropped
     # between milestones. That is the case this harness exists to make loud.
@@ -247,6 +240,21 @@ def test_a_mutation_naming_a_file_that_is_not_there_is_stale_rather_than_a_crash
     assert outcome.anchor is Anchor.STALE
     assert not outcome.ok
     assert "matches nothing" in outcome.problem
+    # And it says the MODULE went away, not that a line moved. The two have
+    # different remedies, and a report that confuses them sends the reader to
+    # look for a line in a file that is not there.
+    assert "is not in the package" in outcome.problem
+
+
+def test_a_missing_target_file_does_not_cost_the_other_results(src):
+    # THE PROPERTY THAT MATTERS. Crashing on the first missing module lost every
+    # other verdict in the run, which is a total loss of coverage reported as a
+    # traceback. One bad entry must cost exactly one result.
+    ghost = Mutation(label="its module went away", file="vanished.py", find="if guard:", replace="if False:")
+    outcomes = sweep([ghost, GUARD, ghost], src=src, run=killed, log=quiet)
+    assert [outcome.anchor for outcome in outcomes] == [Anchor.STALE, Anchor.OK, Anchor.STALE]
+    assert outcomes[1].verdict is Verdict.KILLED
+    assert outcomes[1].ok
 
 
 # --- a mutation that moves something needs more than one edit -------------------------
@@ -488,16 +496,9 @@ def test_the_check_path_reports_a_stale_anchor_without_running_the_suite(capsys,
     assert "STALE" in printed and "its guard moved" in printed
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "the --check path reads (SRC / mutation.file) with no try/except, so a mutation naming a"
-        " module that is not there raises FileNotFoundError instead of reporting STALE. --check is"
-        " the one-second guard that is supposed to be the readable answer to 'has anything stopped"
-        " applying', and a traceback from it names neither the mutation nor what to do, and hides"
-        " every anchor after it."
-    ),
-)
+# Was an xfail against the same defect on the --check path, which is the
+# one-second answer to 'has anything stopped applying' and so is the worst
+# place of all for a traceback that names neither the mutation nor the remedy.
 def test_the_check_path_reports_stale_rather_than_crashing_when_a_target_file_is_gone(capsys, monkeypatch):
     ghost = Mutation(label="its module went away", file="vanished.py", find="a", replace="b")
     monkeypatch.setattr("tools.mutation.runner.MUTATIONS", (ghost,))

@@ -185,14 +185,24 @@ same antibody are different matched ions.
 
 These do not block the new platform but were never closed:
 
-- Figure 1 of Analyst 2015 holds the seven high-mannose structures needed to
-  unblock those 89 records.
+- Figure 1 of Analyst 2015 holds the seven high-mannose structures for that file.
+  **Corrected 19 September: reading them would not unblock those 89 records
+  either.** A missing structure is not one of the two things the gate refuses them
+  for. What the structures would buy is finer identity - those rows are currently
+  identified by composition alone, so two isomers of one composition would key as
+  one matched ion - which matters for pairing, not for whether these rows may be
+  used.
 - **Corrected 18 September: the drift gas is only HALF of what blocks those 89
   rows.** Every one of them also carries `uncertainty_type = unknown` with no
   spread, which is an independent training blocker. Reading Hofmann 2014 and
-  resolving the gas would unblock zero records on its own. Both must be resolved,
-  and there is now a test pinning both so that whoever resolves the gas is told
-  about the second one rather than discovering it afterwards.
+  resolving the gas would unblock zero records on its own. There is now a test
+  pinning both, so whoever resolves the gas is told about the second one rather
+  than discovering it afterwards.
+- **Updated 19 September: the second blocker is probably not resolvable from this
+  paper.** The owner reports that the Analyst ESI carries no uncertainty column at
+  all, which makes `unknown` a complete record of what the source says rather than
+  a gap. These 89 rows are therefore NOT a pending transcription task and should
+  not be carried as one.
 - Four rows in the 2016 dataset are held pending curation: human milk LNH and LNnH
   share identical values for [M+H]+ (228.9) and [M+Cl]- (245.0), almost certainly
   one unresolved peak reported against both compounds.
