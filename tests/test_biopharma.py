@@ -733,3 +733,40 @@ def test_no_two_analyte_kinds_share_an_identity_key_prefix(kind):
     peptide sequence and a subunit sequence, a free glycan composition and a
     glycopeptide's - are never one ion."""
     assert ANALYTE_BUILDERS[kind]().identity_key()[0] == kind.value
+
+
+# --- the two identity surfaces must not contradict each other ---------------------------
+
+
+def test_a_proteins_sequence_atom_carries_the_subunit_like_its_key_does():
+    """identity_key and identity_atoms must agree about what is one molecule.
+
+    The key holds two subunit labels apart. An atom that dropped the label would
+    say the same two records are one molecule and may be merged, and matched-ion
+    construction is told that sharing an atom licenses a merge. The merge would
+    then join records the key deliberately separates, and the disagreement would
+    surface only as a pair nobody could explain.
+    """
+    from wmxccs.identity import ProteinAnalyte
+    from wmxccs.reuse import ReuseStatus
+
+    fixture = ReuseStatus.SYNTHETIC_FIXTURE
+    light = ProteinAnalyte(sequence="PEPTIDE", subunit="light chain", source="a test", reuse_status=fixture)
+    heavy = ProteinAnalyte(sequence="PEPTIDE", subunit="heavy chain", source="a test", reuse_status=fixture)
+
+    assert light.identity_key() != heavy.identity_key()
+    assert not (light.identity_atoms() & heavy.identity_atoms())
+
+
+def test_two_proteins_of_one_sequence_and_one_subunit_do_still_share_an_atom():
+    """The negative direction. Without it the test above passes on a protein whose
+    atoms are unique per record, which would stop M2 ever merging anything."""
+    from wmxccs.identity import ProteinAnalyte
+    from wmxccs.reuse import ReuseStatus
+
+    fixture = ReuseStatus.SYNTHETIC_FIXTURE
+    one = ProteinAnalyte(sequence="PEPTIDE", subunit="light chain", source="one", reuse_status=fixture)
+    other = ProteinAnalyte(sequence="PEPTIDE", subunit="light chain", source="another", reuse_status=fixture)
+
+    assert one.identity_key() == other.identity_key()
+    assert one.identity_atoms() & other.identity_atoms()

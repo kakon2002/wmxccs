@@ -29,6 +29,7 @@ Sections:
   [K] readiness.py  - what refuses and what merely warns
   [C] models.py     - cyclic ion mobility (M1)
   [G] identity.py   - the glycopeptide (M1)
+  [B] identity.py   - antibody, ADC and protein subunit identity (M1)
   [X] matching.py   - matched-ion construction (M2)
 """
 
@@ -605,6 +606,60 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="loader.py",
         find='        for atom in atoms or (f"unidentified:{where}",):',
         replace='        for atom in atoms or ("unidentified",):',
+    ),
+    Mutation(
+        label="[G] a glycopeptide's structural state drops the derivatisation",
+        file="identity.py",
+        find="    def structural_state(self) -> tuple:\n        return (str(self.derivatisation),)",
+        replace="    def structural_state(self) -> tuple:\n        return ()",
+    ),
+    Mutation(
+        label="[G] a glycopeptide's sialic-acid rule stops asking for a composition to check against",
+        file="identity.py",
+        find="        if self.derivatisation in SIALIC_ACID_DERIVATISATIONS and self.glycan_composition is None:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[G] a glycopeptide accepts a sialic-acid derivatisation on a glycan with no sialic acid",
+        file="identity.py",
+        find="            and self.glycan_composition.neuac + self.glycan_composition.neugc == 0",
+        replace="            and False",
+    ),
+    Mutation(
+        label="[G] a glycopeptide's identity atoms drop the attachment site",
+        file="identity.py",
+        find="        stem = f\"glycopeptide:{self.sequence}|{'+'.join(self.modifications)}|{self.attachment_site or ''}\"",
+        replace="        stem = f\"glycopeptide:{self.sequence}|{'+'.join(self.modifications)}\"",
+    ),
+    Mutation(
+        label="[B] an ADC's key drops the DAR, pooling two drug loads of one conjugate",
+        file="identity.py",
+        find='        loading = ("dar", self.dar) if self.dar is not None else ("conjugation", self.conjugation_state)',
+        replace='        loading = ("dar",) if self.dar is not None else ("conjugation",)',
+    ),
+    Mutation(
+        label="[B] an ADC's identity atoms drop the DAR",
+        file="identity.py",
+        find='        loading = f"dar={self.dar}" if self.dar is not None else f"conjugation={self.conjugation_state}"',
+        replace='        loading = "dar" if self.dar is not None else "conjugation"',
+    ),
+    Mutation(
+        label="[B] an ADC's structural state drops the CIU state",
+        file="identity.py",
+        find="    def structural_state(self) -> tuple:\n        return (str(self.folding_state), self.ciu_state)\n\n\n# The tagged union.",
+        replace="    def structural_state(self) -> tuple:\n        return (str(self.folding_state),)\n\n\n# The tagged union.",
+    ),
+    Mutation(
+        label="[B] a protein's key drops the subunit, pooling a light chain with a heavy chain",
+        file="identity.py",
+        find="        return (AnalyteKind.PROTEIN.value, *which, self.subunit)",
+        replace="        return (AnalyteKind.PROTEIN.value, *which)",
+    ),
+    Mutation(
+        label="[B] a protein's sequence atom drops the subunit, so atoms and the key disagree",
+        file="identity.py",
+        find="            atoms.add(f\"sequence:{self.sequence}|{self.subunit or ''}\")",
+        replace='            atoms.add(f"sequence:{self.sequence}")',
     ),
     # --- [C] models.py: cyclic ion mobility (M1) -------------------------------
     Mutation(

@@ -1165,7 +1165,21 @@ class ProteinAnalyte(_FoldedAnalyte):
         if self.accession is not None:
             atoms.add(f"accession:{self.accession}|{self.subunit or ''}")
         if self.sequence is not None:
-            atoms.add(f"sequence:{self.sequence}")
+            # The subunit is carried here too, and the asymmetry it removes is
+            # worth spelling out. identity_key() holds two records apart when
+            # their subunit labels differ; an atom that dropped the label would
+            # say they are one molecule and may be merged. Two identity surfaces
+            # that can contradict each other are a latent bug: matched-ion
+            # construction is told that sharing an atom licenses a merge, so the
+            # merge would join records the key deliberately separates, and the
+            # disagreement would only surface as a pair nobody can explain.
+            #
+            # There is a real argument the other way - an identical sequence IS
+            # the same molecule and a subunit label is only naming - and if that
+            # turns out to be what a real dataset needs, this is the line to
+            # change. It is the conservative direction: it costs a merge that a
+            # person can still make, rather than making one nobody asked for.
+            atoms.add(f"sequence:{self.sequence}|{self.subunit or ''}")
         return frozenset(atoms)
 
     def structural_state(self) -> tuple:
