@@ -277,12 +277,63 @@ interval built on it with nothing downstream able to detect it.
 This corrects the reference documents, which listed the gas as the single blocker
 on these records. Both `CONTEXT.md` and `PROJECT_REFERENCE.md` have been amended.
 
+## 7A. M1 and M2: what is built, and what it has never seen
+
+### The cyclic layer has no data behind it
+
+`CyclicSettings` accepts the fields the objective document asks for and enforces
+the rules that follow from them, and **not one cyclic measurement exists in this
+repository**. Public cyclic CCS data is very thin, which the objective document
+notes in its own risk table, and no internal instrument access has been confirmed.
+
+Two consequences worth stating plainly:
+
+- `arrival_time_correction` is FREE TEXT, where every other controlled vocabulary
+  here is an enum. It is not an enum because nobody has read a real cyclic methods
+  section, and inventing the members from what is usual would be exactly the kind
+  of plausible detail that has burned this project before. When a real dataset
+  arrives, read its methods and make it an enum from what is actually there.
+- the wrap-around rules are reasoned, not measured. That a multipass value with no
+  wrap-around statement is unusable follows from what wrap-around does to arrival
+  time; it has not been checked against a paper that reports one.
+
+### M2 is built entirely against synthetic fixtures
+
+`matching.py` has never seen a real cross-platform pair, because there is not one
+to see. Everything it does is exercised by `fixtures.py`, whose records all
+declare `SYNTHETIC_FIXTURE`, and `assert_quotable` refuses to let any report
+covering one be quoted as a result.
+
+That is a deliberate trade: the pairing rules do not depend on which dataset fills
+them, and waiting for the steroid study's licence to be read would have put the
+deadline at risk for no benefit. But it means **the first real dataset is also the
+first test of whether these rules fit real data**, and two of them are judgement
+calls that real data may overturn:
+
+- **deduplication keys on the exact CCS value.** Two records agreeing to the last
+  digit on one platform are treated as one measurement republished. That is right
+  far more often than it is wrong, but a genuine independent replicate that lands
+  on the same number would be collapsed. The provenance keeps both citations, so
+  the evidence survives; the count does not.
+- **conformer indices are never paired across sources.** A matched set carrying a
+  conformer index is built and then refused, because conformer numbering is
+  source-local and nothing establishes that conformer 1 in one paper is conformer 1
+  in another. If a real benchmark numbers its conformers consistently, this refuses
+  pairs it should have found - which is the safe direction, and still a cost.
+
+### The fixture corpus is not a benchmark
+
+Sixteen cases, chosen to exercise one rule each. It says nothing about how often
+these situations occur, and no number computed over it describes anything. Its
+only claim is that each rule fires when it should and stays quiet when it should
+not.
+
 ## 8. Scope of the test suite
 
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 110 mutations against seven modules. It is smaller than the
+- the catalogue holds 137 mutations against nine modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;

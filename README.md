@@ -14,7 +14,7 @@ Separate from the glycan platform. See `CLAUDE.md` for the constraints,
 
 **Deadline: deployable by 25 September 2026, 27 at the latest.**
 
-## Status: M0 complete
+## Status: M0, M1 and M2 complete
 
 The data layer is in place and the seed corpus loads. **No harmonization model
 exists, and there is not one cross-platform matched ion in the repository** — the
@@ -30,9 +30,11 @@ src/wmxccs/
   licensing.py    the default-deny training gate
   sources.py      the licence registry: who read which terms, when, and where
   identity.py     the analyte union, and the matched-ion key
-  models.py       CCSMeasurement, its validators, and calibration lineage
+  models.py       CCSMeasurement, its validators, calibration lineage, cyclic IMS
   loader.py       strict CSV loading that loses nothing and invents nothing
   readiness.py    what refuses, what merely warns, and the honest zero
+  matching.py     matched-ion construction: which measurements are the same ion
+  fixtures.py     a synthetic corpus that cannot be quoted as a result
 tools/
   mutation/       the mutation harness: break a guard, require a test to notice
   seed_struwe.py  one-off conversion of the two transcriptions into seed format
@@ -65,10 +67,31 @@ declared identifier — an InChIKey, a sequence, an accession, an INN, a structu
 a canonical composition. `display_name` is in no key.
 
 Do not confuse the matched-ion key with the **calibration group**, which is close
-to its complement: the calibration group carries the platform, the method and the
-calibrant and carries no analyte, because it answers "were these produced the same
-way", not "are these the same ion". Using either in place of the other produces a
-check that can never fire.
+to its complement: the calibration group carries the platform, the method, the
+calibrant and the cyclic pass count, and carries no analyte, because it answers
+"were these produced the same way", not "are these the same ion". Using either in
+place of the other produces a check that can never fire.
+
+The cyclic pass count shows the distinction working. A six-pass and a single-pass
+cyclic value of one ion share a matched-ion key, so they can be compared, and sit
+in different calibration groups, so they are never averaged together.
+
+## Matched ions
+
+A **matched set** is two or more measurements sharing a matched-ion key from two
+or more different platforms. Three-way sets are first class: the likely benchmark
+carries DTIMS, TWIMS and TIMS for one compound, and flattening that into three
+pairs would count one compound three times.
+
+Five things look like a match and are not one, and each has a rule and a test:
+the same measurement republished in two papers; two conformers of one ion; two
+ions whose charge carrier was never stated; two values from one platform; and a
+set one of whose members nobody may use, which is refused with the member named.
+
+`matching.py` is built and exercised entirely against `fixtures.py`, a synthetic
+corpus, because there is no real cross-platform data yet. Everything in it
+declares `SYNTHETIC_FIXTURE` and `assert_quotable` refuses to let a report
+covering one be presented as a result.
 
 ## Running it
 
