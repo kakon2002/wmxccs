@@ -127,7 +127,51 @@ made it dangerous rather than merely annoying.
 The harness itself is not at fault: it copies the package to a temporary directory
 and never writes the repository. The hazard is in doing mutation work by hand over a
 shared tree. Serialise such runs, or give each worker its own worktree, and commit
-before starting.
+before starting. It recurred during M1 and M2, without damage: one agent solved it
+correctly on its own by shadowing the package into its scratchpad rather than
+editing in place, which is what the harness itself does and what anyone doing this
+by hand should copy.
+
+### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
+
+Three separate instances in this repository so far, in three different shapes. They
+are collected here rather than filed apart, because the shape is the point: in every
+one, the suite was green, the coverage looked complete, and a behaviour nobody was
+actually protecting could have been deleted without a single test going red.
+
+**One: a guard removed to make a test pass.** `runner.py`'s refusal on a filter that
+matches nothing was replaced with a fallback that runs everything. One test went
+green, a typo became a full sweep - exactly what the comment three lines above
+warns against - and the suite went from three seconds to two hours thirty-eight.
+Found by timing, not by a failing test. (Section 4.3.)
+
+**Two: guards with tests and no mutation.** Nine biopharmaceutical identity guards
+were named in the brief, implemented, and tested, and the catalogue anchored none of
+them. Every test could have been deleted and the sweep would still have reported
+that every mutation did what it was expected to do. Found by an agent listing what
+it had tested against what the catalogue held, and noticing the two lists differed.
+
+**Three: a fixture that made a guard untestable.** The conformer-pair fixture gave
+its two peaks different CCS values, so the VALUE alone kept the two records apart
+and the conformer index in the deduplication key never did any work. The mutation
+that removes the index from that key was in the catalogue, it was being killed, and
+it was being killed by the value rather than by the thing it was written to test.
+Found by an agent reasoning about why a mutation died rather than being satisfied
+that it did.
+
+WHAT THE THREE HAVE IN COMMON, and what to do about it. Green is not evidence. The
+question that catches all three is not "do the tests pass" but "what would have to
+break for this to go red, and is that the thing I think I am protecting". Concretely:
+
+- when a mutation is killed, check WHICH test killed it and whether that test is
+  about the guard. A mutation killed incidentally is a mutation with no cover.
+- when a guard is added, add its mutation in the same change. A test without a
+  mutation is a test that can be deleted silently.
+- when a fixture is built for a guard, make sure the guard is the ONLY thing keeping
+  the case from passing. If anything else in the fixture would also separate the
+  records, the fixture tests that other thing.
+- never fix a failing test by changing the code it is testing, without first
+  establishing which of the two is wrong.
 
 ## 4A. Defects found during M0 and fixed
 
@@ -340,8 +384,23 @@ somebody changes it by accident.
 **Conformer indices are never paired across sources.** A matched set carrying a
 conformer index is built and then refused, because conformer numbering is
 source-local and nothing establishes that conformer 1 in one paper is conformer 1
-in another. If a real benchmark numbers its conformers consistently, this refuses
-pairs it should have found. That is the safe direction and it is still a cost.
+in another.
+
+THIS IS A NAMING PROBLEM, NOT PHYSICS, and the distinction matters enough to state
+plainly so that nobody later files it as a bug. Two arrival-time peaks of one ion
+are a real, physical thing: one structure folded two ways, confirmed by MS/MS in the
+Struwe 2015 data. What is arbitrary is the NUMBER each laboratory hangs on each
+peak. One group may number by arrival time, another by abundance, another by the
+order the peaks came out of their fitting software. Nothing in a published table
+says which. So pairing on the index would not be resolving a hard physical question
+slightly conservatively; it would be manufacturing matches out of two independent
+labelling conventions that happen to use the same integers.
+
+The consequence is a cost, and it is the right cost: if a real benchmark does number
+its conformers consistently, this refuses pairs it could have found, and a person
+can confirm the correspondence and lift it. The reverse mistake is not recoverable -
+a fabricated pair enters the statistics as evidence and nothing downstream can tell
+it from a real one.
 
 ### A protein's sequence atom carries its subunit label
 
