@@ -32,6 +32,8 @@ Sections:
   [B] identity.py   - antibody, ADC and protein subunit identity (M1)
   [X] matching.py   - matched-ion construction (M2)
   [T] statistics.py - cross-platform statistics (M3)
+  [F] grading.py    - the confidence rules
+  [A] api.py, contracts.py - the response contract
 """
 
 from __future__ import annotations
@@ -980,6 +982,152 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="statistics.py",
         find="        band: 100.0 * sum(1 for p in percents if abs(p) <= band) / n for band in COVERAGE_BANDS_PERCENT",
         replace="        band: 100.0 * sum(1 for p in percents if abs(p) >= band) / n for band in COVERAGE_BANDS_PERCENT",
+    ),
+    # --- [F] grading.py: the confidence rules ----------------------------------
+    Mutation(
+        label="[F] a grade is averaged rather than taking the worst demotion",
+        file="grading.py",
+        find="        if _SEVERITY[demotion.grade] > _SEVERITY[grade]:\n            grade = demotion.grade",
+        replace="        if _SEVERITY[demotion.grade] < _SEVERITY[grade]:\n            grade = demotion.grade",
+    ),
+    Mutation(
+        label="[F] an ion far outside the calibration range is merely weak rather than unsupported",
+        file="grading.py",
+        find='        rule="far outside the calibration range",\n        grade=ConfidenceGrade.UNSUPPORTED,',
+        replace='        rule="far outside the calibration range",\n        grade=ConfidenceGrade.WEAK,',
+    ),
+    Mutation(
+        label="[F] extrapolation stops being flagged at all",
+        file="grading.py",
+        find="    if low <= ccs <= high:\n        return None",
+        replace="    if True:\n        return None",
+    ),
+    Mutation(
+        label="[F] the extrapolation margin is unbounded, so any distance counts as near",
+        file="grading.py",
+        find="    if low - margin <= ccs <= high + margin:",
+        replace="    if True:",
+    ),
+    Mutation(
+        label="[F] a stratum too small to fit anything is graded rather than refused",
+        file="grading.py",
+        find="    if n < MIN_POINTS_FOR_DEMING:\n        return Demotion(",
+        replace="    if False:\n        return Demotion(",
+    ),
+    Mutation(
+        label="[F] a thinly populated calibration group stops demoting",
+        file="grading.py",
+        find="    if n < TARGET_MATCHED_IONS:",
+        replace="    if False:",
+    ),
+    Mutation(
+        label="[F] an ion its own stratum flagged as not transferring is graded as usable",
+        file="grading.py",
+        find="    for point in stratum.outliers:\n        if point.ion.key == matched_ion_key:",
+        replace="    for point in stratum.outliers:\n        if False:",
+    ),
+    Mutation(
+        label="[F] a source that may not be used stops disqualifying the correction",
+        file="grading.py",
+        find="            if not can_train_commercial(status):",
+        replace="            if False:",
+    ),
+    Mutation(
+        label="[F] an unreadable reuse status is waved through instead of counted against",
+        file="grading.py",
+        find='                offending.append(f"{getattr(record, \'source\', \'?\')!r} (unreadable reuse status)")',
+        replace="                pass",
+    ),
+    Mutation(
+        label="[F] the leverage diagnostic silently drops the outliers from the correction itself",
+        file="grading.py",
+        find="    outlier_keys = {id(point) for point in stratum.outliers}\n    kept = [point for point in stratum.points if id(point) not in outlier_keys]",
+        replace="    outlier_keys = {id(point) for point in stratum.outliers}\n    kept = list(stratum.points)",
+    ),
+    Mutation(
+        label="[F] leverage is measured at zero rather than at a typical ion",
+        file="grading.py",
+        find="    middle = median([point.reference_ccs for point in stratum.points])",
+        replace="    middle = 1.0",
+    ),
+    Mutation(
+        label="[F] a correction levered by ions that do not transfer stops being flagged",
+        file="grading.py",
+        find="    if leverage is None or leverage <= LEVERAGE_LIMIT_PERCENT:",
+        replace="    if True:",
+    ),
+    Mutation(
+        label="[F] a check that could not be run is reported as a check that passed",
+        file="grading.py",
+        find="    if slope_leverage_percent(stratum) is None:\n        not_checked.append(",
+        replace="    if False:\n        not_checked.append(",
+    ),
+    Mutation(
+        label="[F] an unsupported grade is still reported as usable",
+        file="grading.py",
+        find="        return self.grade is not ConfidenceGrade.UNSUPPORTED",
+        replace="        return True",
+    ),
+    # --- [A] api.py and contracts.py: the response contract --------------------
+    Mutation(
+        label="[A] harmonize answers 200 instead of refusing while no model exists",
+        file="api.py",
+        find='    @app.post("/harmonize", status_code=501, response_model=HarmonizationUnavailable)',
+        replace='    @app.post("/harmonize", status_code=200, response_model=HarmonizationUnavailable)',
+    ),
+    Mutation(
+        label="[A] the refusal stops returning the measurements it was given",
+        file="api.py",
+        find="            measurements=tuple(\n                # harmonized and confidence are left absent, not empty.",
+        replace="            measurements=(),  # (\n                # harmonized and confidence are left absent, not empty.",
+    ),
+    Mutation(
+        label="[A] provenance is read from the record's own claim rather than from the registry",
+        file="api.py",
+        find='    entry = licence_for(getattr(record, "doi", None))',
+        replace="    entry = None",
+    ),
+    Mutation(
+        label="[A] an unregistered source is reported as registered",
+        file="api.py",
+        find="        registered=entry is not None,",
+        replace="        registered=True,",
+    ),
+    Mutation(
+        label="[A] health reports a model loaded when none is",
+        file="api.py",
+        find="            model_loaded=request.app.state.model is not None,",
+        replace="            model_loaded=True,",
+    ),
+    Mutation(
+        label="[A] the maturity stamp claims validated while nothing has been checked",
+        file="api.py",
+        find="                DataMaturity.VALIDATED if request.app.state.model_validated else DataMaturity.PROVISIONAL",
+        replace="                DataMaturity.VALIDATED",
+    ),
+    Mutation(
+        label="[A] a harmonized estimate may carry an interval coverage of one",
+        file="contracts.py",
+        find='    interval_coverage: float = Field(\n        gt=0, lt=1,',
+        replace='    interval_coverage: float = Field(\n        gt=0, le=1,',
+    ),
+    Mutation(
+        label="[A] a harmonized cross section of zero or less is accepted",
+        file="contracts.py",
+        find='    ccs: float = Field(gt=0, description="The harmonized cross section, square angstrom.")',
+        replace='    ccs: float = Field(description="The harmonized cross section, square angstrom.")',
+    ),
+    Mutation(
+        label="[A] a harmonize request with no measurements at all is accepted",
+        file="contracts.py",
+        find="        min_length=1, description=\"The measurements to harmonize.",
+        replace="        description=\"The measurements to harmonize.",
+    ),
+    Mutation(
+        label="[A] the response drops the count of matched ions behind a harmonized value",
+        file="contracts.py",
+        find="    matched_ions_behind_it: int = Field(\n        ge=0,",
+        replace="    matched_ions_behind_it: int = Field(\n        default=0,\n        ge=0,",
     ),
     # --- [K] readiness: what refuses and what merely warns ---------------------
     Mutation(

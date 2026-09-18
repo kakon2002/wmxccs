@@ -14,7 +14,7 @@ Separate from the glycan platform. See `CLAUDE.md` for the constraints,
 
 **Deadline: deployable by 25 September 2026, 27 at the latest.**
 
-## Status: M0 to M3 complete
+## Status: M0 to M3 complete, plus the API contract and the confidence scheme
 
 The data layer is in place and the seed corpus loads. **No harmonization model
 exists, and there is not one cross-platform matched ion in the repository** — the
@@ -35,6 +35,9 @@ src/wmxccs/
   readiness.py    what refuses, what merely warns, and the honest zero
   matching.py     matched-ion construction: which measurements are the same ion
   statistics.py   association and agreement, kept apart and never pooled
+  grading.py      confidence as rules, not a fitted model
+  contracts.py    the request and response bodies
+  api.py          health, the confidence scheme, and a harmonize that refuses
   fixtures.py     a synthetic corpus that cannot be quoted as a result
 tools/
   mutation/       the mutation harness: break a guard, require a test to notice
@@ -117,6 +120,56 @@ than one stratum gets no pooled figure at all.
 Outliers are flagged relative to their own stratum's offset and **never removed**.
 There is no parameter that would remove them. Those ions are the result: they are
 where a harmonization model will be confidently wrong.
+
+## The API, and what it refuses
+
+Three endpoints. Two answer today; one will answer 501 until a harmonization model
+has been fitted on real cross-platform matched ions, of which this repository holds
+none.
+
+| | |
+|---|---|
+| `GET /health` | version, whether a model is loaded, how many matched ions it rests on |
+| `GET /confidence/rules` | the grading scheme as data, so it can be argued with |
+| `POST /harmonize` | **501**, with your measurements returned untouched |
+
+The 501 is the contract, not an error path. A caller gets back every measurement
+exactly as sent, the provenance and licence terms of each, the maturity stamp, and
+a statement of why there is no harmonized value. What they do not get is a number:
+no zero, no null standing in for one, no interval of infinite width, no grade
+computed against nothing. An API returning a plausible value with a caveat in a
+field would be used and the caveat would not be read. One returning 501 cannot be
+used by accident.
+
+A malformed body still gets 422. The request is validated before the refusal, so a
+501 never tells a caller their measurement was fine when it was not.
+
+The eventual 200 shape is fully specified in `contracts.HarmonizeResponse` so
+callers can build against it now. No endpoint returns it, and `/harmonize` declares
+`HarmonizationUnavailable` instead, so nobody can write code against a harmonized
+value that is never there.
+
+## Confidence is graded by rules, not by a model
+
+A grade is not a probability and has never been calibrated, because calibrating it
+would need the held-out matched ions this repository does not have. It is a set of
+checks, each evaluable today, each naming a specific reason a correction might not
+apply to a particular ion.
+
+A grade **only ever falls**, and the final grade is the worst demotion found: never
+a score, never an average, never a count. Two mild concerns do not add up to a
+severe one, and a severe one is not offset by everything else being fine. A grade
+falls when the ion sits outside the calibration range, its calibration group is
+thinly populated, it was flagged as an outlier in its own stratum, a source behind
+the correction may not be used, or the correction is substantially driven by ions
+that do not transfer.
+
+That last rule is the M3 leverage finding made operational: it refits the slope
+without the stratum's outliers purely to **measure** how much they move the
+correction, and demotes when that exceeds half a per cent of CCS at a typical ion.
+Nothing is removed from the statistics, the correction or any count. Measuring the
+influence of outliers is the opposite of dropping them, and a test holds the two
+apart.
 
 ## Running it
 

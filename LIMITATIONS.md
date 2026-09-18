@@ -429,19 +429,50 @@ not.
 Every figure `statistics.py` can produce has been produced from records declared
 in code. The module has never seen a measurement made by an instrument.
 
-### Mass-based residuals cannot be computed at all
+### Mass is out of scope by decision, not by oversight
 
-The brief asks for residuals against mass as well as against CCS, so that
-size-dependent bias is visible. **No record in this repository carries a mass.**
-`CCSMeasurement` has no mass or m/z field, and the one place a mass could have
-been derived - the glycan residue-mass table - was deliberately left behind with
-the rest of the glycan chemistry in M0.
+The brief for M3 asks for residuals against mass as well as against CCS, so that
+size-dependent bias is visible. **No record in this repository carries a mass**,
+so the mass half is not computed, and that is a DELIBERATE M0 SCOPING CHOICE that
+has been reviewed and confirmed rather than an omission.
 
-What is computed instead is the residual against the reference CCS, which is a
-reasonable size proxy for the purpose intended and is not the same thing. Adding
-the mass half means adding a field and deciding where its values come from, which
-is a schema decision with a provenance question attached: a neutral mass derived
-from a formula is not the same claim as an m/z read off a paper.
+What was decided in M0: `composition.py` came across as its canonicalisation half
+only. The residue-mass table, `RESIDUE_MASS`, `WATER_MASS` and the
+`monoisotopic_mass` property were left behind with the N-glycan plausibility rules,
+because a mass table is chemistry and this platform takes any ion. Carrying a
+glycan mass table into a repository that also holds steroids, peptides, antibodies
+and ADCs would have given exactly one of the seven analyte kinds a mass and left
+the rest without one, which is worse than none having it.
+
+What is computed instead is the residual against the reference CCS. CCS is a
+reasonable size proxy for the purpose intended and it is not the same thing: two
+ions of one cross section can differ in mass, and a bias that tracks mass rather
+than size would not show.
+
+**What adding it would require**, if a later milestone wants it:
+
+1. A FIELD on `CCSMeasurement`. Almost certainly two, not one: a neutral
+   monoisotopic mass and an m/z are different quantities, and an m/z without its
+   charge is not a mass. The charge is already on the record, so `mz` plus the
+   existing `charge` would give a derived mass - but see 3.
+2. A PROVENANCE DECISION, which is the hard part. A mass read off a published
+   table is a transcribed observation and belongs in the loader with every other
+   transcribed value. A mass computed from a formula or a sequence is a DERIVED
+   number, and this platform has no field that distinguishes the two. Storing a
+   derived mass in a field a reader assumes was transcribed is precisely the
+   failure class recorded in section 4.5. Whichever is chosen, the record has to
+   say which it is.
+3. A PER-KIND SOURCE for the derived case, and this is where it gets expensive:
+   a peptide mass follows from its sequence, a glycan mass from a residue table,
+   a small-molecule mass from its formula, and an antibody mass from neither. Six
+   of the seven analyte kinds would need their own derivation, each with its own
+   reference data and its own licence question.
+4. A LOADER COLUMN and a validator refusing a mass that disagrees with the
+   adduct's charge by more than rounding.
+
+None of that is hard. All of it is a schema and provenance decision that should
+be made when something actually needs mass-based residuals, rather than
+speculatively now.
 
 ### The outlier rule was wrong the first time, and the second version is still a choice
 
@@ -486,6 +517,30 @@ residual left over. Ten is the conventional floor for quoting an SD of
 differences, it is marked as policy in the source, and somebody with a real corpus
 should argue with it.
 
+### What M4 must do with the leverage finding
+
+Recorded here because it is a conclusion from M3 that constrains a milestone that
+does not exist yet, and it would otherwise live only in a conversation.
+
+The benchmark showed three outlying ions in twenty-four moving a fitted Deming
+slope from the injected 1.020 to 1.031. The correction applied to every
+well-behaved ion was therefore, in part, the work of the three that were not. So
+the harmonization model, when it is built:
+
+- **reports BOTH the slope-derived and the median-derived correction.** The
+  contract already has fields for both, and for which one the headline value came
+  from. They agree when the fit is well behaved and diverge exactly when it is
+  not, so a caller comparing them learns something a single number hides.
+- **prefers a robust fit.** Three ions should not drive the correction applied to
+  everything else. Robust does NOT mean dropping the outliers: they stay in the
+  corpus, in the statistics and in the reported counts, and `grading.py` already
+  flags any ion the fit does not cover. It means fitting so that a few points
+  cannot dominate.
+- **keeps `grading.correction_driven_by_outliers` on the path.** It measures the
+  leverage directly and demotes the grade when it exceeds half a per cent of CCS
+  at a typical ion. That check is the M3 finding made operational, and a robust
+  fit should make it fire less often rather than make it unnecessary.
+
 ### The benchmark corpus is constructed, not observed
 
 `fixtures.benchmark_corpus()` injects a 2 per cent TWIMS bias, a 1 per cent TIMS
@@ -496,12 +551,47 @@ is a convenience and is not evidence.** No figure computed over that corpus
 describes any instrument, `quotable` is False for every report built from it, and
 `assert_quotable` refuses.
 
+## 7C. The API and the confidence scheme, built ahead of the model
+
+Both were built while waiting for a licence answer, because neither needs data.
+Both stop short of anything that needs a fitted model, and the stopping is
+structural rather than a convention.
+
+### /harmonize will answer 501 for as long as there is no model
+
+Not an error path: a caller posting measurements gets back every measurement
+exactly as sent, the provenance and licence terms of each, the maturity stamp, and
+a statement of why there is no harmonized value. What they do not get is a number.
+The 200 shape is fully specified in `contracts.HarmonizeResponse` so callers can
+build against it, and no endpoint returns it.
+
+The response model for the endpoint is `HarmonizationUnavailable`, NOT
+`HarmonizeResponse`. That is deliberate: one shape has a harmonized estimate and
+the other does not, and declaring the richer one would let a caller write code
+against a field that is never populated.
+
+### The confidence grades are rules and have never been calibrated
+
+A grade is not a probability. It is not calibrated against anything, because
+calibrating it would need exactly the held-out matched ions this repository does
+not have. It is a set of checks, each of which names a specific reason a
+correction might not apply to a particular ion.
+
+Two of the five thresholds are POLICY rather than derived, and are marked as such
+in the source and in the published rules: the ten per cent extrapolation margin,
+and the half a per cent leverage limit. The second is at least anchored to the
+published stepped-field DTIMS interlaboratory reproducibility, which is a real
+number from a real paper, quoted in CONTEXT.md and not read from the paper here.
+
+**The grading has never graded a real harmonized value**, because none exists. It
+has been exercised against synthetic strata only.
+
 ## 8. Scope of the test suite
 
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 171 mutations against ten modules. It is smaller than the
+- the catalogue holds 195 mutations against twelve modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;
