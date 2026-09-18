@@ -1078,8 +1078,19 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[A] the refusal stops returning the measurements it was given",
         file="api.py",
-        find="            measurements=tuple(\n                # harmonized and confidence are left absent, not empty.",
-        replace="            measurements=(),  # (\n                # harmonized and confidence are left absent, not empty.",
+        # Re-anchored: the first version replaced only the opening of the argument
+        # and left the generator body dangling, so the mutated file did not COMPILE.
+        # An uncompilable mutation is UNRUNNABLE, which this harness deliberately
+        # does not count as a kill - so it was a mutation no test could ever kill,
+        # and the sweep would have reported it as a problem forever. The whole
+        # argument is replaced now, which compiles and fails nine tests.
+        find="            measurements=tuple(\n"
+        "                # harmonized and confidence are left absent, not empty. There is no\n"
+        "                # number to put in them and no grade to compute against nothing.\n"
+        "                HarmonizedMeasurement(original=record, provenance=provenance_of(record))\n"
+        "                for record in body.measurements\n"
+        "            ),",
+        replace="            measurements=(),",
     ),
     Mutation(
         label="[A] provenance is read from the record's own claim rather than from the registry",

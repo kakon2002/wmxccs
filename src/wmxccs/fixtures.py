@@ -26,6 +26,8 @@ from things that should pair.
 
 from __future__ import annotations
 
+import hashlib
+
 from .identity import (
     ADCAnalyte,
     AntibodyIdentity,
@@ -53,6 +55,8 @@ GLUCOSE = "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"
 
 
 _DIGITS_AS_LETTERS = str.maketrans("0123456789", "ABCDEFGHIJ")
+# An InChIKey's first block is fourteen characters.
+_BODY_LENGTH = 14
 
 
 def synthetic_inchikey(tag: str) -> str:
@@ -77,7 +81,20 @@ def synthetic_inchikey(tag: str) -> str:
     letters = "".join(
         character for character in tag.upper().translate(_DIGITS_AS_LETTERS) if character.isalpha()
     )
-    body = (letters + "XXXXXXXXXXXXXX")[:14]
+    if len(letters) <= _BODY_LENGTH:
+        body = (letters + "X" * _BODY_LENGTH)[:_BODY_LENGTH]
+    else:
+        # A tag too long to fit is FOLDED, not truncated. Truncation was the
+        # second time this function silently merged two molecules into one: any
+        # two tags agreeing in their first fourteen letters produced one key, one
+        # matched ion, and a stratum quietly shrunk to a single point. A fold
+        # keeps distinct tags distinct however long they are.
+        #
+        # sha256 rather than hash(), because hash() is salted per process and a
+        # corpus that changed between runs would make every statistic computed
+        # over it irreproducible.
+        digest = hashlib.sha256(tag.encode("utf-8")).hexdigest()
+        body = "".join(chr(ord("A") + int(character, 16)) for character in digest[:_BODY_LENGTH])
     return f"{body}-FIXTUREAAA-N"
 
 _PLATFORMS = {
