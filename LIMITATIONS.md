@@ -134,7 +134,7 @@ by hand should copy.
 
 ### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
 
-Three separate instances in this repository so far, in three different shapes. They
+Five separate instances in this repository so far, in five different shapes. They
 are collected here rather than filed apart, because the shape is the point: in every
 one, the suite was green, the coverage looked complete, and a behaviour nobody was
 actually protecting could have been deleted without a single test going red.
@@ -151,7 +151,18 @@ them. Every test could have been deleted and the sweep would still have reported
 that every mutation did what it was expected to do. Found by an agent listing what
 it had tested against what the catalogue held, and noticing the two lists differed.
 
-**Three: a fixture that made a guard untestable.** The conformer-pair fixture gave
+**Three: a mutation that could never be killed.** The catalogue entry for "the
+refusal stops returning the measurements it was given" replaced only the opening
+of a function argument and left the generator body dangling, so the mutated file
+did not compile. An uncompilable mutation is UNRUNNABLE, and this harness
+deliberately does not count UNRUNNABLE as a kill - so it was a mutation no test
+could ever kill. This one is the LEAST bad of the four, and the reason is worth
+noting: the sweep would have reported it as a problem forever rather than quietly
+passing, so the harness's own design caught it by construction. It was still
+wrong, and it was found by an agent reasoning about why a mutation would not die
+rather than by the sweep.
+
+**Four: a fixture that made a guard untestable.** The conformer-pair fixture gave
 its two peaks different CCS values, so the VALUE alone kept the two records apart
 and the conformer index in the deduplication key never did any work. The mutation
 that removes the index from that key was in the catalogue, it was being killed, and
@@ -159,9 +170,20 @@ it was being killed by the value rather than by the thing it was written to test
 Found by an agent reasoning about why a mutation died rather than being satisfied
 that it did.
 
-WHAT THE THREE HAVE IN COMMON, and what to do about it. Green is not evidence. The
-question that catches all three is not "do the tests pass" but "what would have to
-break for this to go red, and is that the thing I think I am protecting". Concretely:
+**Five: a fixture helper that silently merged two molecules.** `synthetic_inchikey`
+first stripped digits, so twenty-four benchmark ions named `bench00` to `bench23`
+became one molecule and the whole corpus collapsed to a single matched ion. Fixed,
+and then it did it again: it truncated to fourteen letters, so any two tags
+agreeing in their first fourteen collapsed the same way, quietly shrinking a
+stratum to one point. Both times the symptom was a count that was obviously wrong
+if anybody looked - "1 matched ion considered" where twenty-four were expected -
+and nothing failed. Long tags are now folded rather than cut.
+
+WHAT THE FIVE HAVE IN COMMON, and what to do about it. Green is not evidence. The
+question that catches all five is not "do the tests pass" but "what would have to
+break for this to go red, and is that the thing I think I am protecting". Note that
+three of the five were found by somebody asking that question about a mutation that
+had apparently behaved correctly, and none by a test going red. Concretely:
 
 - when a mutation is killed, check WHICH test killed it and whether that test is
   about the guard. A mutation killed incidentally is a mutation with no cover.
@@ -172,6 +194,13 @@ break for this to go red, and is that the thing I think I am protecting". Concre
   records, the fixture tests that other thing.
 - never fix a failing test by changing the code it is testing, without first
   establishing which of the two is wrong.
+- when a mutation is written, check the mutated file still COMPILES. An
+  uncompilable mutation is UNRUNNABLE, which this harness does not count as a
+  kill, so it is a mutation nothing can ever satisfy.
+- when a fixture builds several cases, check the cases are actually distinct. Two
+  of these five were one helper quietly giving two different things the same
+  identity, and in both the symptom was a count that was obviously wrong to anyone
+  who looked at it.
 
 ## 4A. Defects found during M0 and fixed
 
