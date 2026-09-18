@@ -71,6 +71,31 @@ CONFORMER_INDICES_UNCONFIRMED = (
 
 
 def _platform_of(record: object) -> str:
+    """What counts as a platform for the purpose of pairing.
+
+    STEPPED-FIELD AND SINGLE-FIELD DTIMS COUNT AS TWO DIFFERENT PLATFORMS, and
+    that is deliberate rather than a side effect of reusing the calibration
+    group's label. One ion measured both ways is a matched set here.
+
+    The reason is that the two are not the same measurement in the way that
+    matters to this platform. Stepped-field DTIMS is primary: the cross section
+    follows from first principles and no reference value enters it. Single-field
+    DTIMS is calibrated, like TWIMS and TIMS, and inherits whatever bias its
+    reference set carries. Comparing them measures exactly the thing this
+    pipeline exists to measure, and the literature already treats them apart -
+    the interlaboratory reproducibility figures quoted in CONTEXT.md are
+    separate numbers for the two, 0.29 per cent RSD stepped-field against 0.54
+    per cent mean absolute bias single-field.
+
+    Folding them together would lose a real comparison and would also make the
+    primary-versus-derived distinction invisible at exactly the point where a
+    harmonization model most needs it: a fit whose "DTIMS" arm silently mixed
+    primary and calibrated values would be regressing against a moving anchor.
+
+    This is a wider reading of "two platforms" than the DTIMS/TWIMS/TIMS framing
+    in the module docstring, so it is stated here, tested, and carries a mutation
+    of its own rather than being left for somebody to discover in M3.
+    """
     ims = getattr(record, "ims_type", None)
     method = getattr(record, "dtims_method", None)
     return str(ims) if method is None else f"{ims}/{method}"

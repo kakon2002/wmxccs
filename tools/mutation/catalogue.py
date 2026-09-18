@@ -682,6 +682,15 @@ MUTATIONS: tuple[Mutation, ...] = (
     ),
     # --- [X] matching.py: matched-ion construction (M2) ------------------------
     Mutation(
+        label="[X] stepped-field and single-field DTIMS are read as one platform",
+        file="matching.py",
+        # A primary value and a calibrated one are not the same measurement in the
+        # way that matters here, and folding them together loses a real comparison
+        # AND hides the primary-versus-derived distinction from any later fit.
+        find='    return str(ims) if method is None else f"{ims}/{method}"',
+        replace="    return str(ims)",
+    ),
+    Mutation(
         label="[X] a matched set counts measurements rather than platforms, so replicates become matches",
         file="matching.py",
         find="        return len(self.platforms) >= 2",

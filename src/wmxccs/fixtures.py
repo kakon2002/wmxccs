@@ -319,6 +319,51 @@ def a_cyclic_pair_at_different_pass_counts() -> tuple[CCSMeasurement, ...]:
     )
 
 
+def a_primary_and_a_calibrated_dtims_pair() -> tuple[CCSMeasurement, ...]:
+    """One ion, stepped-field and single-field DTIMS. MATCHES: they are two platforms.
+
+    Stepped-field is primary and single-field is calibrated, so comparing them
+    measures the thing this pipeline exists to measure. See matching._platform_of.
+    """
+    return (
+        measurement(analyte=small_molecule(synthetic_inchikey("primarycal")), platform="dtims", ccs=180.0),
+        measurement(
+            analyte=small_molecule(synthetic_inchikey("primarycal")),
+            platform="dtims_single",
+            ccs=181.9,
+            source="fixture laboratory B",
+            doi=DOI_B,
+        ),
+    )
+
+
+def two_conformers_sharing_one_value() -> tuple[CCSMeasurement, ...]:
+    """Two conformers of one ion reported at the SAME value, on one platform.
+
+    Contrived, and it has to exist. The ordinary conformer case gives its two
+    peaks different values, so the VALUE alone keeps those records apart and the
+    conformer index in the deduplication key is never actually load-bearing
+    there. Here it is the only thing standing between two legitimate rows and
+    being collapsed into one, which is what a conformer pair must never be.
+    """
+    return (
+        measurement(
+            analyte=small_molecule(synthetic_inchikey("sharedvalue")),
+            platform="dtims",
+            ccs=180.0,
+            conformer=1,
+            conformers_total=2,
+        ),
+        measurement(
+            analyte=small_molecule(synthetic_inchikey("sharedvalue")),
+            platform="dtims",
+            ccs=180.0,
+            conformer=2,
+            conformers_total=2,
+        ),
+    )
+
+
 def a_match_with_an_unusable_member() -> tuple[CCSMeasurement, ...]:
     """A genuine cross-platform pair, one member of which nobody may use.
 
@@ -393,6 +438,8 @@ CASES = {
     "a glycopeptide and its bare backbone": a_glycopeptide_and_its_backbone,
     "one ion referred to two gases": two_gases_for_one_ion,
     "a cyclic pair at different pass counts": a_cyclic_pair_at_different_pass_counts,
+    "a primary and a calibrated DTIMS pair": a_primary_and_a_calibrated_dtims_pair,
+    "two conformers sharing one value": two_conformers_sharing_one_value,
     "a match with an unusable member": a_match_with_an_unusable_member,
     "two different molecules": two_different_molecules,
     "two glycan isomers of one composition": two_glycans_of_one_composition,
