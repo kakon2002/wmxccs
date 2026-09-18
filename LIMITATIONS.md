@@ -424,12 +424,84 @@ these situations occur, and no number computed over it describes anything. Its
 only claim is that each rule fires when it should and stays quiet when it should
 not.
 
+## 7B. M3: statistics computed over nothing real
+
+Every figure `statistics.py` can produce has been produced from records declared
+in code. The module has never seen a measurement made by an instrument.
+
+### Mass-based residuals cannot be computed at all
+
+The brief asks for residuals against mass as well as against CCS, so that
+size-dependent bias is visible. **No record in this repository carries a mass.**
+`CCSMeasurement` has no mass or m/z field, and the one place a mass could have
+been derived - the glycan residue-mass table - was deliberately left behind with
+the rest of the glycan chemistry in M0.
+
+What is computed instead is the residual against the reference CCS, which is a
+reasonable size proxy for the purpose intended and is not the same thing. Adding
+the mass half means adding a field and deciding where its values come from, which
+is a schema decision with a provenance question attached: a neutral mass derived
+from a formula is not the same claim as an m/z read off a paper.
+
+### The outlier rule was wrong the first time, and the second version is still a choice
+
+Outliers are flagged more than 2 per cent from **their own stratum's median**
+difference, not from zero. The first version used an absolute threshold and was
+demonstrably wrong: over a corpus with an injected 2 per cent bias it flagged 14
+of 24 ions, burying the three that genuinely did not transfer among the ordinary
+ones.
+
+The relative version is defensible - the systematic offset is what harmonization
+corrects, so what matters is which ions are still wrong after it is removed - but
+the margin itself is borrowed from the published TWIMS envelope and is not derived
+from anything measured here. A platform pair that genuinely agrees to 0.2 per cent
+would have its real outliers hidden by a 2 per cent margin. When a real corpus
+exists, the margin should be reconsidered against that corpus's own spread.
+
+### Lambda is assumed equal more often than it is measured
+
+The Deming fit weights by the ratio of the two platforms' error variances. That
+ratio is measured only when EVERY paired record on both sides reports an
+uncertainty this repository can convert to a standard deviation. In practice that
+will often fail, because:
+
+- `CI95` is refused outright. A 95 per cent interval may be reported as a half
+  width or a full width and this repository has never fixed which. Dividing by
+  1.96 on the assumption it is a half width would silently halve or double every
+  weight built on it.
+- `SEM` needs the replicate count, which most published tables do not give.
+- `unknown` converts to nothing, which is the point of the value.
+
+When the ratio cannot be measured the fit falls back to orthogonal regression and
+the report SAYS it assumed rather than measured. That string is the guard, and it
+has a mutation of its own, because a fit reporting an assumed weighting as a
+measured one is exactly the kind of quiet overclaim this project exists to refuse.
+
+### Limits of agreement rest on the one threshold that is pure policy
+
+`MIN_POINTS_FOR_LIMITS_OF_AGREEMENT = 10` is not derived from anything. The two
+other floors are: a correlation needs three points because r is exactly plus or
+minus one at two, and a Deming slope needs three because two parameters need one
+residual left over. Ten is the conventional floor for quoting an SD of
+differences, it is marked as policy in the source, and somebody with a real corpus
+should argue with it.
+
+### The benchmark corpus is constructed, not observed
+
+`fixtures.benchmark_corpus()` injects a 2 per cent TWIMS bias, a 1 per cent TIMS
+bias and a 7 per cent tail on three ions. Those numbers were chosen to be
+recoverable and to be roughly the shape of the published envelope, so that the
+arithmetic is exercised on a case resembling the real problem. **The resemblance
+is a convenience and is not evidence.** No figure computed over that corpus
+describes any instrument, `quotable` is False for every report built from it, and
+`assert_quotable` refuses.
+
 ## 8. Scope of the test suite
 
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 147 mutations against nine modules. It is smaller than the
+- the catalogue holds 171 mutations against ten modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;

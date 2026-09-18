@@ -14,7 +14,7 @@ Separate from the glycan platform. See `CLAUDE.md` for the constraints,
 
 **Deadline: deployable by 25 September 2026, 27 at the latest.**
 
-## Status: M0, M1 and M2 complete
+## Status: M0 to M3 complete
 
 The data layer is in place and the seed corpus loads. **No harmonization model
 exists, and there is not one cross-platform matched ion in the repository** — the
@@ -34,6 +34,7 @@ src/wmxccs/
   loader.py       strict CSV loading that loses nothing and invents nothing
   readiness.py    what refuses, what merely warns, and the honest zero
   matching.py     matched-ion construction: which measurements are the same ion
+  statistics.py   association and agreement, kept apart and never pooled
   fixtures.py     a synthetic corpus that cannot be quoted as a result
 tools/
   mutation/       the mutation harness: break a guard, require a test to notice
@@ -92,6 +93,30 @@ set one of whose members nobody may use, which is refused with the member named.
 corpus, because there is no real cross-platform data yet. Everything in it
 declares `SYNTHETIC_FIXTURE` and `assert_quotable` refuses to let a report
 covering one be presented as a result.
+
+## Association is not agreement
+
+`statistics.py` reports the two separately and never combines them, because they
+answer different questions and only one of them is the question this platform
+exists to answer.
+
+**Association** (Pearson r, r squared) is whether two platforms move together.
+**Agreement** (Deming regression, Bland-Altman bias and limits, Lin's concordance,
+delta CCS per cent, MAE, MAPE, RMSE) is whether they give the same number. A
+platform can correlate at 0.998 and run two per cent high on every single ion.
+
+There is no ordinary least squares anywhere, not behind a flag. Both axes carry
+measurement error, so an OLS slope is biased towards zero by however noisy the x
+platform happens to be, and it gives two different answers depending which way
+round the platforms are put. Deming is symmetric and is the only regression here.
+
+Nothing is pooled across gases, calibrants or cyclic pass counts: figures are per
+platform pair **and** per calibration-group pair within it, and a pair holding more
+than one stratum gets no pooled figure at all.
+
+Outliers are flagged relative to their own stratum's offset and **never removed**.
+There is no parameter that would remove them. Those ions are the result: they are
+where a harmonization model will be confidently wrong.
 
 ## Running it
 
