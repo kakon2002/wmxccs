@@ -1,0 +1,202 @@
+# Limitations
+
+What this repository does not do, does not know, and must not be read as claiming.
+Written at M0. Everything here is a live limitation unless it says it is closed.
+
+---
+
+## 1. The thing that matters most
+
+**There is not one cross-platform matched ion in this repository.** The corpus is
+117 measurements, all travelling-wave, all from one laboratory, and the platform's
+entire premise is comparing the same ion measured on two different platforms.
+Nothing downstream of matched-ion construction can be built, validated or
+demonstrated on the data now held.
+
+This is not a shortage that more of the same data would fix. It is
+over-determined, and each of these alone is sufficient:
+
+1. both seed files are TWIMS, so there is only one platform;
+2. the analyte sets are disjoint — the 2015 file is high-mannose N-glycans
+   (Man3 to Man9Glc), the 2016 file is milk oligosaccharides (LNH, LNnH, LNT,
+   LNnT). No molecule appears in both;
+3. the 2015 rows carry `drift_gas = UNSTATED` and the 2016 rows carry `He`, and
+   gas is part of the matched-ion key, so even a shared analyte could not pair.
+
+`readiness.py` reports this as a blocker, in those terms, rather than as a small
+number. That is the M0 deliverable.
+
+## 2. No number in this repository describes model performance
+
+No harmonization model has been fitted. No CCS value has been corrected,
+harmonized or predicted. Every readiness report carries a `MaturityStamp` of
+`provisional`, and the count beside it is the number of cross-platform matched
+ions behind it, which is zero. There is no code path that can produce a
+`validated` stamp, because the milestone that would earn one does not exist.
+
+## 3. Licences: what is settled and what is not
+
+Four of the eleven registered sources are **unverified**, and the default-deny
+gate means none of them may be ingested. Each carries a `what_to_check` field
+naming the single thing that would settle it.
+
+The one that matters is the **steroid interplatform study**
+(DOI 10.1021/jasms.2c00196): 87 steroids, 142 values, DTIMS + TWIMS + TIMS. It is
+the only identified source that would supply cross-platform matched ions
+directly. ACS publishes open access under both CC-BY and CC-BY-NC-ND, and which
+one applies has not been read. One page decides whether a benchmark set exists.
+
+Nothing in this repository has read a licence. Every entry in `sources.py` records
+a report by a named person on a stated date. The code does not verify those
+reports and does not claim to.
+
+**The commercial-versus-research question is still open with the CEO.** Until it
+is answered the platform is treated as commercial, which is what blocks CCSBase.
+If the answer is internal research, CCSBase becomes usable and the data problem
+largely changes shape.
+
+## 4. Known defects and weaknesses, carried over deliberately
+
+### 4.1 The lone-conformer check has a hole where no locator is given
+
+`loader._lone_conformers` groups sibling conformers by `(calibration group,
+analyte, declared total, source_locator)`. Where a file gives no locator, rows
+from different samples pool into one key and the check weakens to requiring that
+the indices present cover the set and appear equally often. Two samples of one
+molecule that have each lost a *different* sibling satisfy that count and are not
+caught.
+
+This is inherited from the glycan platform, where it was documented as a
+weakening but described as still catching a missing sibling. It does not, in that
+one case. It is recorded here rather than fixed because fixing it means deciding
+what identifies a sample, which is a schema question for M1.
+
+**It currently bites nothing**, because the 2015 seed conversion folds sample
+origin into the locator exactly as the original adapter did. That folding is
+load-bearing: the eleven conformer pairs in that file are four compounds measured
+from four sample origins, and the locator is the only thing keeping one origin's
+pair from pooling with another's. There is a test pinning it.
+
+### 4.2 The conformal calibration floor is derived, tested, and not yet on a fit path
+
+`smallest_calibration_set`, `calibration_refusal` and `calibration_warning` are
+correct and tested: 9 calibration points for 90 per cent coverage, 19 for 95.
+`interval_readiness` wires them into one reachable call.
+
+Nothing calls it, because nothing computes a prediction interval yet. In the
+glycan platform the equivalent functions existed, were correct, and were called
+by nothing but their own tests — the floor reached a human only as a line in a
+summary. **Whatever computes a prediction interval in M4 must call
+`interval_readiness` first and refuse on a refusal.** That obligation is written
+down here because an uncalled guard is the failure shape this project keeps
+meeting.
+
+### 4.3 The mutation runner crashes rather than reporting STALE on a missing file
+
+`runner.sweep` builds its pristine map by reading every distinct `Mutation.file`
+with no error handling, and the `--check` path does the same. A mutation naming a
+file that does not exist raises `FileNotFoundError` instead of being reported as
+STALE, which is what the harness's own design says should happen.
+
+Not fixed, deliberately: `tools/mutation` was ported byte-for-byte apart from the
+package name, and that faithfulness is worth more right now than the fix. The
+anchor test that runs on every pytest invocation covers the case in practice.
+
+### 4.4 The mutation CLI is unhelpful on an empty catalogue
+
+With no mutations, `python -m tools.mutation` prints "no mutation label contains
+any of []" and exits 1, which describes a filter that matched nothing rather than
+an empty catalogue. Latent only: the catalogue holds 103. Same reasoning as 4.3.
+
+## 5. Where this repository departs from CONTEXT.md, and why
+
+CONTEXT.md was written before this repository existed. These are the places its
+instructions could not be followed exactly. Each was a judgement call and each is
+reversible.
+
+| CONTEXT.md says | What was done | Why |
+|---|---|---|
+| Port `licensing.py`, "no change beyond the package name" | `reuse.py` ported as well | `ReuseStatus` and the tier predicates live in `reuse.py`, not `licensing.py`, which only re-exports them. Folding them together re-creates the import cycle `reuse.py` exists to break |
+| Port `sources.py` | Ported without its SugarBase dataset entry | `sources.py` imported `sugarbase.py`, which is on the do-not-port list, and called it at module import. The `DATASETS` mechanism is kept and seeded with the two seed transcriptions, so the dataset-backed branch of the gate stays exercised instead of becoming unreachable |
+| Glycan analyte: "reuse the existing representation" and do not port `composition.py` | The canonicalisation half of `composition.py` was ported into `identity.py`; the N-glycan plausibility rules and the Man3GlcNAc2 core check were not | Those two instructions conflict. Canonical spelling is identity machinery — without it `Hex5HexNAc4` and `HexNAc4Hex5` are two matched ions instead of one. The biosynthetic rules are glycan biology and do not come across |
+| `readiness.py` "ported, rethresholded" | Rewritten around matched-ion and platform counts | `Readiness` lives inside `training.py`, whose thresholds come from `splits.py` and `evaluation.py`, neither of which is in the port list and both of which import do-not-port modules. The thresholds that carried over are marked as ported; the platform-count blocker is new, and is the one this platform actually needs |
+| `loader.py` "adapted to new columns" | One canonical format, plus a separate conversion step in `tools/seed_struwe.py` | The glycan platform had per-source adapter modules. A second entrance to the record model is a second way to skip the gate, which its own loader docstring warns against. Each source is now converted once into a reviewable file and then loaded by the one loader |
+| `reducing_end_label` and `derivatisation` on the measurement | Moved onto the glycan analyte | A steroid has no reducing end. A field that can only ever be null on five of six analyte kinds is a glycan assumption leaking into every record |
+
+Two further decisions that CONTEXT.md does not cover:
+
+- **Composition is optional on a glycan** when a structure identifier is present.
+  The 2016 transcription has no composition column; the glycan platform derived
+  one from the IUPAC string using a monosaccharide-class table, which is glycan
+  chemistry and does not port. Rather than derive or invent one, those rows record
+  no composition and are identified by their structure, which is finer anyway.
+- **`[M+24?]24+`** is a new adduct form meaning "twenty-four charges, carrier not
+  stated". Native-MS papers routinely report a charge state without saying whether
+  the carriers are protons, sodium or ammonium. Without this the adduct is
+  mandatory and its charge must match, so such a record could not be built at all;
+  writing `[M+24H]24+` instead would assert protons, which the paper does not say.
+  It keys apart from every named carrier and blocks training, following the
+  `DriftGas.UNSTATED` precedent exactly.
+
+## 6. Corrections to CONTEXT.md
+
+Stated plainly because CONTEXT.md is the document everyone reads first.
+
+- **"1,796 tests" is wrong.** The glycan repository collects **1,868** test cases
+  from 705 test functions at the commit read. The string "1796" appears nowhere in
+  that repository.
+- **"136 curated mutations" is wrong.** The catalogue holds **154**.
+- **"Roughly 40 percent of its code carries over" understates it as an import
+  fact.** The transitive closure of the named port set is 15 of 20 modules, four
+  of which are on the explicit do-not-port list. The glycan core is not a
+  separable layer; it is load-bearing under the registry, the record model and the
+  loader, and cutting it is most of the porting work.
+- **"89 stored records stay blocked until the drift gas is known" is wrong.**
+  Resolving the gas alone unblocks nothing. All 89 rows of the 2015 file carry
+  `uncertainty_type = unknown` with no spread, which is an independent blocker.
+  Both must be resolved. There is a test pinning both so the day somebody reads
+  Hofmann 2014 the suite tells them there is a second one.
+- **The four held rows in the 2016 file are not marked in the file.** CONTEXT.md
+  describes them as held pending curation. Nothing in the CSV says so: the hold is
+  *derived* by the loader's shared-peak detector from exact CCS equality within a
+  calibration group across differing analyte identity. Port the detector away and
+  all 28 rows clear with nothing to show it happened.
+- **Calibration reference lineage was not missing from the glycan repository.**
+  The objective document has no field for it, but `ccs_is_calibrated`,
+  `calibrant_reference` and the primary-versus-calibrated distinction all existed
+  and ported. What was genuinely new is the structured reference set: which
+  publication the reference values came from and what platform they were measured
+  on, which is what makes circularity detectable at all.
+
+## 7. What is not known about the seed data
+
+- The drift gas the 2015 values refer to. The ESI says a dextran ladder of known
+  DTCCS and never says which gas. Recorded as `UNSTATED`, not inferred from the
+  same group's 2016 paper. Resolving it means reading Hofmann 2014, Anal. Chem.
+  86, 10789.
+- The platform the calibration references were measured on, for both files.
+  "DTCCS" in the 2015 cell plainly suggests a drift tube, and that is a reading of
+  an abbreviation rather than of a paper, so `calref_platform` is null on both and
+  `traces_to_primary` returns `None` for every seeded record. That is the honest
+  answer.
+- Whether either transcription is faithful to its ESI. Neither has been checked
+  against the source within this repository. Every count reported is a count of
+  the transcription as delivered.
+- The seven high-mannose structures for the 2015 file. They are in Figure 1 of the
+  paper, which nobody here has read. The composition column is taken as
+  transcribed rather than derived from a structure, so a composition typo in that
+  file cannot be caught the way a structure would catch one.
+
+## 8. Scope of the test suite
+
+The tests assert the constraints in CLAUDE.md, not only the happy path, and the
+mutation catalogue is what demonstrates that they bite. But:
+
+- the catalogue holds 103 mutations against seven modules. It is smaller than the
+  glycan platform's 154 because 46 of those anchored into modules that do not come
+  across and 26 into modules not in this milestone. The floor in the catalogue test
+  is the real current count and goes up, never quietly down;
+- a mutation that survives is a behaviour with no test behind it. There are no
+  documented expected survivors in this catalogue, so any survivor is a finding;
+- nothing here tests numerical accuracy of anything, because nothing numerical is
+  computed yet.

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wmxccs"
+dynamic = ["version"]
+description = "Cross-platform CCS harmonization: measurements from DTIMS, TWIMS, TIMS and cIMS held apart, paired by matched ion, and harmonized without overwriting the originals."
+requires-python = ">=3.11"
+dependencies = [
+    # The only runtime dependency M0 has. The record models, the licence gate and
+    # the loader are all pydantic; nothing else is needed to hold a measurement.
+    "pydantic>=2.10",
+]
+
+# Deliberately absent, and worth saying why, because the module these were ported
+# from declared all four. networkx, glycowork and the 44-column featuriser served
+# the glycan graph layer, which does not come across. scikit-learn served a fit
+# that does not exist here yet; it returns as a dependency of the harmonization
+# model in M4, declared then rather than now. fastapi returns with the API in M5.
+# A dependency declared before a code path reaches it is a claim about the
+# platform that the platform does not yet make.
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "wmxccs.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+# So the tests can import tools/, which holds the mutation catalogue. The
+# catalogue's anchors are checked on every ordinary pytest run, because a
+# mutation that silently stops applying is a loss of coverage that reports
+# itself as success.
+pythonpath = ["."]

@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+data/raw/*
+!data/raw/.gitkeep
+mlruns/
+.env
+
+# Scratch space the mutation harness's test agents use for source copies.
+# Nothing here is ever part of the repository.
+.mutcheck/
+
+# data/seed is deliberately NOT ignored. It holds the curated transcriptions and
+# the converted seed files, and both are reviewable artefacts: the whole point of
+# data/raw being ignored is that the delivered file lives in data/seed instead,
+# under version control, with the conversion diffable against it.
