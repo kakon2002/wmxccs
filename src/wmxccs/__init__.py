@@ -1,3 +1,5 @@
 """Cross-platform CCS harmonization."""
 
-__version__ = "0.0.1"
+# 0.5.0 at M5: the milestone number, not a claim about stability. The model it serves is
+# fitted on one study and every response says so.
+__version__ = "0.5.0"

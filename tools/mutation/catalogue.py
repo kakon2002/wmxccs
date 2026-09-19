@@ -1176,27 +1176,25 @@ MUTATIONS: tuple[Mutation, ...] = (
     ),
     # --- [A] api.py and contracts.py: the response contract --------------------
     Mutation(
-        label="[A] harmonize answers 200 instead of refusing while no model exists",
+        label="[A] harmonize answers 200 when it harmonized nothing at all",
         file="api.py",
-        find='    @app.post("/harmonize", status_code=501, response_model=HarmonizationUnavailable)',
-        replace='    @app.post("/harmonize", status_code=200, response_model=HarmonizationUnavailable)',
+        # Was anchored on the route's status_code=501 until M5 wired the endpoint to a
+        # model and gave it two declared shapes. The damage is unchanged: a response
+        # where nothing could be answered reading as success to a status-code check.
+        find="        response.status_code = 501",
+        replace="        pass",
     ),
     Mutation(
-        label="[A] the refusal stops returning the measurements it was given",
+        label="[A] a response stops returning the measurements it was given",
         file="api.py",
-        # Re-anchored: the first version replaced only the opening of the argument
-        # and left the generator body dangling, so the mutated file did not COMPILE.
-        # An uncompilable mutation is UNRUNNABLE, which this harness deliberately
-        # does not count as a kill - so it was a mutation no test could ever kill,
-        # and the sweep would have reported it as a problem forever. The whole
-        # argument is replaced now, which compiles and fails nine tests.
-        find="            measurements=tuple(\n"
-        "                # harmonized and confidence are left absent, not empty. There is no\n"
-        "                # number to put in them and no grade to compute against nothing.\n"
-        "                HarmonizedMeasurement(original=record, provenance=provenance_of(record))\n"
-        "                for record in body.measurements\n"
-        "            ),",
-        replace="            measurements=(),",
+        # Re-anchored TWICE. The first version replaced only the opening of the
+        # argument and left the generator body dangling, so the mutated file did not
+        # COMPILE - and an uncompilable mutation is UNRUNNABLE, which this harness
+        # deliberately does not count as a kill, so it was a mutation no test could
+        # ever kill. The second re-anchoring is M5's: the endpoint now builds its
+        # measurements once for both response shapes, so there is one line to name.
+        find="        measurements = tuple(_harmonized_measurement(loaded, record) for record in body.measurements)",
+        replace="        measurements = ()",
     ),
     Mutation(
         label="[A] provenance is read from the record's own claim rather than from the registry",
@@ -1213,14 +1211,17 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[A] health reports a model loaded when none is",
         file="api.py",
-        find="            model_loaded=request.app.state.model is not None,",
+        find="            model_loaded=loaded is not None,",
         replace="            model_loaded=True,",
     ),
     Mutation(
-        label="[A] the maturity stamp claims validated while nothing has been checked",
+        label="[A] the maturity stamp is invented rather than read from the model",
         file="api.py",
-        find="                DataMaturity.VALIDATED if request.app.state.model_validated else DataMaturity.PROVISIONAL",
-        replace="                DataMaturity.VALIDATED",
+        # Was anchored on `app.state.model_validated`, a boolean beside the model that
+        # could be set independently of it. M5 removed it and reads the model's own
+        # stamp; the damage attacked is the same, a stamp nobody derived.
+        find="        return loaded.maturity",
+        replace="        return MaturityStamp(data_maturity=DataMaturity.VALIDATED, matched_ion_count=93)",
     ),
     Mutation(
         label="[A] a harmonized estimate may carry an interval coverage of one",
@@ -1408,6 +1409,48 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="harmonization.py",
         find="        if candidate.other_platform == platform and candidate.stratum.other_group == group:",
         replace="        if candidate.other_platform == platform:",
+    ),
+    Mutation(
+        label="[A] a value graded unsupported is returned anyway, so the API extrapolates",
+        file="api.py",
+        find="    if confidence is not None and confidence.grade is ConfidenceGrade.UNSUPPORTED:",
+        replace="    if False:",
+    ),
+    Mutation(
+        label="[A] an absent harmonized value stops carrying the reason there is none",
+        file="contracts.py",
+        find='        if self.harmonized is None and not (self.not_harmonized_because or "").strip():',
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[A] a harmonized value and a reason there is none are allowed together",
+        file="contracts.py",
+        find="        if self.harmonized is not None and self.not_harmonized_because:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[A] the interval is served at its nominal level as though that were guaranteed",
+        file="api.py",
+        find="        guaranteed_coverage=band.guaranteed_coverage,",
+        replace="        guaranteed_coverage=band.nominal_coverage,",
+    ),
+    Mutation(
+        label="[A] a jackknife+ interval is served labelled as split conformal, claiming the stronger guarantee",
+        file="api.py",
+        find="        interval_kind=IntervalKind.JACKKNIFE_PLUS,",
+        replace="        interval_kind=IntervalKind.CONFORMAL_PREDICTION,",
+    ),
+    Mutation(
+        label="[A] a seed directory with no data yields an empty model instead of none",
+        file="api.py",
+        find="    return model if model.applied else None",
+        replace="    return model",
+    ),
+    Mutation(
+        label="[A] the served scope is invented rather than taken from the fit",
+        file="api.py",
+        find="        scope=ScopeReport.of(result.scope),",
+        replace="        scope=ScopeReport.of(correction.stratum.points[0].ion.key),",
     ),
     # --- [K] readiness: what refuses and what merely warns ---------------------
     Mutation(

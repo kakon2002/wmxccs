@@ -27,6 +27,7 @@ terms and when.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from copy import deepcopy
 
 import pytest
@@ -34,8 +35,8 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from wmxccs import sources
-from wmxccs.api import CONFIDENCE_NOTE, create_app
-from wmxccs.scope import ComparisonScope
+from wmxccs.api import CONFIDENCE_NOTE, create_app, provenance_of
+from wmxccs.scope import ComparisonScope, ScopeStamp
 from wmxccs.contracts import (
     ScopeReport,
     ConfidenceReport,
@@ -50,7 +51,11 @@ from wmxccs.contracts import (
 )
 from wmxccs.grading import ConfidenceGrade, grade_rules
 from wmxccs.models import CCSMeasurement, UncertaintyType
-from wmxccs.readiness import DataMaturity
+from wmxccs.readiness import DataMaturity, MaturityStamp
+
+# Located from THIS FILE, not from the package: the package moves under the mutation
+# harness and the data does not.
+SEED_DIRECTORY = Path(__file__).resolve().parents[1] / "data" / "seed"
 from wmxccs.reuse import ReuseStatus
 
 from conftest import measurement
@@ -59,6 +64,36 @@ from conftest import measurement
 REGISTERED_DOI = "10.1039/c6cc06247d"
 # Not allocated to any registrant, so it can never be in the registry.
 UNREGISTERED_DOI = "10.9999/nobody.has.registered.this"
+
+
+class _StubModel:
+    """A model-shaped object for the two tests that need a maturity no real model can have.
+
+    Only `maturity` is read by the endpoints under test. It exists because
+    DataMaturity.VALIDATED is unreachable from any corpus this repository holds, so the
+    "other direction" of the maturity test cannot be written with a real model - which is
+    itself the thing being asserted, in test_no_model_fitted_on_this_corpus_can_report_validated.
+    """
+
+    def __init__(self, matched_ions: int = 0, validated: bool = False):
+        self.maturity = MaturityStamp(
+            data_maturity=DataMaturity.VALIDATED if validated else DataMaturity.PROVISIONAL,
+            matched_ion_count=matched_ions,
+        )
+        self.applied = ()
+        self.corrections = ()
+        # `harmonize` reads the model's scope to report it on a refusal, so the stub
+        # carries a real one rather than a mock: a scope is derived from provenance and
+        # there is nothing about it to fake.
+        self.scope = ScopeStamp(
+            studies=("doi:10.1021/jasms.2c00196",),
+            instruments=(),
+            platforms=("DTIMS/stepped_field",),
+            records_behind_it=matched_ions or 1,
+        )
+
+    def correction_for(self, *args, **kwargs):
+        return None
 
 
 @pytest.fixture
@@ -160,8 +195,17 @@ def test_every_measurement_posted_comes_back_in_the_order_it_was_sent(client):
 def test_the_harmonized_value_is_an_additional_field_and_never_replaces_the_original(client):
     record = awkward_record()
     returned = client.post("/harmonize", json=body_for(record)).json()["measurements"][0]
-    assert set(returned) == {"original", "provenance", "harmonized", "confidence"}
+    assert set(returned) == {
+        "original",
+        "provenance",
+        "harmonized",
+        "confidence",
+        "not_harmonized_because",
+    }
     assert returned["harmonized"] is None
+    # And an absent value now has to say why, so a caller can tell a platform the model
+    # does not cover from an ion outside the range its correction was fitted over.
+    assert returned["not_harmonized_because"].strip()
     assert returned["original"]["ccs"] == record.ccs
 
 
@@ -314,10 +358,14 @@ def test_health_reports_no_model_and_no_matched_ions(client):
     assert payload["version"]
 
 
-def test_health_would_report_a_model_if_one_were_loaded(app):
-    """The other direction, so the flag is reading the app rather than returning a constant."""
-    app.state.model = object()
-    app.state.matched_ion_count = 7
+def test_health_reports_the_model_it_is_actually_serving(app):
+    """The other direction, and it now reads the MODEL rather than a mutable count beside it.
+
+    `app.state.matched_ion_count` is gone. It was a number that could be set independently
+    of the model it described, which is the shape of defect this repository keeps finding:
+    setting it anywhere would have made /health report ions the model did not have.
+    """
+    app.state.model = _StubModel(matched_ions=7)
     payload = TestClient(app).get("/health").json()
     assert payload["model_loaded"] is True
     assert payload["matched_ions_available"] == 7
@@ -329,11 +377,36 @@ def test_the_maturity_stamp_on_the_refusal_is_provisional_over_zero_matched_ions
     assert maturity["matched_ion_count"] == 0
 
 
-def test_the_maturity_stamp_only_says_validated_once_something_has_been_checked(app):
-    """The other direction. A stamp that always said provisional would pass the test above."""
-    app.state.model_validated = True
+def test_the_maturity_stamp_is_read_from_the_model_and_not_from_a_flag_beside_it(app):
+    """The other direction. A stamp that always said provisional would pass the test above.
+
+    It used to read `app.state.model_validated`, a boolean that could be set independently
+    of the model - so a response could say 'validated' while every estimate in it said
+    within-study. The stamp now comes from the model, which derives it from its own scope.
+
+    A stub model is used because no model fitted on this corpus can be validated: VALIDATED
+    needs data the model was not fitted on, and one study has none. That is the point, and
+    it is why this test cannot be written with a real model.
+    """
+    app.state.model = _StubModel(matched_ions=93, validated=True)
     maturity = TestClient(app).post("/harmonize", json=body_for(awkward_record())).json()["maturity"]
     assert maturity["data_maturity"] == DataMaturity.VALIDATED.value
+    assert maturity["matched_ion_count"] == 93
+
+
+def test_no_model_fitted_on_this_corpus_can_report_validated():
+    """The reason the test above needs a stub, asserted on the real thing.
+
+    The seed directory is NAMED rather than defaulted. `build_default_model()` with no
+    argument resolves a path relative to the installed package, which is correct for a
+    deployment and wrong for a test: the mutation harness runs the suite against a copy of
+    the package in a temporary directory, where that default finds nothing.
+    """
+    from wmxccs.api import build_default_model
+
+    model = build_default_model(SEED_DIRECTORY)
+    assert model is not None
+    assert model.maturity.data_maturity is DataMaturity.PROVISIONAL
 
 
 # --- 7. the grading scheme is published and needs no model -------------------------------------------
@@ -342,7 +415,6 @@ def test_the_maturity_stamp_only_says_validated_once_something_has_been_checked(
 def test_the_confidence_rules_answer_on_a_fresh_app_with_no_model(app):
     """The endpoint exists precisely because these rules need no training data."""
     assert app.state.model is None
-    assert app.state.matched_ion_count == 0
     response = TestClient(app).get("/confidence/rules")
     assert response.status_code == 200
 
@@ -370,13 +442,20 @@ def test_the_published_note_says_the_grade_only_ever_falls(client):
 # --- 8. the 200 shape is specified and is not what any endpoint returns -------------------------------
 
 
-def test_the_eventual_200_shape_is_specified_for_callers_building_ahead_of_the_model():
+def test_the_200_shape_is_what_it_was_specified_to_be_before_it_was_reachable():
+    """The shape was published in M3 and is now served. It did not have to change to be served.
+
+    One field was ADDED - `not_harmonized_because` - because serving real answers showed
+    that an absent value without a reason leaves a caller unable to act. Everything else
+    that was specified ahead of the model is what a caller gets.
+    """
     assert set(HarmonizeResponse.model_fields) == {"measurements", "maturity"}
     assert set(HarmonizedMeasurement.model_fields) == {
         "original",
         "provenance",
         "harmonized",
         "confidence",
+        "not_harmonized_because",
     }
     assert set(ConfidenceReport.model_fields) == {"grade", "reasons", "not_checked"}
     assert {"ccs", "basis", "interval_low", "interval_high", "interval_coverage", "interval_kind"} <= set(
@@ -393,20 +472,23 @@ def test_the_eventual_200_shape_is_specified_for_callers_building_ahead_of_the_m
     }
 
 
-def test_no_endpoint_returns_the_200_shape_today(app):
-    """/harmonize answers with the refusal shape, which is a different shape on purpose.
+def test_harmonize_declares_both_shapes_and_neither_is_optional_in_the_other(app):
+    """BOTH response shapes are declared, and that is the change M5 made.
 
-    Declaring HarmonizeResponse here would let a caller write code against a
-    harmonized value that is never present, and the schema would say the value was
-    merely optional rather than absent by policy.
+    Until a model existed this route declared only HarmonizationUnavailable, so a caller
+    could not write code against a harmonized value that was never present. Now both are
+    declared against their own status codes, which is the honest description: 200 carries a
+    value, 501 carries none, and the status says which without a caller inspecting fields.
+
+    They remain DIFFERENT SHAPES. One response model covering both would make the
+    harmonized value merely optional rather than absent-with-a-reason.
     """
     harmonize = [route for route in app.routes if getattr(route, "path", None) == "/harmonize"]
     assert len(harmonize) == 1
-    assert harmonize[0].response_model is HarmonizationUnavailable
-    assert harmonize[0].response_model is not HarmonizeResponse
-    assert harmonize[0].status_code == 501
-    declared = {getattr(route, "response_model", None) for route in app.routes}
-    assert HarmonizeResponse not in declared
+    declared = harmonize[0].responses
+    assert declared[200]["model"] is HarmonizeResponse
+    assert declared[501]["model"] is HarmonizationUnavailable
+    assert HarmonizeResponse is not HarmonizationUnavailable
 
 
 # --- 9. the contract refuses a placeholder estimate at the model level ---------------------------------
@@ -527,3 +609,52 @@ def test_a_harmonized_estimate_must_say_how_many_matched_ions_are_behind_it():
     with pytest.raises(ValidationError):
         HarmonizedEstimate(**good_estimate(matched_ions_behind_it=-1))
     assert HarmonizedEstimate(**good_estimate(matched_ions_behind_it=0)).matched_ions_behind_it == 0
+
+
+# --- a measurement with no value must say why, and one with a value must not ------------------
+#
+# Both directions, built directly rather than through a response. The endpoint tests check
+# that real responses carry the right thing; these check that the wrong thing cannot be
+# constructed at all. Without them the validators had no cover: the mutation sweep found
+# both of them surviving.
+
+
+def test_a_measurement_with_no_harmonized_value_and_no_reason_is_refused():
+    """An absent value with no reason is indistinguishable from an oversight."""
+    with pytest.raises(ValidationError, match="must say why"):
+        HarmonizedMeasurement(
+            original=awkward_record(),
+            provenance=provenance_of(awkward_record()),
+        )
+
+
+@pytest.mark.parametrize("reason", ["", "   "], ids=["empty", "whitespace"])
+def test_a_blank_reason_does_not_count_as_a_reason(reason):
+    with pytest.raises(ValidationError, match="must say why"):
+        HarmonizedMeasurement(
+            original=awkward_record(),
+            provenance=provenance_of(awkward_record()),
+            not_harmonized_because=reason,
+        )
+
+
+def test_a_measurement_cannot_carry_both_a_value_and_a_reason_there_is_none():
+    """The other direction. A response saying both is a response a caller cannot act on."""
+    with pytest.raises(ValidationError, match="cannot both carry"):
+        HarmonizedMeasurement(
+            original=awkward_record(),
+            provenance=provenance_of(awkward_record()),
+            harmonized=HarmonizedEstimate(**good_estimate()),
+            not_harmonized_because="a reason that should not be here",
+        )
+
+
+def test_a_measurement_with_a_value_and_no_reason_is_accepted():
+    """The control, so the two refusals above are not satisfied by a model that refuses all."""
+    measurement = HarmonizedMeasurement(
+        original=awkward_record(),
+        provenance=provenance_of(awkward_record()),
+        harmonized=HarmonizedEstimate(**good_estimate()),
+    )
+    assert measurement.not_harmonized_because is None
+    assert measurement.harmonized is not None

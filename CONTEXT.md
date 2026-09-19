@@ -286,6 +286,38 @@ all four" is the histogram over all 521 records; over the 517 that clear the gat
 93, the difference being four records the shared-peak check holds. Both are true and they
 answer different questions. Corrected in place here and in LIMITATIONS 7D.
 
+## M5: the deployable MVP
+
+Built 19 September 2026. `/harmonize` is wired to the fitted model; `python -m wmxccs` or
+`wmxccs-serve` starts it; `tools/demo_end_to_end.py` runs one real ion through every stage.
+Installed and served from a clean virtual environment and verified there, not assumed.
+
+Three things worth carrying forward:
+
+**Nothing is extrapolated.** A correction grading `unsupported` has its value WITHHELD, not
+returned with a warning. The grade means "do not use this number", and returning one while
+saying that is a contradiction a caller resolves in favour of the number. The grade and its
+reasons still come back.
+
+**An absent value must say why.** `not_harmonized_because` is required by a contract
+validator whenever there is no harmonized value. A platform the model does not cover, an ion
+outside the fitted range, and a value already on the primary platform are three different
+situations needing three different actions from the caller.
+
+**DEPLOY FROM A CHECKOUT, NOT A WHEEL.** The seed CSVs are deliberately not package data, so
+a built wheel carries no measurements and its `/harmonize` answers 501. That is a licensing
+decision: the steroid data is academic_only with an attribution obligation, and bundling it
+into a redistributable artefact is a decision nobody has made. Making it silently, as a
+packaging convenience, is the sort of thing this project exists not to do. If a wheel
+deployment is ever wanted, that decision has to be taken explicitly and recorded in the
+registry.
+
+Not done, and each needs a decision rather than code: authentication, rate limiting and CORS
+(the server binds 127.0.0.1, which is the only concession); model versioning, since the model
+is refitted from the seed files at every startup and a changed seed file changes the answers
+with nothing recording that it did; and growing the corpus from submitted measurements, which
+the API deliberately does not do.
+
 ## Domain facts already established
 
 - Interlab DTIMS reproducibility: 0.29% RSD stepped field, 0.54% bias single field

@@ -67,6 +67,66 @@ The other two licence-clear sources are retrieved and characterised, not ingeste
 
 Both are in `LIMITATIONS.md` section 7E, with what each one still needs.
 
+## Running it
+
+Verified on Python 3.14 on Windows; nothing in it is platform-specific.
+
+```
+python -m venv .venv
+.venv/Scripts/pip install -e ".[dev,serve]"     # Windows
+# .venv/bin/pip install -e ".[dev,serve]"       # macOS, Linux
+
+python -m wmxccs                                # serves on http://127.0.0.1:8000
+```
+
+`python -m wmxccs` prints what it is serving before it starts - how many corrections the
+model holds, how many matched ions are behind it, and the scope caveat - so an operator can
+see whether a model was found. Interactive documentation is at `/docs`.
+
+Three endpoints:
+
+| | |
+|---|---|
+| `GET /health` | version, whether a model is loaded, how many matched ions it rests on |
+| `GET /confidence/rules` | the grading scheme as data, so it can be challenged |
+| `POST /harmonize` | 200 with harmonized values, or 501 where the model covers nothing |
+
+The model is fitted at startup from the CSV files in `data/seed`, which are committed. An
+installation whose seed directory is empty serves a working API whose `/harmonize` answers
+501 - which is correct rather than broken, and `/health` says so.
+
+`pip install -e .` alone installs the library without a web server; `[serve]` adds uvicorn
+and `[ingest]` adds openpyxl, which only the source-workbook adapters in `tools/` need.
+
+**Deploy from a checkout, not from a built wheel.** The seed CSVs are deliberately not
+declared as package data, so a wheel carries no measurements and its `/harmonize` answers
+501. That is a licensing decision rather than an oversight: the steroid data is
+`academic_only` with an attribution obligation, and bundling it into a redistributable
+artefact is a decision nobody has made. An editable install from a clone - which is what
+the commands above do - resolves `data/seed` in the source tree and serves a real model.
+
+### Seeing it work end to end
+
+```
+python tools/demo_end_to_end.py
+```
+
+One real ion from the steroid corpus through every stage in order - ingestion, identity,
+matched-ion construction, statistics, the three corrections, the interval, the grade, and
+what the result may and may not be called. It asserts nothing; the assertions are in
+`tests/`. It exists so the pipeline is legible without reading the code.
+
+### Checking it
+
+```
+.venv/Scripts/python -m pytest                  # 2060 tests
+PYTHONPATH=. .venv/Scripts/python -c "import sys; sys.argv=['r']; from tools.mutation.runner import main; raise SystemExit(main())"
+```
+
+The second is the mutation sweep: it breaks each guard in the package one at a time and
+requires a test to notice. A mutation that survives is a behaviour with no test behind it,
+and is treated as a failure rather than as a note.
+
 ## Layout
 
 ```

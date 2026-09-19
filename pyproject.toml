@@ -19,22 +19,45 @@ dependencies = [
 
 # Deliberately absent, and worth saying why, because the module these were ported
 # from declared all four. networkx, glycowork and the 44-column featuriser served
-# the glycan graph layer, which does not come across. scikit-learn served a fit
-# that does not exist here yet; it returns as a dependency of the harmonization
-# model in M4, declared then rather than now. A dependency declared before a code
-# path reaches it is a claim about the platform that the platform does not make.
+# the glycan graph layer, which does not come across.
 #
-# Note the statistics in M3 are pure Python and stay that way on purpose: Pearson,
-# Deming, Bland-Altman and Lin's concordance are each a handful of sums, and
-# pulling in a numerical stack to compute them would add a large dependency whose
-# version is then part of every figure this platform quotes.
+# SCIKIT-LEARN WAS PREDICTED HERE AND IS NOT NEEDED. The note this replaces said it
+# "returns as a dependency of the harmonization model in M4, declared then rather
+# than now". M4 arrived on 19 September 2026 and needed nothing: Passing-Bablok is a
+# median of pairwise slopes, jackknife+ is a loop of refits, and the rank interval
+# uses statistics.NormalDist from the standard library. The whole harmonization
+# model is a few hundred lines of pure Python.
+#
+# That is not a small thing to have got right by accident, so the reason is recorded:
+# the statistics in M3 were kept pure Python on purpose - Pearson, Deming,
+# Bland-Altman and Lin's concordance are each a handful of sums - and M4 inherited
+# the same discipline. Pulling in a numerical stack would have made its version part
+# of every figure this platform quotes, for arithmetic anybody can check by hand.
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
     # fastapi's TestClient needs it.
     "httpx>=0.27",
+    # tools/ingest_steroid.py reads the published supporting-information workbook.
+    # Only the adapter needs it; the library never opens a spreadsheet.
+    "openpyxl>=3.1",
 ]
+# What it takes to SERVE the API rather than import the library. Separated because a
+# caller using wmxccs as a library should not be made to install a web server.
+serve = [
+    "uvicorn>=0.30",
+]
+# Reading the source workbooks in tools/. Kept out of the runtime dependencies: a
+# deployment serves the converted CSV in data/seed and never touches an .xlsx.
+ingest = [
+    "openpyxl>=3.1",
+]
+
+[project.scripts]
+# `wmxccs-serve` starts the API with a model fitted from data/seed. Equivalent to
+# `python -m wmxccs`, which works without installing.
+wmxccs-serve = "wmxccs.__main__:main"
 
 [tool.setuptools.dynamic]
 version = { attr = "wmxccs.__version__" }

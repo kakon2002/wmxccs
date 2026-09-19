@@ -114,6 +114,12 @@ class IntervalKind(StrEnum):
     """
 
     CONFORMAL_PREDICTION = "conformal_prediction"
+    # Distinct from the above, and the distinction is the guarantee rather than the
+    # family. Split conformal proves 1-alpha; jackknife+ proves 1-2*alpha, so a
+    # nominally 90 per cent jackknife+ interval is guaranteed at 80. Labelling one as
+    # the other would be read as the stronger claim, which is the failure this enum
+    # exists to prevent one level up.
+    JACKKNIFE_PLUS = "jackknife_plus"
     LIMITS_OF_AGREEMENT = "limits_of_agreement"
 
 
@@ -265,8 +271,31 @@ class HarmonizedMeasurement(BaseModel):
         description="Absent, not empty, where no correction can be made. There is no placeholder value.",
     )
     confidence: ConfidenceReport | None = Field(
-        default=None, description="Absent where there is no harmonized value to grade."
+        default=None,
+        description="The grade. Present even where `harmonized` is absent IF a grade was computed and the"
+        " number withheld because of it - a caller is owed the reason the value is missing.",
     )
+    not_harmonized_because: str | None = Field(
+        default=None,
+        description="REQUIRED whenever `harmonized` is absent, and absent whenever it is present. Which of"
+        " those two it is decides what a caller should do next: a platform the model does not cover is a"
+        " different problem from an ion outside the range its correction was fitted over.",
+    )
+
+    @model_validator(mode="after")
+    def a_missing_value_carries_its_reason(self) -> "HarmonizedMeasurement":
+        if self.harmonized is None and not (self.not_harmonized_because or "").strip():
+            raise ValueError(
+                "a measurement with no harmonized value must say why. An absent value with no reason is"
+                " indistinguishable from an oversight, and a caller cannot tell whether to fix their input,"
+                " wait for more data, or stop asking"
+            )
+        if self.harmonized is not None and self.not_harmonized_because:
+            raise ValueError(
+                "a measurement cannot both carry a harmonized value and a reason there is none:"
+                f" {self.not_harmonized_because!r}"
+            )
+        return self
 
 
 class HarmonizeResponse(BaseModel):

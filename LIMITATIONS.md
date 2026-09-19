@@ -1,5 +1,63 @@
 # Limitations
 
+## READ THIS FIRST: what these numbers are, in plain terms
+
+This platform takes a molecule's "collision cross section" - a measured size, in square
+angstroms - as reported by four different kinds of instrument, and reports how much those
+instruments disagree. It then offers a corrected value that puts one instrument's number
+onto another's scale, **alongside the original, never instead of it**.
+
+**Where the numbers come from.** One published study of 87 steroids
+(DOI 10.1021/jasms.2c00196). That is the whole corpus. 142 ions are measured on more than
+one kind of instrument; 93 of them on all four.
+
+**What the corrections say.** Between one instrument and another, in that one study, the
+values differ by roughly 0.1 to 1.1 per cent depending on the instrument pair and the ion.
+The corrections move a value by about that much.
+
+### Five things it would be easy to read into these numbers that are not there
+
+**1. "Drift tube versus trapped ion" is one laboratory comparing its own two instruments.**
+Those measurements were made by the study's authors on their own equipment. If a different
+laboratory ran the same ions, it might not get the same difference.
+
+**2. "Travelling wave" is not that laboratory's measurement at all.** Those values are
+taken from an earlier paper (DOI 10.1021/acs.analchem.9b05247) and are already an average
+over four instruments in several laboratories. So a travelling-wave comparison is one
+laboratory's number against somebody else's average - which is a different thing again from
+the first case, and neither is wrong, but they are not the same kind of comparison.
+
+**3. NEITHER IS A REPRODUCIBILITY FIGURE.** "How much does this instrument type vary
+between laboratories" is a different question, answered by measuring the same ions
+independently in many laboratories and looking at the spread. That has been done elsewhere -
+the published figure for one drift-tube method is about 0.29 per cent - and it is not what
+this platform produces. The software will not let a number from here be labelled that way:
+the claim cannot be expressed in the code at all.
+
+**4. The uncertainty ranges are guaranteed at 80 per cent, not 90.** Each corrected value
+comes with a range. The range is calculated at a 90 per cent setting, but the method used
+(jackknife+) mathematically guarantees only 80 per cent - that is, about one in five values
+may fall outside its stated range rather than one in ten. Both numbers are reported with
+every range, and the smaller one is the one to rely on.
+
+**5. One of the internal safety checks currently does nothing.** A check exists to warn when
+a correction is being driven by a handful of unusual ions rather than by the data as a whole.
+On this corpus it never triggers, and on eight of the eighteen comparisons it cannot even be
+calculated. Its threshold has deliberately NOT been lowered to make it trigger, because
+adjusting a safety check until it fires is fitting the check to the data.
+
+### What to do with a number from this platform
+
+Use it with the range and the grade that came with it, for comparing instruments within this
+kind of study. Do not quote it as a reproducibility figure, do not quote the range without
+its 80 per cent figure, and do not assume it transfers to molecules unlike steroids - nothing
+here has been tested on proteins, peptides or sugars.
+
+Everything below this section is the detailed version, written for somebody working on the
+code.
+
+---
+
 What this repository does not do, does not know, and must not be read as claiming.
 Written at M0 and updated through each milestone since; sections 7A to 7D were added
 after it. Everything here is a live limitation unless it says it is closed.
@@ -317,6 +375,24 @@ All three now have tests that fail when the guard is removed, and all three need
 FIXTURE rather than the real corpus, because the real corpus cannot distinguish the
 correct behaviour from the broken one. That is the lesson repeated: the data you have
 does not exercise the guard you wrote.
+
+**M5 PRODUCED THREE MORE AND THE HARNESS CAUGHT ALL THREE AGAIN.** Two were contract
+validators - a measurement with no harmonized value and no reason, and one carrying both a
+value and a reason - which every endpoint test passed because those tests build VALID
+responses and check what they carry. Nothing constructed the invalid state, so nothing
+covered the validator that forbids it.
+
+The third is worth its own sentence because the test meant to cover it existed and did not.
+`build_default_model` returns None both when no records load AND when records load but yield
+no applicable correction. The test passed an EMPTY directory, which returns None one branch
+earlier - so the branch being tested was never reached, and the mutation that breaks it
+survived. Reaching it needs data that loads, clears the gate, and still pairs nothing, which
+is what the Struwe seed files are. **A test that exercises an earlier return is not a test of
+a later one**, and the only thing that distinguished them was the sweep.
+
+Running tally: nine instances found after the fact, six caught by the sweep before shipping
+(three in M4, three in M5). The harness is now catching them faster than they are written,
+which is the only acceptable direction.
 
 WHAT THE NINE HAVE IN COMMON, and what to do about it. Green is not evidence. The
 question that catches all nine is not "do the tests pass" but "what would have to
@@ -1321,12 +1397,62 @@ reproducibility figure. See 7D.
   fire, because it is anchored to published stepped-field DTIMS reproducibility and
   tuning a guard until it triggers is fitting the guard to the data.
 
+## 7G. M5: the deployable MVP, and what "deployable" does not cover
+
+Built 19 September 2026. `/harmonize` is wired to the fitted model, there is a
+demonstration that runs one real ion through every stage, and the package installs and
+serves from a clean virtual environment - verified, not assumed.
+
+### What the API does and does not do
+
+Three outcomes, and which one a caller gets is the useful part:
+
+- **200 with a harmonized value** where the measurement's platform and calibration group
+  match one of the nine applied strata. It carries both coverage figures, the interval, the
+  grade, the scope and the provenance.
+- **No value, with a per-measurement reason**, where the model does not cover it. The field
+  is `not_harmonized_because` and it is REQUIRED whenever the value is absent - a validator
+  on the contract enforces it, because an absent value with no reason is indistinguishable
+  from an oversight.
+- **501 for the whole request** where nothing in it could be harmonized. A response full of
+  absent values is a refusal and should read as one to anything checking the status alone.
+
+**Nothing is extrapolated.** A correction that grades `unsupported` has its VALUE WITHHELD
+rather than returned with a warning, because that grade's definition is "do not use this
+number" and handing over a number while saying not to use it is a contradiction a caller
+resolves in favour of the number. The grade and its reasons are still returned, so the
+caller learns why.
+
+### Deployment is from a checkout, and a wheel is not enough
+
+The seed CSVs are not declared as package data, so a built wheel carries no measurements
+and serves a model-less API. **This is a licensing decision, not an oversight.** The steroid
+data is `academic_only` and carries an attribution obligation; bundling it into a
+redistributable artefact is a decision nobody has made, and making it silently as a
+packaging convenience is exactly the kind of thing this repository exists not to do.
+
+An editable install from a clone resolves `data/seed` in the source tree and serves a real
+model. That is the supported deployment and it is what was verified.
+
+### What M5 did not do, and would need deciding
+
+- **No authentication, no rate limiting, no CORS policy.** The server binds 127.0.0.1 by
+  default rather than 0.0.0.0, which is the only concession to this. Exposing it needs a
+  decision about who may call it.
+- **No persistence and no model versioning.** The model is refitted from the seed files at
+  every startup, so two deployments on the same data give the same answers, and a changed
+  seed file changes the answers with nothing recording that it did.
+- **One request builds no matched ions of its own.** A caller submitting two platforms'
+  values for one ion gets each corrected against the stored model; the pair they sent is
+  not added to the corpus. That is the honest behaviour for a fitted model and it means the
+  API cannot be used to grow the corpus.
+
 ## 8. Scope of the test suite
 
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 235 mutations against fifteen modules. It is smaller than the
+- the catalogue holds 242 mutations against fifteen modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;
