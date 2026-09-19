@@ -23,7 +23,7 @@ from datetime import date
 import pytest
 
 from wmxccs import sources
-from wmxccs.reuse import ReuseStatus, can_train_commercial
+from wmxccs.reuse import ReuseStatus, can_train_commercial, can_use
 from wmxccs.sources import (
     DatasetLicence,
     SourceLicence,
@@ -91,9 +91,18 @@ def dataset_record(**overrides) -> DatasetLicence:
 CONTEXT_SOURCES = (
     ("Struwe 2016 Chem Commun", sources.STRUWE_2016, STRUWE_2016_DOI, ReuseStatus.OPEN_ATTRIBUTION),
     ("Struwe 2015 Analyst", sources.STRUWE_2015, STRUWE_2015_DOI, ReuseStatus.OPEN_ATTRIBUTION),
-    ("steroid interplatform 2022", sources.STEROID_INTERPLATFORM_2022, STEROID_DOI, ReuseStatus.UNVERIFIED),
+    # Was UNVERIFIED. Reopened 19 September 2026: recorded academic_only as the
+    # conservative reading of ACS AuthorChoice, which may well be CC BY.
+    ("steroid interplatform 2022", sources.STEROID_INTERPLATFORM_2022, STEROID_DOI, ReuseStatus.ACADEMIC_ONLY),
     ("METLIN-CCS", sources.METLIN_CCS, "https://metlin.scripps.edu/", ReuseStatus.UNVERIFIED),
-    ("Bush Lab CCS database", sources.BUSH_LAB_CCS, "https://biophysicalms.org/ccsdatabase", ReuseStatus.UNVERIFIED),
+    # Was UNVERIFIED. Reopened 19 September 2026, and the weakest of the three:
+    # the page posts no terms at all, only a citation request.
+    (
+        "Bush Lab CCS database",
+        sources.BUSH_LAB_CCS,
+        "https://biophysicalms.org/ccsdatabase",
+        ReuseStatus.ACADEMIC_ONLY,
+    ),
     ("Bayesian harmonization 2026", sources.BAYESIAN_HARMONIZATION_2026, BAYESIAN_DOI, ReuseStatus.UNVERIFIED),
     ("CCSbase", sources.CCSBASE, "https://ccsbase.net/", ReuseStatus.ACADEMIC_ONLY),
     (
@@ -154,20 +163,69 @@ def test_struwe_2015_records_its_own_reader_and_a_later_date_than_the_2016_paper
     assert entry.evidence, "the 2015 paper's entry records no evidence"
 
 
-def test_only_the_two_struwe_papers_are_recorded_as_trainable():
-    # Constraint 2 in the direction that matters commercially: nothing else in
-    # the registry may enter a fit, and CCSbase in particular is blocked while
-    # the platform is treated as commercial.
-    trainable = {entry.key for entry in sources.REGISTRY.values() if entry.permits_training}
-    assert trainable == {STRUWE_2016_DOI, STRUWE_2015_DOI}
-    assert sources.CCSBASE.permits_training is False
+# The sources this platform may use, and which of them it may use only because it
+# is academic. Written out rather than computed, so that a status changed by
+# accident shows up here as a diff a reviewer reads.
+USABLE_NOW = {
+    STRUWE_2016_DOI,
+    STRUWE_2015_DOI,
+    "10.1021/jasms.2c00196",
+    "https://ccsbase.net/",
+    "https://biophysicalms.org/ccsdatabase",
+}
+USABLE_ONLY_BECAUSE_ACADEMIC = {
+    "10.1021/jasms.2c00196",
+    "https://ccsbase.net/",
+    "https://biophysicalms.org/ccsdatabase",
+}
 
 
-def test_unverified_sources_returns_exactly_the_four_sources_nobody_has_read_the_terms_for():
+def test_exactly_the_expected_sources_are_usable_by_this_platform():
+    usable = {entry.key for entry in sources.REGISTRY.values() if entry.permits_training}
+    assert usable == USABLE_NOW
+
+
+def test_three_of_them_would_not_be_usable_if_the_platform_were_commercial():
+    """The distinction the CEO's answer rests on, and the reason it is reversible.
+
+    These three are usable because this platform is academic, not because their
+    terms permit anybody. Each is still recorded as academic_only, so setting
+    reuse.PLATFORM_USE_CONTEXT back to COMMERCIAL refuses them again without
+    anybody re-reading a licence.
+    """
+    blocked_if_commercial = {
+        entry.key
+        for entry in sources.REGISTRY.values()
+        if entry.permits_training and not can_train_commercial(entry.reuse_status)
+    }
+    assert blocked_if_commercial == USABLE_ONLY_BECAUSE_ACADEMIC
+    for key in USABLE_ONLY_BECAUSE_ACADEMIC:
+        assert sources.REGISTRY[key].reuse_status is ReuseStatus.ACADEMIC_ONLY
+
+
+def test_every_source_usable_only_because_of_the_context_records_who_decided_that():
+    """context_basis is required for exactly these, and says who and when.
+
+    An entry whose usability rests on a decision rather than on a licence has to
+    name the decision, or it reads like one whose terms permit anybody.
+    """
+    for key in USABLE_ONLY_BECAUSE_ACADEMIC:
+        basis = sources.REGISTRY[key].context_basis
+        assert basis.strip(), f"{key} needs a context_basis"
+        assert "CEO" in basis and "19 September 2026" in basis
+
+
+def test_an_academic_only_entry_without_a_context_basis_is_refused():
+    with pytest.raises(ValueError, match="context_basis"):
+        licence_record(reuse_status=ReuseStatus.ACADEMIC_ONLY, context_basis="")
+
+
+def test_unverified_sources_returns_exactly_the_two_nobody_has_read_the_terms_for():
+    # Was four. The steroid study and the Bush Lab database were read and recorded
+    # on 19 September 2026, which is what an unverified entry is FOR: it names the
+    # one thing that would settle it, and then somebody settles it.
     assert {entry.key for entry in unverified_sources()} == {
-        STEROID_DOI,
         "https://metlin.scripps.edu/",
-        "https://biophysicalms.org/ccsdatabase",
         BAYESIAN_DOI,
     }
 
@@ -435,7 +493,7 @@ def test_a_provenance_of_none_matches_nothing():
 # =========================================================================================
 
 
-@pytest.mark.parametrize("status", [s for s in ReuseStatus if not can_train_commercial(s)], ids=lambda s: s.value)
+@pytest.mark.parametrize("status", [s for s in ReuseStatus if not can_use(s)], ids=lambda s: s.value)
 def test_a_claim_that_cannot_train_is_never_checked_because_it_errs_in_the_safe_direction(status):
     assert claim_problem(None, status) is None
     assert claim_problem(UNRECORDED_DOI, status) is None
@@ -474,9 +532,10 @@ def test_an_open_claim_on_a_doi_with_no_licence_record_is_refused():
 @pytest.mark.parametrize(
     ("doi", "recorded"),
     [
-        (STEROID_DOI, "unverified"),
+        (STEROID_DOI, "academic_only"),
         (BAYESIAN_DOI, "unverified"),
         ("https://ccsbase.net/", "academic_only"),
+        ("https://biophysicalms.org/ccsdatabase", "academic_only"),
     ],
 )
 def test_a_claim_that_exceeds_what_the_record_says_is_refused_and_the_record_governs(doi, recorded):
@@ -617,7 +676,7 @@ def test_an_in_house_or_invented_analyte_identity_needs_no_backing(status):
     assert component_claim_problem(None, None, status) is None
 
 
-@pytest.mark.parametrize("status", [s for s in ReuseStatus if not can_train_commercial(s)], ids=lambda s: s.value)
+@pytest.mark.parametrize("status", [s for s in ReuseStatus if not can_use(s)], ids=lambda s: s.value)
 def test_an_analyte_claim_that_cannot_train_is_never_checked(status):
     assert component_claim_problem(None, UNKNOWN_ORIGIN, status) is None
     assert component_claim_problem(STRUWE_2016_DOI, SEED_2016, status) is None

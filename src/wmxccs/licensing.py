@@ -30,10 +30,13 @@ from __future__ import annotations
 
 from .reuse import (  # noqa: F401  re-exported: the gate and the statuses are one interface
     DEFAULT_REUSE_STATUS,
+    PLATFORM_USE_CONTEXT,
     ReuseStatus,
+    UseContext,
     as_reuse_status,
     can_redistribute,
     can_train_commercial,
+    can_use,
     is_inference_only,
 )
 from .sources import claim_problem, component_claim_problem
@@ -257,7 +260,9 @@ def _refusal(what: str, status: object) -> str | None:
         coerced = as_reuse_status(status)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return f"{what} has unrecognised reuse status {status!r}"
-    if can_train_commercial(coerced):
+    # can_use, not can_train_commercial: what these terms permit depends on what
+    # this platform is, and PLATFORM_USE_CONTEXT is where that is recorded.
+    if can_use(coerced):
         return None
     reason = _REFUSAL_REASONS.get(coerced, "which is not cleared for training")
     return f"{what} has reuse status '{coerced.value}', {reason}"

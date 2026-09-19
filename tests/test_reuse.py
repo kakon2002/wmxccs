@@ -18,6 +18,9 @@ from __future__ import annotations
 import pytest
 
 from wmxccs.reuse import (
+    PLATFORM_USE_CONTEXT,
+    UseContext,
+    can_use,
     DEFAULT_REUSE_STATUS,
     ReuseStatus,
     as_reuse_status,
@@ -33,16 +36,29 @@ from wmxccs.reuse import (
 # separate question from use, which is why it is a third column and not implied
 # by the first two: share-alike may be passed on under its own licence but may
 # not be trained on, and internal data is trainable but confidential.
-POLICY: dict[ReuseStatus, tuple[bool, bool, bool]] = {
-    ReuseStatus.OPEN_ATTRIBUTION: (True, False, True),
-    ReuseStatus.OPEN_SHARE_ALIKE: (False, True, True),
-    ReuseStatus.NON_COMMERCIAL: (False, True, False),
-    ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES: (False, False, False),
-    ReuseStatus.ACADEMIC_ONLY: (False, True, False),
-    ReuseStatus.INTERNAL_PROPRIETARY: (True, False, False),
-    ReuseStatus.SYNTHETIC_FIXTURE: (True, False, False),
-    ReuseStatus.UNVERIFIED: (False, False, False),
-    ReuseStatus.EXCLUDED: (False, False, False),
+# FOUR columns now, not three, because permission stopped being a property of the
+# status alone the day the CEO answered. Read each row as:
+#
+#   (usable IF COMMERCIAL, usable BY THIS PLATFORM, inference-only here, redistributable)
+#
+# The first and second columns differ for exactly the statuses the answer
+# reopened, and that gap IS the decision: an academic-only source is usable now
+# and would not be if this platform were commercialised. Keeping both columns in
+# one table is what makes that visible to a reader rather than buried in a tier.
+POLICY: dict[ReuseStatus, tuple[bool, bool, bool, bool]] = {
+    ReuseStatus.OPEN_ATTRIBUTION: (True, True, False, True),
+    ReuseStatus.OPEN_SHARE_ALIKE: (False, False, True, True),
+    # Reopened by the academic context. Usable now, so no longer inference-only.
+    ReuseStatus.NON_COMMERCIAL: (False, True, False, False),
+    # The no-derivatives clause is not about commerce, so the context does not
+    # touch it: still no permitted use of any kind.
+    ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES: (False, False, False, False),
+    # Reopened by the academic context. This is the row CCSbase sits on.
+    ReuseStatus.ACADEMIC_ONLY: (False, True, False, False),
+    ReuseStatus.INTERNAL_PROPRIETARY: (True, True, False, False),
+    ReuseStatus.SYNTHETIC_FIXTURE: (True, True, False, False),
+    ReuseStatus.UNVERIFIED: (False, False, False, False),
+    ReuseStatus.EXCLUDED: (False, False, False, False),
 }
 
 # The statuses with no permitted use of any kind. Held separately from the table
@@ -72,12 +88,60 @@ def test_every_reuse_status_has_a_row_in_the_policy_table() -> None:
 
 @pytest.mark.parametrize(("status", "policy"), sorted(POLICY.items(), key=lambda item: str(item[0])))
 def test_each_status_permits_exactly_what_the_policy_table_says(
-    status: ReuseStatus, policy: tuple[bool, bool, bool]
+    status: ReuseStatus, policy: tuple[bool, bool, bool, bool]
 ) -> None:
-    trainable, inference_only, redistributable = policy
-    assert can_train_commercial(status) is trainable
+    commercial, usable_now, inference_only, redistributable = policy
+    assert can_train_commercial(status) is commercial
+    assert can_use(status) is usable_now
     assert is_inference_only(status) is inference_only
     assert can_redistribute(status) is redistributable
+
+
+@pytest.mark.parametrize(("status", "policy"), sorted(POLICY.items(), key=lambda item: str(item[0])))
+def test_the_commercial_answer_does_not_move_when_the_platform_is_academic(
+    status: ReuseStatus, policy: tuple[bool, bool, bool, bool]
+) -> None:
+    """can_train_commercial answers about the SOURCE, not about us.
+
+    The whole point of keeping it beside can_use is that it does not follow the
+    platform. If it did, the question "would this data still be usable if we
+    commercialised" would have no way of being asked, and the answer would
+    silently become yes.
+    """
+    commercial = policy[0]
+    assert can_train_commercial(status) is commercial
+    assert can_use(status, UseContext.COMMERCIAL) is commercial
+
+
+@pytest.mark.parametrize("status", sorted(ReuseStatus, key=str))
+def test_no_status_is_usable_commercially_without_also_being_usable_academically(
+    status: ReuseStatus,
+) -> None:
+    """The academic tier is a superset. Anything a company may use, a university may.
+
+    Asserted as an invariant rather than read off the table, because a future edit
+    that permitted something commercially and not academically would be a
+    contradiction nobody would think to look for.
+    """
+    if can_use(status, UseContext.COMMERCIAL):
+        assert can_use(status, UseContext.ACADEMIC_RESEARCH)
+
+
+def test_the_platform_context_is_academic_research_and_is_not_a_parameter() -> None:
+    """Where the CEO's answer is recorded, and that it is a constant.
+
+    A context that can be passed in is one that can be passed COMMERCIAL by a
+    caller who does not know what that implies, or ACADEMIC_RESEARCH by one not
+    entitled to decide it. Changing what this platform is should be an edit to
+    that line with a reason beside it.
+    """
+    import inspect
+
+    assert PLATFORM_USE_CONTEXT is UseContext.ACADEMIC_RESEARCH
+    # can_use takes a context so a caller can ASK about another one; it defaults
+    # to the platform's, which is the only one the gate ever uses.
+    signature = inspect.signature(can_use)
+    assert signature.parameters["context"].default is None
 
 
 @pytest.mark.parametrize("status", sorted(ReuseStatus, key=str))
@@ -93,6 +157,21 @@ def test_a_status_with_no_permitted_use_is_in_no_usable_tier_at_all(status: Reus
     assert can_redistribute(status) is False
 
 
+@pytest.mark.parametrize("status", NO_PERMITTED_USE)
+@pytest.mark.parametrize("context", sorted(UseContext, key=str))
+def test_a_status_with_no_permitted_use_stays_unusable_in_every_context(
+    status: ReuseStatus, context: UseContext
+) -> None:
+    """The context reopens academic terms. It must not reopen these.
+
+    Unverified means nobody read the terms, excluded means somebody read them and
+    said no, and no-derivatives forbids sharing adapted material whoever is doing
+    the sharing. None of the three is a question about commerce, so becoming an
+    academic platform answers none of them.
+    """
+    assert can_use(status, context) is False
+
+
 def test_no_derivatives_has_no_permitted_use_though_plain_non_commercial_is_inference_only() -> None:
     """The pair that must not be folded together.
 
@@ -101,8 +180,18 @@ def test_no_derivatives_has_no_permitted_use_though_plain_non_commercial_is_infe
     extra clause forbids, so it has no use here at all. Collapsing the two
     members would be invisible except in this direction.
     """
-    assert is_inference_only(ReuseStatus.NON_COMMERCIAL) is True
-    assert is_inference_only(ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES) is False
+    # Under COMMERCIAL use the pair separates the way it always did: plain
+    # non-commercial may be held for reference, no-derivatives may not.
+    assert is_inference_only(ReuseStatus.NON_COMMERCIAL, UseContext.COMMERCIAL) is True
+    assert is_inference_only(ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES, UseContext.COMMERCIAL) is False
+    assert can_use(ReuseStatus.NON_COMMERCIAL, UseContext.COMMERCIAL) is False
+    assert can_use(ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES, UseContext.COMMERCIAL) is False
+    # Under this platform's own context the pair separates harder, which is the
+    # point: plain non-commercial becomes trainable and no-derivatives does not
+    # move at all, because the clause that blocks it is not about commerce.
+    assert can_use(ReuseStatus.NON_COMMERCIAL) is True
+    assert can_use(ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES) is False
+    # And neither is ever usable commercially, whatever this platform is.
     assert can_train_commercial(ReuseStatus.NON_COMMERCIAL) is False
     assert can_train_commercial(ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES) is False
 

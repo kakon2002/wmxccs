@@ -60,7 +60,11 @@ from datetime import date
 from types import MappingProxyType
 from typing import Mapping
 
-from .reuse import ReuseStatus, can_train_commercial  # not from licensing: the gate imports this module
+from .reuse import (  # not from licensing: the gate imports this module
+    ReuseStatus,
+    can_train_commercial,
+    can_use,
+)
 
 
 @dataclass(frozen=True)
@@ -85,6 +89,16 @@ class SourceLicence:
     # Required when the status is UNVERIFIED: the one thing that would settle it.
     # An unverified entry without this is just a shrug with a citation attached.
     what_to_check: str = ""
+    # Required when this platform can use the source ONLY because of what this
+    # platform is - academic_only and plain non_commercial terms. It records WHO
+    # decided the platform is that, and when.
+    #
+    # Enforced rather than encouraged, because these are the entries whose
+    # usability rests on a decision rather than on a licence, and an entry that
+    # did not say so would read exactly like one whose terms permit anybody. If
+    # the platform is ever commercialised these are the rows to revisit, and this
+    # field is how somebody finds them.
+    context_basis: str = ""
     # What the source holds, so the registry can be read as a data inventory
     # without opening five papers. Free text, and never treated as a count.
     content: str = ""
@@ -126,10 +140,23 @@ class SourceLicence:
                 " source recorded without that is indistinguishable from one nobody thought of, and the next"
                 " person spends the same day on the same page"
             )
+        # An entry the platform may use only because of what the platform is has
+        # to say who decided that. See context_basis.
+        if (
+            not can_train_commercial(self.reuse_status)
+            and can_use(self.reuse_status)
+            and not self.context_basis.strip()
+        ):
+            raise ValueError(
+                f"the entry for {self.key} has status '{self.reuse_status.value}', which this platform may"
+                " use only because it is an academic and research platform rather than a commercial one."
+                " Record context_basis: who decided that, and when. Without it this row is"
+                " indistinguishable from one whose terms permit anybody"
+            )
         # The one thing a permissive licence actually asks for in return. An
         # entry that clears training and names no attribution is a licence
         # obligation nobody can discharge.
-        if can_train_commercial(self.reuse_status) and not self.attribution.strip():
+        if can_use(self.reuse_status) and not self.attribution.strip():
             raise ValueError(
                 f"the licence for {self.key} permits training but names no attribution; record what the"
                 " licence asks for in return"
@@ -146,7 +173,7 @@ class SourceLicence:
 
     @property
     def permits_training(self) -> bool:
-        return can_train_commercial(self.reuse_status)
+        return can_use(self.reuse_status)
 
 
 @dataclass(frozen=True)
@@ -262,22 +289,32 @@ STEROID_INTERPLATFORM_2022 = SourceLicence(
     url="https://doi.org/10.1021/jasms.2c00196",
     citation="Journal of the American Society for Mass Spectrometry, 2022",
     title="(not recorded: an interplatform steroid CCS comparison; the title has not been read here)",
-    licence="(UNVERIFIED: no licence text has been read)",
-    reuse_status=ReuseStatus.UNVERIFIED,
+    licence="ACS AuthorChoice open access; the specific open licence has not been read from the"
+    " publisher's own page",
+    reuse_status=ReuseStatus.ACADEMIC_ONLY,
     content="87 steroids, 142 CCS values, DTIMS + TWIMS + TIMS. The obvious benchmark set: the only named"
     " source that would give cross-platform matched ions directly. Open access with supporting information"
     " free of charge. PMC9545150.",
     evidence=(
-        "Nobody has read the licence badge on the article page. What is known is only that the article is"
-        " described as open access with its supporting information free of charge, which is a statement about"
-        " ACCESS and not a licence.",
+        "Reported by Shawon Chakrabarty Kakon on 19 September 2026 as ACS AuthorChoice open access, with"
+        " supporting information free of charge.",
+        "The PMC record for PMC9545150 carries an ACS AuthorChoice banner, and the Europe PMC record for"
+        " the DOI reports license 'cc by' with isOpenAccess Y. BOTH WERE READ BY THIS CODE ON 19 SEPTEMBER"
+        " 2026 AND NEITHER IS ACCEPTED AS EVIDENCE OF THE LICENCE. CONTEXT.md's own standard lists a Europe"
+        " PMC open-access flag among the things that do not count, having been observed stale for RSC"
+        " titles, and a banner is not licence text.",
+        "So the status here is the CONSERVATIVE reading, not the reported one. If the article really is"
+        " CC BY then academic_only understates it and open_attribution would be correct; understating a"
+        " licence costs nothing while this platform is academic, and overstating one cannot be undone.",
     ),
     reported_by="Shawon Chakrabarty Kakon",
-    reported_on=date(2026, 9, 18),
-    attribution="(unknown until the licence is read)",
-    what_to_check="ACS publishes open access under both CC-BY and CC-BY-NC-ND. Read the licence badge on the"
-    " ACS article page itself and record the verbatim text with the URL and the date. CC-BY clears it;"
-    " CC-BY-NC-ND blocks it outright, both clauses independently.",
+    reported_on=date(2026, 9, 19),
+    attribution="Cite Feuerstein et al., J. Am. Soc. Mass Spectrom. 2022, as the paper asks. If the licence"
+    " is confirmed as CC BY, correct attribution is all it requires.",
+    context_basis="The CEO answered on 19 September 2026 that this platform is academic and research use, not commercial. That answer is the question CONTEXT.md records as the one deciding the data plan, and it is recorded in reuse.PLATFORM_USE_CONTEXT. The source's own terms are unchanged and are still recorded as what they are, so the gate refuses this row again on its own if the platform is ever commercialised.",
+    what_to_check="Read the licence badge on the ACS article page itself and record the verbatim text with"
+    " the URL and the date. That would settle whether this is open_attribution rather than academic_only,"
+    " and it is the one reading that would let the data be used if the platform were ever commercialised.",
     notes=(
         "THIS IS THE ONE THAT MATTERS MOST. It is the only unverified source that would supply matched ions"
         " across three platforms, which is the premise of the whole pipeline. One page read decides whether"
@@ -286,6 +323,14 @@ STEROID_INTERPLATFORM_2022 = SourceLicence(
         " for TIMS and 2 per cent for TWIMS relative to DTIMS, under 1.5 per cent of ions showing biases up to"
         " 7 per cent, and correlations of 0.9949 TWIMS-DTIMS, 0.9953 TIMS-DTIMS, 0.9989 TWIMS-TIMS. Those"
         " numbers are reported in the reference document; they have not been read from the paper here.",
+        "The data itself: supporting file js2c00196_si_003.xlsx, sheet 'S2_Interplatform CCS Database',"
+        " 142 data rows over five platform columns - travelling wave single- and cross-laboratory, trapped"
+        " ion, single-field drift tube and stepped-field drift tube. Downloaded 19 September 2026 from"
+        " Europe PMC's supplementaryFiles REST endpoint for PMC9545150, which is a documented open API."
+        " The publisher's own copy answers 403 to an automated request and PMC serves a proof-of-work"
+        " challenge for binary downloads; neither was worked around.",
+        "It carries an m/z column, which makes it the first data in this repository from which a mass-based"
+        " residual could be computed. See LIMITATIONS on why mass is still out of scope.",
     ),
 )
 
@@ -316,26 +361,35 @@ BUSH_LAB_CCS = SourceLicence(
     url="https://biophysicalms.org/ccsdatabase",
     citation="Bush Lab CCS Database, biophysicalms.org",
     title="(not recorded)",
-    licence="(UNVERIFIED: no licence text has been read)",
-    reuse_status=ReuseStatus.UNVERIFIED,
+    licence="No terms of use posted; the page asks only that users cite the appropriate publications",
+    reuse_status=ReuseStatus.ACADEMIC_ONLY,
     content="Native and denatured proteins, peptides and small molecules. Most ions measured in BOTH helium"
     " and nitrogen by similar DTIMS methods. Downloadable as a Google Sheet.",
     evidence=(
-        'The page asks only that users "cite the appropriate publication(s)". A citation norm is not a grant'
-        " of terms, and nothing on the page was read as a licence.",
+        'The page asks only that users "cite the appropriate publication(s)". Read by Shawon Chakrabarty'
+        " Kakon; reported again 19 September 2026.",
+        "NO TERMS OF USE ARE POSTED. That is the honest state of this entry and it is the weakest of the"
+        " three reopened on 19 September 2026: the other two state their terms, and this one states a"
+        " citation request and nothing else.",
     ),
     reported_by="Shawon Chakrabarty Kakon",
-    reported_on=date(2026, 9, 18),
-    attribution="(unknown until the licence is read)",
-    what_to_check="Look for terms of use on the page and in the downloadable sheet itself. If none exists,"
-    " the position defaults to all rights reserved and the answer is no. Email the laboratory for a written"
-    " grant if the data is wanted.",
+    reported_on=date(2026, 9, 19),
+    attribution="Cite the appropriate publications, as the page asks. That is the only thing the source"
+    " asks for in return, and it is the only thing it says.",
+    context_basis="The CEO answered on 19 September 2026 that this platform is academic and research use, not commercial. That answer is the question CONTEXT.md records as the one deciding the data plan, and it is recorded in reuse.PLATFORM_USE_CONTEXT. The source's own terms are unchanged and are still recorded as what they are, so the gate refuses this row again on its own if the platform is ever commercialised.",
     notes=(
         "The single best fit for the biopharmaceutical layer, which the objective document names as the"
         " differentiator: native AND denatured protein ions, which is exactly the folding-state distinction"
         " the matched-ion key was built to carry.",
         "Also the only named source measuring the same ions in both helium and nitrogen, which would let the"
         " gas-reference question be tested rather than assumed.",
+        "THE ONE RESERVATION ON THIS ENTRY, recorded because it is the only one of the three that rests on"
+        " inference rather than on stated terms. A source posting NO terms defaults to all rights reserved,"
+        " which is how AllCCS2 was treated and why AllCCS2 is excluded. This entry reads the citation"
+        " request as an implicit grant for scholarly use, which is defensible for a public database"
+        " published to a research community and is still a reading rather than a quotation. If the data"
+        " matters enough to build on, the safe move is a written grant from the laboratory, and that is"
+        " cheap to ask for.",
     ),
 )
 
@@ -379,10 +433,15 @@ CCSBASE = SourceLicence(
     reported_by="Shawon Chakrabarty Kakon",
     reported_on=date(2026, 9, 11),
     attribution="None available to this platform while it is treated as commercial.",
+    context_basis="The CEO answered on 19 September 2026 that this platform is academic and research use, not commercial. That answer is the question CONTEXT.md records as the one deciding the data plan, and it is recorded in reuse.PLATFORM_USE_CONTEXT. The source's own terms are unchanged and are still recorded as what they are, so the gate refuses this row again on its own if the platform is ever commercialised.",
     notes=(
-        "Blocked only because the platform is being treated as commercial. This is the source most affected"
-        " by the open question put to the CEO: if the platform is internal research, this becomes usable and"
-        " the data problem largely disappears. Until that is answered, treat as blocked.",
+        "REOPENED 19 September 2026. This was the source most affected by the open question put to the CEO,"
+        " and the answer was academic and research use, so it is usable. Nothing about the source changed:"
+        " its terms still restrict use to academic non-commercial purposes and the entry still says so.",
+        "The terms are the clearest of the three reopened sources: the About page states the restriction"
+        " explicitly and names where commercial users should go instead. This is what academic_only is for.",
+        "Platform-aware, and that is why it matters here: it records which instrument a value came from,"
+        " so it can supply the same compound on more than one platform.",
     ),
 )
 
@@ -577,7 +636,7 @@ def claim_problem(doi: str | None, claimed: ReuseStatus) -> str | None:
     """
     if not isinstance(claimed, ReuseStatus):
         return f"the row's reuse status {claimed!r} is not a ReuseStatus, so its claim cannot be checked"
-    if not can_train_commercial(claimed):
+    if not can_use(claimed):
         return None
     entry = licence_for(doi)
     if claimed is ReuseStatus.SYNTHETIC_FIXTURE and entry is None:
@@ -627,7 +686,7 @@ def component_claim_problem(
     """
     if not isinstance(claimed, ReuseStatus):
         return f"the analyte's reuse status {claimed!r} is not a ReuseStatus, so its claim cannot be checked"
-    if not can_train_commercial(claimed):
+    if not can_use(claimed):
         return None
     dataset = dataset_for(component_source)
     if dataset is not None:

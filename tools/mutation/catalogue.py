@@ -407,20 +407,53 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[R] an unverified record becomes trainable",
         file="reuse.py",
-        find="_TRAINABLE = frozenset(\n    {ReuseStatus.OPEN_ATTRIBUTION, ReuseStatus.INTERNAL_PROPRIETARY, ReuseStatus.SYNTHETIC_FIXTURE}\n)",
-        replace="_TRAINABLE = frozenset(\n    {\n        ReuseStatus.OPEN_ATTRIBUTION,\n        ReuseStatus.INTERNAL_PROPRIETARY,\n        ReuseStatus.SYNTHETIC_FIXTURE,\n        ReuseStatus.UNVERIFIED,\n    }\n)",
+        # Re-anchored once already: the flat _TRAINABLE set became
+        # _TRAINABLE_BY_CONTEXT when the platform's use context arrived.
+        find="            ReuseStatus.NON_COMMERCIAL,\n        }\n    ),\n}",
+        replace="            ReuseStatus.NON_COMMERCIAL,\n            ReuseStatus.UNVERIFIED,\n        }\n    ),\n}",
     ),
     Mutation(
         label="[R] a no-derivatives record becomes usable at inference",
         file="reuse.py",
-        find="_INFERENCE_ONLY = frozenset(\n    {ReuseStatus.OPEN_SHARE_ALIKE, ReuseStatus.NON_COMMERCIAL, ReuseStatus.ACADEMIC_ONLY}\n)",
-        replace="_INFERENCE_ONLY = frozenset(\n    {\n        ReuseStatus.OPEN_SHARE_ALIKE,\n        ReuseStatus.NON_COMMERCIAL,\n        ReuseStatus.ACADEMIC_ONLY,\n        ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES,\n    }\n)",
+        # Re-anchored once already: renamed to _INFERENCE_ONLY_EVER, because
+        # whether a status is inference-only now depends on the platform's context
+        # and this set is the part that does not.
+        find="_INFERENCE_ONLY_EVER = frozenset(\n    {ReuseStatus.OPEN_SHARE_ALIKE, ReuseStatus.NON_COMMERCIAL, ReuseStatus.ACADEMIC_ONLY}\n)",
+        replace="_INFERENCE_ONLY_EVER = frozenset(\n    {\n        ReuseStatus.OPEN_SHARE_ALIKE,\n        ReuseStatus.NON_COMMERCIAL,\n        ReuseStatus.ACADEMIC_ONLY,\n        ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES,\n    }\n)",
     ),
     Mutation(
         label="[R] an unrecognised status string is read as trainable rather than refused",
         file="reuse.py",
         find='            raise ValueError(f"unknown reuse status {status!r}; expected one of: {known}") from None',
         replace="            return ReuseStatus.OPEN_ATTRIBUTION",
+    ),
+    Mutation(
+        label="[R] an academic-only source would still be usable if the platform were commercial",
+        file="reuse.py",
+        # THE GUARD THE CEO'S ANSWER RESTS ON. The platform may use academic-only
+        # data because it is academic. If that status also cleared the commercial
+        # tier, the distinction would stop existing and commercialising the
+        # platform would silently take licence-blocked data with it.
+        find="    UseContext.COMMERCIAL: frozenset(\n        {ReuseStatus.OPEN_ATTRIBUTION, ReuseStatus.INTERNAL_PROPRIETARY, ReuseStatus.SYNTHETIC_FIXTURE}\n    ),",
+        replace="    UseContext.COMMERCIAL: frozenset(\n        {\n            ReuseStatus.OPEN_ATTRIBUTION,\n            ReuseStatus.INTERNAL_PROPRIETARY,\n            ReuseStatus.SYNTHETIC_FIXTURE,\n            ReuseStatus.ACADEMIC_ONLY,\n        }\n    ),",
+    ),
+    Mutation(
+        label="[R] can_use ignores the platform's context and always reads the widest one",
+        file="reuse.py",
+        find="    permitted = _TRAINABLE_BY_CONTEXT[context if context is not None else PLATFORM_USE_CONTEXT]",
+        replace="    permitted = _TRAINABLE_BY_CONTEXT[UseContext.ACADEMIC_RESEARCH]",
+    ),
+    Mutation(
+        label="[R] can_train_commercial stops answering about commercial use and follows the platform",
+        file="reuse.py",
+        find="    return as_reuse_status(status) in _TRAINABLE_BY_CONTEXT[UseContext.COMMERCIAL]",
+        replace="    return can_use(status)",
+    ),
+    Mutation(
+        label="[R] is_inference_only stops accounting for what the platform may already train on",
+        file="reuse.py",
+        find="    coerced = as_reuse_status(status)\n    if can_use(coerced, context):\n        return False",
+        replace="    coerced = as_reuse_status(status)\n    if False:\n        return False",
     ),
     # --- [S] sources: the registry and the claim checks ------------------------
     Mutation(
@@ -474,7 +507,10 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[S] a licence that permits training is recorded with no attribution to discharge",
         file="sources.py",
-        find="        if can_train_commercial(self.reuse_status) and not self.attribution.strip():",
+        # Re-anchored once already: can_train_commercial became can_use here, so
+        # that an academic-only entry which the gate now admits still has to name
+        # the attribution its licence asks for.
+        find="        if can_use(self.reuse_status) and not self.attribution.strip():",
         replace="        if False:",
     ),
     Mutation(

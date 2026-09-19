@@ -29,6 +29,9 @@ from conftest import SOURCE, antibody, glycan, measurement
 
 from wmxccs.identity import Derivatisation, DriftGas, FoldingState, ReducingEndLabel
 from wmxccs.licensing import (
+    UseContext,
+    can_train_commercial,
+    can_use,
     LicenceGateError,
     ReuseStatus,
     TrainingGateError,
@@ -54,14 +57,22 @@ UNREGISTERED_DOI = "10.1000/nobody-has-read-this"
 # Hard-coded rather than read back out of reuse.py: a list computed from the
 # tier the gate consults would shrink in step with a mistake there and take
 # these tests with it.
+# The statuses the gate still refuses NOW THAT THIS PLATFORM IS ACADEMIC.
+#
+# Two rows left this tuple on 19 September 2026 when the CEO answered that the
+# platform is academic and research use: non_commercial and academic_only are
+# admitted by the gate today. They are not gone - see REOPENED_BY_THE_CONTEXT
+# below, which asserts they would be refused again the moment the platform became
+# commercial, which is the property that makes the answer reversible.
 REFUSED_STATUSES = (
     (ReuseStatus.OPEN_SHARE_ALIKE, "by policy"),
-    (ReuseStatus.NON_COMMERCIAL, "do not permit commercial use"),
     (ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES, "each clause blocks training on its own"),
-    (ReuseStatus.ACADEMIC_ONLY, "academic or research purposes"),
     (ReuseStatus.UNVERIFIED, "nobody has checked its terms yet"),
     (ReuseStatus.EXCLUDED, "deliberately kept out of the platform"),
 )
+
+# Admitted because of what this platform is, and for no other reason.
+REOPENED_BY_THE_CONTEXT = (ReuseStatus.NON_COMMERCIAL, ReuseStatus.ACADEMIC_ONLY)
 
 
 def defined_glycan(**overrides):
@@ -241,8 +252,66 @@ def test_a_gate_refusal_is_not_a_value_error() -> None:
 
 
 def test_a_licence_fault_gives_a_licence_gate_error() -> None:
-    with pytest.raises(LicenceGateError, match="academic or research purposes"):
-        assert_trainable(clean(reuse_status=ReuseStatus.ACADEMIC_ONLY))
+    # open_share_alike rather than academic_only: the latter is admitted now that
+    # the platform is academic, so it is no longer a licence fault at all.
+    with pytest.raises(LicenceGateError, match="by policy"):
+        assert_trainable(clean(reuse_status=ReuseStatus.OPEN_SHARE_ALIKE))
+
+
+STEROID_DOI = "10.1021/jasms.2c00196"
+
+
+@pytest.mark.parametrize("status", REOPENED_BY_THE_CONTEXT)
+def test_the_statuses_the_ceos_answer_reopened_are_no_longer_a_licence_fault(status: ReuseStatus) -> None:
+    """The point of the whole change, asserted where it shows.
+
+    These records are still refused, and the REASON has changed, which is the
+    whole of it. Before the context existed the refusal was about the tier: these
+    terms do not permit what we do. Now the tier is satisfied and what is left is
+    the ordinary requirement every trainable claim has always had - a DOI and a
+    registry entry backing it. An unbacked claim, not a forbidden licence.
+    """
+    with pytest.raises(UnbackedClaimError) as refusal:
+        assert_trainable(clean(reuse_status=status))
+    message = str(refusal.value)
+    assert "the claim cannot be checked" in message
+    # And specifically NOT the tier refusal it used to be.
+    assert "do not permit commercial use" not in message
+    assert "restrict use to academic" not in message
+
+
+def test_an_academic_only_record_whose_claim_the_registry_backs_clears_the_gate() -> None:
+    """End to end, on a real registry entry: the steroid interplatform study.
+
+    This is the record the CEO's answer exists to admit. Its terms do not permit
+    commercial use, the registry says so, and this platform may use it anyway
+    because of what this platform is.
+    """
+    record = measurement(
+        analyte=defined_glycan(
+            source="Feuerstein et al., J. Am. Soc. Mass Spectrom. 2022",
+            reuse_status=ReuseStatus.ACADEMIC_ONLY,
+        ),
+        source="Feuerstein et al., J. Am. Soc. Mass Spectrom. 2022",
+        doi=STEROID_DOI,
+        reuse_status=ReuseStatus.ACADEMIC_ONLY,
+    )
+    assert assert_trainable(record) is None
+    # And it would not clear if this platform were commercial.
+    assert can_use(ReuseStatus.ACADEMIC_ONLY, UseContext.COMMERCIAL) is False
+
+
+@pytest.mark.parametrize("status", REOPENED_BY_THE_CONTEXT)
+def test_those_same_statuses_are_still_recorded_as_what_they_are(status: ReuseStatus) -> None:
+    """The gate admits them; it does not relabel them.
+
+    This is what makes the decision reversible. The record still says
+    academic_only, so setting the platform context back to COMMERCIAL refuses it
+    again on its own, without anybody re-reading a licence.
+    """
+    assert can_train_commercial(status) is False
+    assert can_use(status, UseContext.COMMERCIAL) is False
+    assert can_use(status, UseContext.ACADEMIC_RESEARCH) is True
 
 
 @pytest.mark.parametrize(
@@ -296,14 +365,16 @@ def test_a_blocker_that_is_not_a_licence_gives_a_plain_training_gate_error(overr
 def test_a_licence_fault_outranks_an_unbacked_claim_and_an_ordinary_blocker() -> None:
     """All three at once. The licence is the one that must be reported."""
     record = published(
-        analyte=defined_glycan(source="a spreadsheet somebody sent", reuse_status=ReuseStatus.NON_COMMERCIAL),
+        # open_share_alike rather than non_commercial: the latter is admitted by
+        # the gate now, so it would no longer be the licence fault this test needs.
+        analyte=defined_glycan(source="a spreadsheet somebody sent", reuse_status=ReuseStatus.OPEN_SHARE_ALIKE),
         doi=UNREGISTERED_DOI,
         drift_gas=DriftGas.UNSTATED,
     )
     with pytest.raises(LicenceGateError) as refusal:
         assert_trainable(record)
     assert not isinstance(refusal.value, UnbackedClaimError)
-    assert "non_commercial" in str(refusal.value)
+    assert "open_share_alike" in str(refusal.value)
 
 
 def test_an_unbacked_claim_outranks_an_ordinary_blocker() -> None:
