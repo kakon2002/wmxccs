@@ -1248,6 +1248,39 @@ one another. A name-based join would pair some of these correctly and some
 incorrectly, and the incorrect ones would appear as inter-laboratory bias of a few per
 cent - indistinguishable from the real thing, which is the entire measurement.
 
+### The evidence for that rule, measured
+
+`reports/steroid_name_resolution.md` is the attempt, made 20 September 2026 against
+PubChem PUG REST and NIH CIR, to resolve all 87 names by machine. **It is the evidence
+anybody questioning this rule should read first.** Its headline:
+
+> 87 names, 6 resolved clean, 67 ambiguous, 14 failed - manual chemist review needed for 81.
+
+**67 of 87 resolved only through the COMMERCIAL name, never the systematic one.** These
+names are not machine-readable as published, and the commercial name is the weaker
+identifier: eight of them name two compounds at once with a slash.
+
+The sharpest case is the pair the demonstration happens to use:
+
+| name | result |
+| --- | --- |
+| `4,9,11-estratiene-17β-ol-3-one` | resolved, **commercial name only** ("trenbolone") |
+| `4,9,11-estratiene-17α-ol-3-one` | **FAILED** - its commercial name, "α-trenbolone/epitrenbolone", names two compounds |
+
+Neither systematic name resolved: both carry the malformed "estratiene" parent described
+below, and it defeats both resolvers. The β form was rescued only by its commercial name;
+the α form was not rescued at all. **A pipeline that accepted the first and skipped the
+second would keep one epimer and silently drop its partner** - and the two have different
+cross sections, so the survivor would then be paired against whatever else carried that
+name.
+
+Two of the six clean resolutions are marked NEEDS CONFIRMATION in the report for the
+converse reason: they resolved correctly AND share connectivity with another name here,
+so a wrong answer in those two would have looked exactly as right as the correct one.
+
+Nothing from that report has entered the corpus. It is a report, written outside `data/`,
+and it exists to size the manual job rather than to do it.
+
 The resolution is asymmetric between the sources, and that asymmetry decides the order
 of work:
 
@@ -1262,6 +1295,38 @@ of work:
   "4-androstene-17alpha-methyl-17beta-ol-3-one" is a complete description - so this is
   a bounded task of 87 compounds for somebody competent to do it, not an impossible
   one. It is simply not a task code can do silently.
+
+#### A worked example, from the ion the demonstration happens to use
+
+The point above is easy to read as fastidiousness. It is not, and one row of the
+published sheet shows why. Verbatim, as the authors wrote it:
+
+| compound name | commercial name | formula | ion |
+| --- | --- | --- | --- |
+| `4,9,11-estratiene-17β-ol-3-one` | trenbolone | C18H22O2 | [M+H]+ |
+| `4,9,11-estratiene-17α-ol-3-one` | α-trenbolone/epitrenbolone | C18H22O2 | [M+H]+ |
+
+**The first name is malformed.** Three locants - 4, 9 and 11 - describe three double
+bonds, so the parent must be a TRIENE and the name required is
+*estra-4,9,11-trien-17β-ol-3-one*. "Estratiene" names a diene. The compound is
+trenbolone, which the sheet's own commercial-name column says and the systematic name
+does not quite.
+
+**And the row beneath it is the same molecule at one stereocentre.** Same formula, same
+m/z of 271.1693, differing only in `17α` against `17β`. They are epimers with different
+cross sections, and this repository holds both.
+
+So a machine resolution of these names has to do three things at once that nothing does
+reliably: recognise a malformed parent and repair it rather than fail; refuse to fall back
+on the formula or the mass, which are identical for the pair; and carry the stereo
+descriptor through, which is the ONLY thing distinguishing them. A lookup that gets
+"trenbolone" from the commercial-name column and stops has silently merged an epimer pair.
+A lookup that fails on the malformed name and falls back to C18H22O2 has done the same.
+
+This is also the reason the corpus is NOT corrected here. The name is the source's, it is
+what the supporting information published, and rewriting a published identifier inside the
+data would create a record the source does not contain. The malformation is recorded; the
+data is left as it was found.
 
 None of this is implemented, and the dataset-scoped identity in `identity.py` is what
 keeps it honest in the meantime: these compounds pair inside their own source and
