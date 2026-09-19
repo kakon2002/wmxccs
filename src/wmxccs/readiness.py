@@ -152,7 +152,41 @@ def smallest_calibration_set(alpha: float = CONFORMAL_ALPHA) -> int:
     return math.ceil(1 / alpha) - 1
 
 
+def conformal_quantile_index(held: int, alpha: float = CONFORMAL_ALPHA) -> int:
+    """The rank of the conformity score split conformal takes as its quantile.
+
+    One expression, used by the floor, the refusal and the warning, so the three
+    cannot drift apart.
+    """
+    return math.ceil((held + 1) * (1 - alpha))
+
+
+def smallest_informative_calibration_set(alpha: float = CONFORMAL_ALPHA) -> int:
+    """The fewest calibration points at which the interval is narrower than the observed range.
+
+    THIS IS NOT THE FLOOR, AND THE GAP BETWEEN THEM IS WIDE. `smallest_calibration_set`
+    gives the size at which an interval EXISTS: nine for 90 per cent coverage. But
+    existing is not the same as saying anything. The quantile index is
+    ceil((n+1)(1-alpha)), and while that index equals n the quantile is the LARGEST
+    observed conformity score, so the interval spans every residual seen and excludes
+    nothing.
+
+    Solving ceil((n+1)(1-a)) <= n-1 gives n >= (2-a)/a: nineteen for 90 per cent
+    coverage, thirty-nine for 95. So for every calibration size from nine to eighteen a
+    90 per cent interval is real, valid, correctly derived - and exactly as wide as the
+    data, which is a statement about the calibration set rather than about the ion.
+
+    It is derived rather than tabulated for the same reason the floor is: the numbers
+    change with alpha, and a reader who wants to check the claim should be able to
+    check the arithmetic instead of trusting a constant.
+    """
+    if not 0 < alpha < 1:
+        raise ValueError(f"alpha must lie strictly between 0 and 1, not {alpha!r}")
+    return math.ceil((2 - alpha) / alpha)
+
+
 MIN_CALIBRATION_RECORDS = smallest_calibration_set()
+MIN_INFORMATIVE_CALIBRATION_RECORDS = smallest_informative_calibration_set()
 
 NOTHING_HELD = "there is nothing to work with: no record cleared the licence gate"
 ONE_PLATFORM_ONLY = (
@@ -174,8 +208,10 @@ CALIBRATION_TOO_SMALL = (
     " At least {needed} are required"
 )
 CALIBRATION_DEGENERATE = (
-    "the calibration set holds {held}, the fewest at which {coverage:.0%} coverage is attainable, so the"
-    " interval is the full observed range: honest, and uninformative"
+    "the calibration set holds {held}, so the {coverage:.0%} quantile is the {index} score of {held} - the"
+    " LARGEST one - and the interval is therefore the full observed range: honest, correctly derived, and"
+    " uninformative, because it excludes nothing that was seen. At least {informative} calibration points"
+    " are needed before the interval is narrower than the data itself"
 )
 NOT_A_MATCHED_ION_SET = (
     "this takes a MatchedIonSet, not a {given}. A bare sequence has not been through the licence gate,"
@@ -200,10 +236,24 @@ def _ordinal(number: int) -> str:
 
 
 def calibration_warning(held: int, alpha: float = CONFORMAL_ALPHA) -> str | None:
-    """A warning where a conformal interval would be valid but uninformative, or None."""
-    needed = smallest_calibration_set(alpha)
-    if held == needed:
-        return CALIBRATION_DEGENERATE.format(held=held, coverage=1 - alpha)
+    """A warning where a conformal interval would be valid but uninformative, or None.
+
+    Fires for EVERY calibration size whose quantile is the largest observed score, not
+    only for the floor. At 90 per cent coverage that is nine through eighteen, and this
+    warned only at nine until 19 September 2026 - with a test pinning the silence at
+    ten, so the wrong belief was recorded rather than merely held.
+
+    The condition is computed from the quantile index rather than compared against a
+    remembered number, because that is the fact that makes the interval degenerate.
+    """
+    index = conformal_quantile_index(held, alpha)
+    if index == held:
+        return CALIBRATION_DEGENERATE.format(
+            held=held,
+            coverage=1 - alpha,
+            index=_ordinal(index),
+            informative=smallest_informative_calibration_set(alpha),
+        )
     return None
 
 
@@ -214,7 +264,7 @@ def calibration_refusal(held: int, alpha: float = CONFORMAL_ALPHA) -> str | None
     needed = smallest_calibration_set(alpha)
     if held < needed:
         return CALIBRATION_TOO_SMALL.format(
-            held=held, coverage=1 - alpha, index=_ordinal(math.ceil((held + 1) * (1 - alpha))), needed=needed
+            held=held, coverage=1 - alpha, index=_ordinal(conformal_quantile_index(held, alpha)), needed=needed
         )
     return None
 

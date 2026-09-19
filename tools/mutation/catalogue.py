@@ -1225,6 +1225,28 @@ MUTATIONS: tuple[Mutation, ...] = (
         find='        ("analyte_inchikey", "inchikey"),\n        ("analyte_dataset_compound_id", "dataset_compound"),',
         replace='        ("analyte_inchikey", "inchikey"),',
     ),
+    Mutation(
+        label="[K] the degenerate-interval warning narrows back to the floor alone",
+        file="readiness.py",
+        # The bug this replaced. Warning only at the floor is silent for every
+        # calibration size from ten to eighteen, where the quantile is still the
+        # largest observed score and the interval is still the full observed range -
+        # which is exactly where M4's strata land.
+        find="    index = conformal_quantile_index(held, alpha)\n    if index == held:",
+        replace="    index = conformal_quantile_index(held, alpha)\n    if held == smallest_calibration_set(alpha):",
+    ),
+    Mutation(
+        label="[K] the informative calibration size collapses onto the floor",
+        file="readiness.py",
+        find="    return math.ceil((2 - alpha) / alpha)",
+        replace="    return math.ceil(1 / alpha) - 1",
+    ),
+    Mutation(
+        label="[K] the conformal quantile index is off by one, so every size looks informative",
+        file="readiness.py",
+        find="    return math.ceil((held + 1) * (1 - alpha))",
+        replace="    return math.ceil(held * (1 - alpha))",
+    ),
     # --- [K] readiness: what refuses and what merely warns ---------------------
     Mutation(
         label="[K] a single-platform corpus is reported as ready to compare",

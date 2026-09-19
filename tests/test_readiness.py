@@ -36,6 +36,8 @@ from wmxccs.readiness import (
     Readiness,
     calibration_refusal,
     calibration_warning,
+    conformal_quantile_index,
+    smallest_informative_calibration_set,
     interval_readiness,
     require_ready,
     smallest_calibration_set,
@@ -419,9 +421,57 @@ def test_a_calibration_set_exactly_at_the_floor_warns_that_the_interval_is_uninf
     assert "full observed range" in warning
 
 
-@pytest.mark.parametrize("held", [8, 10, 40])
-def test_only_a_calibration_set_exactly_at_the_floor_carries_the_degenerate_warning(held):
+# THE FLOOR AND THE INFORMATIVE SIZE ARE DIFFERENT NUMBERS, and this test file used to
+# assume they were the same. An interval EXISTS from nine calibration points; it is
+# narrower than the observed data only from nineteen. Between those the quantile is the
+# largest observed score, so the interval spans every residual seen and excludes nothing.
+#
+# This was wrong until 19 September 2026 and a test pinned it: `calibration_warning(10)`
+# was asserted to be None. Found while sizing M4's strata, whose grouped splits land
+# calibration sets at 11, 14 and 20 - two of the three inside the silent range.
+
+
+@pytest.mark.parametrize("held", list(range(9, 19)), ids=lambda n: f"n{n}")
+def test_every_calibration_size_whose_quantile_is_the_largest_score_warns(held):
+    """Nine through eighteen, not nine alone."""
+    warning = calibration_warning(held)
+
+    assert warning is not None, f"n={held} gives a full-range interval and must say so"
+    assert "full observed range" in warning
+    assert "LARGEST" in warning
+    assert conformal_quantile_index(held) == held
+
+
+@pytest.mark.parametrize("held", [19, 20, 41, 200], ids=lambda n: f"n{n}")
+def test_a_calibration_set_large_enough_to_be_informative_does_not_warn(held):
+    """From nineteen the quantile is no longer the maximum, so the interval says something."""
     assert calibration_warning(held) is None
+    assert conformal_quantile_index(held) < held
+
+
+def test_the_two_calibration_sizes_are_derived_from_alpha_and_not_tabulated():
+    """Both move with the coverage asked for, and the derivation is the code.
+
+    90 per cent: an interval exists from 9 and is informative from 19.
+    95 per cent: an interval exists from 19 and is informative from 39.
+    """
+    assert smallest_calibration_set(0.10) == 9
+    assert smallest_informative_calibration_set(0.10) == 19
+    assert smallest_calibration_set(0.05) == 19
+    assert smallest_informative_calibration_set(0.05) == 39
+    # and the informative size is always the larger of the two
+    for alpha in (0.01, 0.05, 0.10, 0.20, 0.5):
+        assert smallest_informative_calibration_set(alpha) > smallest_calibration_set(alpha)
+
+
+def test_the_boundary_between_refused_and_degenerate_is_the_quantile_index():
+    """Refused when the score does not exist, degenerate when it is the last one."""
+    assert conformal_quantile_index(8) == 9 > 8  # no 9th score of 8: refused
+    assert calibration_refusal(8) is not None
+    assert calibration_warning(8) is None, "a refused set is not a degenerate one"
+    assert conformal_quantile_index(9) == 9  # the 9th of 9: the maximum
+    assert calibration_refusal(9) is None
+    assert calibration_warning(9) is not None
 
 
 def test_a_negative_calibration_set_is_refused_as_impossible():
@@ -431,7 +481,13 @@ def test_a_negative_calibration_set_is_refused_as_impossible():
 
 @pytest.mark.parametrize(
     "held,expect_refusal,expect_warning",
-    [(8, True, False), (9, False, True), (10, False, False)],
+    [
+        (8, True, False),  # no such score: refused
+        (9, False, True),  # the score exists and is the largest: degenerate
+        (10, False, True),  # STILL the largest. This case read (False, False) until 19 Sep 2026
+        (18, False, True),  # the last degenerate size at 90 per cent
+        (19, False, False),  # the first size that says something
+    ],
 )
 def test_interval_readiness_returns_the_refusal_and_the_warning_together(held, expect_refusal, expect_warning):
     refusal, warning = interval_readiness(held)
@@ -440,11 +496,23 @@ def test_interval_readiness_returns_the_refusal_and_the_warning_together(held, e
     assert (warning is not None) is expect_warning
 
 
-def test_interval_readiness_at_ninety_five_per_cent_moves_the_floor_to_nineteen():
-    assert interval_readiness(18, alpha=0.05)[0] is not None
-    assert interval_readiness(19, alpha=0.05)[0] is None
-    assert interval_readiness(19, alpha=0.05)[1] is not None
-    assert interval_readiness(20, alpha=0.05) == (None, None)
+def test_interval_readiness_at_ninety_five_per_cent_moves_both_sizes_not_only_the_floor():
+    """Tighter coverage costs calibration points twice over, and both costs are real.
+
+    At 95 per cent an interval EXISTS from 19 - that is the floor moving - and it is
+    narrower than the observed data only from 39. Asking for tighter coverage on a
+    calibration set that cannot support it does not fail loudly; it returns the full
+    observed range, which is why the warning has to reach that far.
+    """
+    assert interval_readiness(18, alpha=0.05)[0] is not None, "below the floor: refused"
+    assert interval_readiness(19, alpha=0.05)[0] is None, "at the floor: an interval exists"
+    assert interval_readiness(19, alpha=0.05)[1] is not None, "and it is the full observed range"
+    # 20 is above the floor and still degenerate: this asserted (None, None) until the
+    # derivation was corrected.
+    assert interval_readiness(20, alpha=0.05)[0] is None
+    assert interval_readiness(20, alpha=0.05)[1] is not None
+    assert interval_readiness(38, alpha=0.05)[1] is not None, "the last degenerate size at 95 per cent"
+    assert interval_readiness(39, alpha=0.05) == (None, None), "the first informative size"
 
 
 # --- pair counts ------------------------------------------------------------------------------
