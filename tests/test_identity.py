@@ -841,3 +841,85 @@ def test_two_kinds_of_analyte_stating_the_same_text_are_not_the_same_ion():
     """A peptide sequence and a protein sequence of the same letters are different
     claims about what was measured, so the kind is in the key."""
     assert peptide(sequence="PEPTIDE").identity_key() != protein(accession=None, sequence="PEPTIDE").identity_key()
+
+
+# --- a compound its dataset names and nothing else identifies ------------------------------
+#
+# Real published CCS tables very often carry no InChIKey. The steroid interplatform
+# study gives a compound name, a commercial name, a formula and an m/z, and nothing
+# that identifies a structure. The InChIKey was REQUIRED until that data arrived,
+# and keeping it required would have meant either refusing the only cross-platform
+# dataset this project has, or resolving 87 names against a structure database -
+# a lookup that fails silently and wrongly on exactly the compounds that matter
+# here, which are isomers with similar names.
+#
+# So a dataset-scoped id is accepted as a fallback, and the tests below are about
+# keeping it NARROW. It must pair inside its own source and nowhere else.
+
+
+def test_a_small_molecule_identified_by_nothing_at_all_is_refused():
+    """Loosening the InChIKey requirement must not loosen it to a display name.
+
+    A display name is not an identity: two laboratories spell one compound two ways,
+    and matching on the spelling would pair ions that are not the same ion.
+    """
+    with pytest.raises(ValidationError, match="dataset-scoped compound id"):
+        small_molecule(inchikey=None, display_name="trenbolone")
+
+
+def test_a_dataset_scoped_id_identifies_a_compound_when_no_inchikey_exists():
+    analyte = small_molecule(inchikey=None, dataset_compound_id="steroid_jasms2022:trenbolone")
+    assert analyte.identity_key() == ("small_molecule", "dataset_compound", "steroid_jasms2022:trenbolone")
+    assert analyte.identity_atoms() == frozenset({"dataset_compound:steroid_jasms2022:trenbolone"})
+
+
+def test_two_rows_of_one_dataset_naming_one_compound_are_the_same_compound():
+    """Within a dataset the id IS a real identity, on that table's own authority.
+
+    That authority is a better warrant than any inference this code could make, and
+    it is what lets 142 ions pair across four platforms.
+    """
+    one = small_molecule(inchikey=None, dataset_compound_id="steroid_jasms2022:trenbolone")
+    two = small_molecule(inchikey=None, dataset_compound_id="steroid_jasms2022:trenbolone")
+    assert one.identity_key() == two.identity_key()
+
+
+def test_the_same_compound_name_in_two_datasets_does_not_pair():
+    """The namespace is the point, and this is correct rather than unfortunate.
+
+    Nobody has established that these two rows are the same compound. A name is
+    what this platform refuses to match on, and two tables both listing
+    "trenbolone" are two tables using a name.
+    """
+    here = small_molecule(inchikey=None, dataset_compound_id="steroid_jasms2022:trenbolone")
+    there = small_molecule(inchikey=None, dataset_compound_id="ccsbase:trenbolone")
+    assert here.identity_key() != there.identity_key()
+    assert not (here.identity_atoms() & there.identity_atoms())
+
+
+def test_an_inchikey_wins_over_a_dataset_id_so_a_resolved_compound_pairs_across_sources():
+    """The fallback is a fallback. Resolving a dataset id is the act that makes a
+    compound pair across sources, and once resolved the structure is the key."""
+    resolved = small_molecule(inchikey=INCHIKEY, dataset_compound_id="steroid_jasms2022:trenbolone")
+    plain = small_molecule(inchikey=INCHIKEY)
+    assert resolved.identity_key() == plain.identity_key()
+    assert resolved.identity_key()[1] == "inchikey"
+    # Both atoms are carried, so the shared-peak check sees the dataset id too and a
+    # resolved record still licenses a merge with its unresolved former self.
+    assert resolved.identity_atoms() == frozenset(
+        {f"inchikey:{INCHIKEY}", "dataset_compound:steroid_jasms2022:trenbolone"}
+    )
+
+
+def test_a_dataset_scoped_id_is_an_identity_atom_the_shared_peak_check_can_see():
+    """Asserted here as well as in the loader, because the two surfaces must agree.
+
+    `identity_atoms` and `identity_key` drifting apart has already happened once in
+    this repository - ProteinAnalyte dropped the subunit from its atoms while keeping
+    it in its key, so two records could share an atom, licensing a merge, while their
+    keys differed. A new identity atom is exactly when that can happen again.
+    """
+    analyte = small_molecule(inchikey=None, dataset_compound_id="steroid_jasms2022:trenbolone")
+    assert analyte.identity_atoms()
+    for atom in analyte.identity_atoms():
+        assert str(analyte.identity_key()[2]) in atom

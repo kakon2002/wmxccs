@@ -746,3 +746,56 @@ def test_a_demotion_renders_with_its_grade_and_its_reason(twims_stratum):
     assert rendered.startswith(f"[{ConfidenceGrade.WEAK}]")
     assert demotion.rule in rendered
     assert demotion.detail in rendered
+
+
+# --- 5b. the licence question this demotion actually asks --------------------------------------
+#
+# The same defect as in matching.blockers, in the same words and found at the same
+# time: this rule asked `can_train_commercial` where it meant "may this platform
+# use the record". The test above did not catch it because `unverified` is refused
+# under both questions. academic_only is the branch where they differ.
+
+
+def test_an_academic_only_source_does_not_demote_the_correction(twims_stratum):
+    """A source this platform may use is not a source behind the correction that may not be used.
+
+    Had this rule kept asking the commercial question, every correction derived
+    from the steroid interplatform study would have graded UNSUPPORTED - not
+    because anything about it is weak, but because a predicate two modules away
+    answered a question nobody asked it.
+    """
+    academic = with_first_point_recorded_as(
+        twims_stratum,
+        fixtures.measurement(
+            ccs=twims_stratum.points[0].other_ccs,
+            source="Feuerstein et al., J. Am. Soc. Mass Spectrom. 2022",
+            reuse_status=ReuseStatus.ACADEMIC_ONLY,
+        ),
+    )
+    assert unverified_source_behind_it(academic) is None
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        ReuseStatus.UNVERIFIED,
+        ReuseStatus.OPEN_SHARE_ALIKE,
+        ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES,
+        ReuseStatus.EXCLUDED,
+    ],
+    ids=lambda status: status.value,
+)
+def test_a_source_this_platform_may_not_use_still_demotes_the_correction(twims_stratum, status):
+    """The other side: widening the predicate once did not widen it to everything."""
+    spoiled = with_first_point_recorded_as(
+        twims_stratum,
+        fixtures.measurement(
+            ccs=twims_stratum.points[0].other_ccs,
+            source="a source this platform may not use",
+            reuse_status=status,
+        ),
+    )
+    demotion = unverified_source_behind_it(spoiled)
+    assert demotion is not None
+    assert demotion.grade is ConfidenceGrade.UNSUPPORTED
+    assert status.value in demotion.detail

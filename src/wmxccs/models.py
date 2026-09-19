@@ -131,6 +131,24 @@ class UncertaintyType(StrEnum):
 
 TRAINABLE_UNCERTAINTY_TYPES = frozenset(UncertaintyType) - {UncertaintyType.UNKNOWN}
 
+# A calibrant the source did not name, for a platform whose CCS is calibrated.
+#
+# Written the same way as DriftGas.UNSTATED and the unstated charge carrier, and
+# for the same reason: it is a positive record of what a paper does not say, not a
+# filler, and it is deliberately not spelt "unknown", which this package refuses
+# as a placeholder everywhere else.
+#
+# It exists because real data forced it. The steroid interplatform study states
+# its travelling-wave calibrant (Waters Major Mix) and its single-field drift-tube
+# calibrant (Agilent ESI-L G1969-85000) explicitly, and for trapped ion mobility
+# it states only the mass calibration. A calibrated record must name its calibrant
+# or the value is not defined - but the alternative here was to refuse the whole
+# platform, or to write in the calibrant the background section calls typical,
+# which would be inventing a method. This records the gap instead: the row is
+# held, it keys apart from every named calibrant so it cannot pool with one, and
+# it blocks training until somebody reads the methods and settles it.
+UNSTATED_CALIBRANT = "UNSTATED"
+
 
 class CalibrationLineage(StrEnum):
     """Whether a CCS value stands on first principles or on somebody else's numbers."""
@@ -715,6 +733,13 @@ class CCSMeasurement(MeasurementConditions):
                 blockers.extend(f"cyclic settings: {blocker}" for blocker in cyclic.training_blockers())
             except Exception as exc:  # fail closed, as everywhere else in this method
                 blockers.append(f"cyclic settings could not be checked ({type(exc).__name__}: {exc})")
+        if getattr(self, "calibrant", None) == UNSTATED_CALIBRANT:
+            blockers.append(
+                "the calibrant is recorded as UNSTATED, so what this CCS was referenced against is not"
+                " defined: a calibrated value depends on the reference set its curve was built from, and two"
+                " laboratories using different calibrants do not produce the same quantity. Resolving it"
+                " means reading the source's methods, never writing in whichever calibrant is usual"
+            )
         kind = self.uncertainty_type
         if kind is not None and not is_one_of(kind, TRAINABLE_UNCERTAINTY_TYPES):
             blockers.append(

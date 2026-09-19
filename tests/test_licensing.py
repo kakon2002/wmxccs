@@ -29,18 +29,22 @@ from conftest import SOURCE, antibody, glycan, measurement
 
 from wmxccs.identity import Derivatisation, DriftGas, FoldingState, ReducingEndLabel
 from wmxccs.licensing import (
-    UseContext,
-    can_train_commercial,
-    can_use,
     LicenceGateError,
     ReuseStatus,
     TrainingGateError,
     UnbackedClaimError,
+    UseContext,
     as_reuse_status,
     assert_trainable,
-    can_train_commercial,
+    can_use,
     declares_synthetic,
 )
+
+# From reuse, not through licensing. The gate no longer asks the commercial
+# question - it asks can_use - so licensing does not import this any more, and a
+# test that reached it through licensing was reading a re-export that only existed
+# by accident.
+from wmxccs.reuse import can_train_commercial
 
 # A DOI the registry holds, with the status it is recorded at, and the exact
 # provenance string the seed transcription writes into an analyte's source.

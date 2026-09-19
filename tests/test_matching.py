@@ -21,6 +21,7 @@ Two things are load-bearing and easy to lose quietly:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -31,6 +32,7 @@ from wmxccs.identity import DriftGas, SmallMoleculeAnalyte
 from wmxccs.licensing import assert_trainable, declares_synthetic
 from wmxccs.loader import load_measurements_file
 from wmxccs.matching import (
+    SYNTHETIC_SET,
     MatchedIon,
     MatchingReport,
     NotQuotableError,
@@ -695,3 +697,85 @@ def test_two_conformers_reported_at_the_same_value_are_still_two_measurements():
     assert report.measurements == 2
     assert len(report.single_platform) == 2
     assert report.records_in == report.measurements + report.duplicates_collapsed
+
+
+# --- the licence question these blockers actually ask ------------------------------------
+#
+# Added after a real defect. matching.blockers asked `can_train_commercial` where
+# it meant "may THIS PLATFORM use the record", and reported all 142 matched ions
+# from the steroid interplatform study as blocked while the licence gate had
+# cleared 375 of the 521 records in them. The tests above did not catch it and
+# were not wrong: every one of them uses synthetic_fixture, open_attribution or
+# unverified, and those three answer the same under both questions. The one branch
+# where the two questions differ had no test, so the pair below tests it from both
+# sides.
+
+
+def test_an_academic_only_member_does_not_block_its_matched_set() -> None:
+    """The branch where the two licence questions differ, from the side that broke.
+
+    An academic_only record is one this platform may use, so a set holding one is
+    usable. This is the assertion the 142 real matched ions needed and did not have.
+    """
+    good, other = CASES["a two-way match"]()
+    academic = tuple(
+        record.model_copy(update={"reuse_status": ReuseStatus.ACADEMIC_ONLY}) for record in (good, other)
+    )
+    group = build_matched_ions(academic).matched[0]
+    # The corpus is synthetic and says so, and that blocker is not a licence
+    # blocker: `declares_synthetic` keys on the fixture DOI, not on the status, so
+    # restating the status does not launder a fixture into real data. What must be
+    # absent is any complaint about the LICENCE, which is the branch that broke.
+    assert group.blockers == (
+        SYNTHETIC_SET.format(synthetic=2, held=2),
+    ), "the only blocker left should be the synthetic declaration"
+    assert not any("reuse status" in blocker for blocker in group.blockers)
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        ReuseStatus.UNVERIFIED,
+        ReuseStatus.OPEN_SHARE_ALIKE,
+        ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES,
+        ReuseStatus.EXCLUDED,
+    ],
+    ids=lambda status: status.value,
+)
+def test_a_member_this_platform_may_not_use_still_blocks_its_matched_set(status: ReuseStatus) -> None:
+    """The other side, so that widening the predicate once does not widen it to everything.
+
+    academic_only became usable because of what this platform is. These did not,
+    and nothing about the context change touches them.
+    """
+    good, other = CASES["a two-way match"]()
+    blocked = other.model_copy(update={"reuse_status": status})
+    group = build_matched_ions((good, blocked)).matched[0]
+    assert not group.usable
+    assert status.value in " | ".join(group.blockers)
+
+
+def test_no_module_outside_the_three_that_should_asks_the_commercial_licence_question() -> None:
+    """A structural guard against the defect above recurring anywhere else.
+
+    `can_train_commercial` and `can_use` answer different questions, and reading
+    one as the other is invisible: the code compiles, the tests pass, and the
+    answer is wrong only for the statuses the platform's own context reopened.
+    Rather than trust that every future call site picks the right one, this pins
+    the ones allowed to ask the COMMERCIAL question at all:
+
+      reuse.py   - defines both, and is where the tiers live
+      sources.py - asks it deliberately, to decide whether an entry has to record
+                   WHO decided the platform may use it anyway
+
+    Anywhere else, the question being asked is almost certainly "may this platform
+    use this", and the answer differs. A new call site makes this test fail, which
+    is the point: it should be a decision somebody writes down, not a default.
+    """
+    package = Path(__file__).resolve().parents[1] / "src" / "wmxccs"
+    # A CALL, not a mention: both corrected call sites carry a comment naming the
+    # predicate they deliberately do not use, and a guard that cannot tell those
+    # apart would fail on its own explanation.
+    call = re.compile(r"can_train_commercial\s*\(")
+    callers = {path.name for path in package.glob("*.py") if call.search(path.read_text(encoding="utf-8"))}
+    assert callers == {"reuse.py", "sources.py"}

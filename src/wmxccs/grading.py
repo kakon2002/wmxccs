@@ -38,7 +38,7 @@ from enum import StrEnum
 from statistics import median
 from typing import Sequence
 
-from .reuse import ReuseStatus, as_reuse_status, can_train_commercial
+from .reuse import ReuseStatus, as_reuse_status, can_use
 from .statistics import (
     MIN_POINTS_FOR_DEMING,
     MIN_POINTS_FOR_LIMITS_OF_AGREEMENT,
@@ -246,7 +246,11 @@ def unverified_source_behind_it(stratum: StratumStatistics) -> Demotion | None:
             except (TypeError, ValueError):
                 offending.append(f"{getattr(record, 'source', '?')!r} (unreadable reuse status)")
                 continue
-            if not can_train_commercial(status):
+            # can_use, not can_train_commercial: see the same correction in
+            # matching.blockers. A commercial platform reading this repository
+            # gets the stricter answer by setting reuse.PLATFORM_USE_CONTEXT, not
+            # by changing this line.
+            if not can_use(status):
                 offending.append(f"{getattr(record, 'source', '?')!r} ({status.value})")
     if not offending:
         return None

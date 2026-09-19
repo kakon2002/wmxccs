@@ -728,27 +728,75 @@ class _Analyte(_Record):
 
 
 class SmallMoleculeAnalyte(_Analyte):
-    """A small molecule, identified by its InChIKey.
+    """A small molecule, identified by its InChIKey where one is known.
 
-    The InChIKey is REQUIRED and is the whole identity. It is a hash of the
-    structure, so two groups that measured the same molecule produce the same
-    key without ever agreeing on what to call it, which is exactly what a
-    compound name cannot do. SMILES is optional and is not the key: one molecule
-    has many valid SMILES strings and one InChIKey.
+    The InChIKey is the identity that works. It is a hash of the structure, so two
+    groups that measured the same molecule produce the same key without ever
+    agreeing on what to call it, which is exactly what a compound name cannot do.
+    SMILES is optional and is never the key: one molecule has many valid SMILES
+    strings and one InChIKey.
+
+    THE FALLBACK, AND WHY IT IS NARROW. Real published CCS tables very often carry
+    no InChIKey at all - the steroid interplatform study gives a compound name, a
+    commercial name, a formula and an m/z, and nothing that identifies a structure.
+    The InChIKey was required until that data arrived, and requiring it would have
+    meant either refusing the only cross-platform dataset this project has, or
+    resolving 87 names against a structure database, which is a lookup that fails
+    silently and wrongly on exactly the compounds that matter - isomers with
+    similar names.
+
+    So `dataset_compound_id` records the compound AS ONE NAMED DATASET IDENTIFIES
+    IT, written "dataset:identifier". It is deliberately namespaced, and the
+    namespace is the point:
+
+    - WITHIN that dataset it is a real identity. Two rows of one published table
+      naming one compound are the same compound, on the table's own authority,
+      which is a better warrant than any inference we could make.
+    - ACROSS datasets it matches NOTHING, because the namespace differs. Two
+      tables both listing "trenbolone" do not pair on it, and that is correct
+      rather than unfortunate: nobody has established that the two rows are the
+      same compound, and a name is what this platform refuses to match on.
+
+    Resolving a dataset id to an InChIKey is a curation act with a provenance
+    trail, not something the loader does. Until somebody does it, a
+    dataset-identified compound pairs inside its own source and nowhere else.
     """
 
     kind_tag: Literal[AnalyteKind.SMALL_MOLECULE] = AnalyteKind.SMALL_MOLECULE
-    inchikey: Annotated[_Text, AfterValidator(_check_inchikey)]
+    inchikey: Annotated[_Text, AfterValidator(_check_inchikey)] | None = None
     smiles: _Text | None = Field(
         default=None,
         description="Optional, and never the key: one molecule has many valid SMILES and one InChIKey.",
     )
+    dataset_compound_id: _Text | None = Field(
+        default=None,
+        description="A compound as ONE NAMED DATASET identifies it, written 'dataset:identifier'."
+        " A fallback, and a weak one: see the class docstring.",
+    )
+
+    @model_validator(mode="after")
+    def states_an_identifier(self) -> Self:
+        if self.inchikey is None and self.dataset_compound_id is None:
+            raise ValueError(
+                "a small molecule needs an InChIKey, or failing that a dataset-scoped compound id."
+                " A display name is not an identity: two laboratories spell one compound two ways and"
+                " matching on the spelling would pair ions that are not the same ion"
+            )
+        return self
 
     def identity_key(self) -> tuple:
-        return (AnalyteKind.SMALL_MOLECULE.value, "inchikey", self.inchikey)
+        """The InChIKey where there is one, and the dataset-scoped id where there is not."""
+        if self.inchikey is not None:
+            return (AnalyteKind.SMALL_MOLECULE.value, "inchikey", self.inchikey)
+        return (AnalyteKind.SMALL_MOLECULE.value, "dataset_compound", self.dataset_compound_id)
 
     def identity_atoms(self) -> frozenset[str]:
-        return frozenset({f"inchikey:{self.inchikey}"})
+        atoms = set()
+        if self.inchikey is not None:
+            atoms.add(f"inchikey:{self.inchikey}")
+        if self.dataset_compound_id is not None:
+            atoms.add(f"dataset_compound:{self.dataset_compound_id}")
+        return frozenset(atoms)
 
 
 class PeptideAnalyte(_Analyte):

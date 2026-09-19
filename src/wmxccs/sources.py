@@ -312,9 +312,21 @@ STEROID_INTERPLATFORM_2022 = SourceLicence(
     attribution="Cite Feuerstein et al., J. Am. Soc. Mass Spectrom. 2022, as the paper asks. If the licence"
     " is confirmed as CC BY, correct attribution is all it requires.",
     context_basis="The CEO answered on 19 September 2026 that this platform is academic and research use, not commercial. That answer is the question CONTEXT.md records as the one deciding the data plan, and it is recorded in reuse.PLATFORM_USE_CONTEXT. The source's own terms are unchanged and are still recorded as what they are, so the gate refuses this row again on its own if the platform is ever commercialised.",
-    what_to_check="Read the licence badge on the ACS article page itself and record the verbatim text with"
-    " the URL and the date. That would settle whether this is open_attribution rather than academic_only,"
-    " and it is the one reading that would let the data be used if the platform were ever commercialised.",
+    what_to_check="TWO things, and the second now matters more than the first."
+    " (1) LICENCE: read the badge on the ACS article page itself and record the verbatim text with the URL"
+    " and the date. That would settle whether this is open_attribution rather than academic_only, and it is"
+    " the one reading that would let the data be used if the platform were ever commercialised."
+    " (2) THE TRAPPED-ION CCS CALIBRANT, which the supporting information does not state. This holds 142"
+    " real values - every TIM-MS measurement in the file - out of any fit, and they are the values that"
+    " agree BEST with the drift tube, so the gap costs more than it looks. SI_001 page 7 gives only the"
+    " mass calibration ('10 mM sodium formate and a 7th order high-performance calibration') and then says"
+    " 'In addition to the external calibration, each sample was automatically post-run calibrated by"
+    " injecting a 1:1 mixture of BOTH calibrants' - a sentence that presupposes a second calibrant it never"
+    " names. The background section calls an Agilent tune mix typical for TIM-MS, with an 'e.g.', and the"
+    " same laboratory used exactly that mix for its single-field drift-tube work, so the likely answer is"
+    " obvious - and an obvious inference written in as a stated method is the one thing this registry"
+    " exists to prevent. Ask the authors, or find it in a companion paper, and record the answer with its"
+    " source. Until then UNSTATED_CALIBRANT stands.",
     notes=(
         "THIS IS THE ONE THAT MATTERS MOST. It is the only unverified source that would supply matched ions"
         " across three platforms, which is the premise of the whole pipeline. One page read decides whether"

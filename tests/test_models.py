@@ -47,6 +47,7 @@ from wmxccs.identity import (
     UnverifiedFormatWarning,
 )
 from wmxccs.models import (
+    UNSTATED_CALIBRANT,
     CalibrationLineage,
     CalibrationReference,
     DTIMSMethod,
@@ -726,3 +727,60 @@ def test_an_ion_whose_carrier_IS_named_keeps_an_ordinary_matchable_key():
         ims_type=IMSType.TIMS,
     )
     assert named.matched_ion_key == elsewhere.matched_ion_key
+
+
+# --- a calibrant the source never named --------------------------------------------------
+#
+# UNSTATED_CALIBRANT exists because real data forced it. The steroid interplatform
+# study names its travelling-wave calibrant and its single-field drift-tube
+# calibrant, and for trapped ion mobility states only the MASS calibration. The
+# alternative to this sentinel was to refuse 142 real values outright, or to write
+# in the calibrant that paper's own background section calls typical - which would
+# be inventing a method and recording it as fact.
+
+
+def test_a_calibrant_recorded_as_unstated_is_a_valid_record_and_blocks_training():
+    """Held, not refused. The distinction is the whole design of the sentinel.
+
+    A refused record is gone and its value is lost. A held record is in the file,
+    countable, reportable, and one paragraph of somebody's methods away from being
+    usable - which is exactly the position the 142 trapped-ion values are in.
+    """
+    record = measurement(calibrant=UNSTATED_CALIBRANT)
+    assert record.calibrant == UNSTATED_CALIBRANT
+    assert record.ccs_is_calibrated is True
+    with pytest.raises(TrainingGateError, match="recorded as UNSTATED"):
+        assert_trainable(record)
+    # and the reason says what would settle it, rather than only that it is blocked
+    problem = record.training_blockers()
+    assert any("reading the source's methods" in blocker for blocker in problem)
+    assert any("never writing in whichever calibrant is usual" in blocker for blocker in problem)
+
+
+def test_an_unstated_calibrant_keys_apart_from_every_named_one():
+    """It must not pool with a named calibrant, or the gap it records is erased.
+
+    Two laboratories using different calibrants do not produce the same quantity,
+    and "we do not know which" is not a third laboratory using the same one.
+    """
+    unstated = measurement(calibrant=UNSTATED_CALIBRANT)
+    named = measurement(calibrant="dextran")
+    assert unstated.calibration_group != named.calibration_group
+    # It is also not the placeholder the package refuses everywhere else: "unknown"
+    # is rejected as a filler, and this is a deliberate positive record.
+    assert UNSTATED_CALIBRANT.casefold() != "unknown"
+    with pytest.raises(ValidationError):
+        measurement(calibrant="unknown")
+
+
+def test_two_records_whose_calibrant_is_unstated_still_describe_one_group():
+    """Deliberately NOT unique per record, unlike the unstated charge carrier.
+
+    An unstated carrier is made unique because two ions whose carrier nobody named
+    are not known to be the same ion. An unstated calibrant is different: the rows
+    are the same ion under conditions one of whose details is missing, so they
+    belong in one group and are held together rather than split into singletons.
+    """
+    one = measurement(calibrant=UNSTATED_CALIBRANT)
+    two = measurement(calibrant=UNSTATED_CALIBRANT, source="another laboratory")
+    assert one.calibration_group == two.calibration_group

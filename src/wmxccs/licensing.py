@@ -35,7 +35,6 @@ from .reuse import (  # noqa: F401  re-exported: the gate and the statuses are o
     UseContext,
     as_reuse_status,
     can_redistribute,
-    can_train_commercial,
     can_use,
     is_inference_only,
 )

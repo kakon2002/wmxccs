@@ -751,3 +751,52 @@ def test_records_whose_charge_carrier_is_unstated_are_counted_apart_from_matched
     # The named-carrier record is the only one that counts as a matched ion.
     assert report.matched_ion_keys_held == 1
     assert "UNMATCHABLE" in report.summary()
+
+
+# --- a dataset-scoped compound on a row that did not validate ------------------------------
+
+
+def _dataset_pair(built_id: str, failed_id: str) -> str:
+    """One row that validates and one that does not, both at 300.0, ids as given."""
+    return table(
+        analyte_row("small_molecule", analyte_dataset_compound_id=built_id, ccs="300.0"),
+        analyte_row(
+            "small_molecule",
+            analyte_dataset_compound_id=failed_id,
+            ccs="300.0",
+            polarity="negative",  # against charge +1: refused by the measurement validator
+        ),
+    )
+
+
+def test_a_row_sharing_a_value_with_a_failed_row_of_the_SAME_dataset_compound_is_not_held():
+    """The direction that needs the atom list, and the one easy to get backwards.
+
+    The shared-peak check reads identity atoms from the CELLS of a row that failed
+    validation, and uses them to decide whether that row is the same analyte as a
+    built row. Sharing an atom means one compound, so an identical CCS is a
+    REPLICATE and is fine.
+
+    If `analyte_dataset_compound_id` were missing from that namespace list, the
+    failed row would carry no atoms at all, could never be recognised as the same
+    compound, and this row would be held for a collision with itself. Nothing else
+    in the suite would go red: a false hold looks exactly like a cautious one.
+    """
+    report = load(_dataset_pair("steroid_jasms2022:trenbolone", "steroid_jasms2022:trenbolone"))
+    assert report.failure_counts == {MEASUREMENT_REJECTED: 1}
+    assert report.records_built == 1
+    assert report.gate_counts == {}, "one compound twice is a replicate, not a shared peak"
+    assert report.records_cleared == 1
+
+
+def test_a_row_sharing_a_value_with_a_failed_row_of_a_DIFFERENT_compound_is_held_fail_closed():
+    """The other direction, so that reading the atoms does not become clearing everything.
+
+    Two different compounds at one value, one of them too broken to have a
+    calibration group to compare, is held until that row is fixed.
+    """
+    report = load(_dataset_pair("steroid_jasms2022:trenbolone", "steroid_jasms2022:something else"))
+    assert report.records_built == 1
+    assert report.gate_counts == {GATE_SHARED_PEAK: 1}
+    assert "did not validate" in report.gate_examples[GATE_SHARED_PEAK][0]
+    assert report.records_cleared == 0

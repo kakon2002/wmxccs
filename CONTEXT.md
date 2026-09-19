@@ -202,32 +202,50 @@ Two further things this table did not say, both of which matter:
   with no reported spread is usable for some purpose that does not need one - never
   a default. See LIMITATIONS.md section 7.1.
 
-### Named in the objective, licence unverified or blocking
+### Named in the objective: usable since the CEO answered, or still unverified
 
 | Source | Status | Detail |
 |---|---|---|
-| CCSBase, ccsbase.net | **Blocked for commercial use** | Terms restrict use to academic, non-commercial purposes. Commercial users directed to UW CoMotion. Read 11 Sep 2026 |
+| Steroid interplatform study, JASMS 2022, DOI 10.1021/jasms.2c00196 | **`academic_only`, INGESTED** | 87 steroids, 142 values, DTIMS + TWIMS + TIMS. Converted by `tools/ingest_steroid.py`: 521 records, **142 cross-platform matched ions**, 375 clear to train. The benchmark set for RQ1, and the first real data in the repository. See LIMITATIONS.md 7D |
+| CCSBase, ccsbase.net | **`academic_only`, usable, not yet ingested** | Terms restrict use to academic, non-commercial purposes; commercial users directed to UW CoMotion. Read 11 Sep 2026. 25,020 entries, platform-aware, DTIMS/TWIMS/TIMS for overlapping compounds. Largest source available to this platform. NEXT to ingest |
+| Bush Lab CCS Database, biophysicalms.org/ccsdatabase | **`academic_only`, usable, not yet ingested** | Page asks only that users cite the appropriate publications. Native and denatured proteins, peptides, small molecules; most measured in both He and N2 by DTIMS. Downloadable Google Sheet. The only identified source that would give the biopharma layer real data |
 | METLIN-CCS, Nature Methods 2023 | Unverified | Paper says "freely available" at METLIN, XCMS Online and PanoramaWeb. That is access, not a licence. 185,589 TIMS values, 27,633 standards. Largest TIMS source |
-| Bush Lab CCS Database, biophysicalms.org/ccsdatabase | Unverified | Page says only "please cite the appropriate publication(s)". Native proteins, denatured proteins, peptides, small molecules. Most measured in both He and N2 by DTIMS. Downloadable Google Sheet. Ideal for the biopharma layer if usable |
-| Steroid interplatform study, JASMS 2022, DOI 10.1021/jasms.2c00196 | Unverified, ACS | 87 steroids, 142 values, DTIMS + TWIMS + TIMS. The obvious benchmark set for RQ1 |
 | Bayesian harmonization study, Anal Chem 2026, DOI 10.1021/acs.analchem.5c06667 | Unverified, ACS | 840 measurements, 347 compounds, three platforms. If its data is released and licensed, it is a ready-made matched-ion set |
+
+All three usable entries are recorded as `academic_only`, **not** `open_attribution`.
+The distinction is enforced: it is what makes the gate refuse them again the moment
+`reuse.PLATFORM_USE_CONTEXT` is set back to `COMMERCIAL`.
 
 ### Previously excluded, still excluded
 
 AllCCS2 (no licence posted). GlycoMob (no terms, possibly offline). Manabe 2022
 (CC BY-NC-ND). Sastre Toraño 2025 Nat Commun (CC BY-NC-ND, both clauses block).
 
-## The open question that decides the data plan
+## The question that decided the data plan: ANSWERED 19 September 2026
 
-Is this platform internal research or a product? The objective document is titled
-"research concept document" and its MVP exposes results through an API. If the
-platform is internal research only, CCSBase and academic-only sources may be usable
-and the data plan is comfortable. If it is a product, or feeds one, they are not,
-and the matched-ion benchmark must come from licence-clean papers, of which none
-are confirmed yet.
+Was this platform internal research or a product? **The CEO answered: academic and
+research use, not commercial.**
 
-This question has been put to the CEO. Until answered, treat the platform as
-commercial and the academic-only sources as blocked.
+That is recorded in code as `reuse.PLATFORM_USE_CONTEXT = UseContext.ACADEMIC_RESEARCH`
+- a named constant, deliberately not a parameter and not a configuration value, so
+that changing it is a visible edit to the package rather than a deployment setting.
+It reopened the three academic-only sources above.
+
+Two things about how it is recorded, both deliberate:
+
+1. **The sources keep their own terms.** A reuse status says what a SOURCE'S TERMS
+   permit; the use context says what WE are. CCSbase's terms still restrict it to
+   academic non-commercial use and the registry still says so. Nothing was relabelled
+   to make it loadable. `can_train_commercial` still exists and still answers the
+   commercial question, so "would this be usable if we were a product" remains a
+   question the code can answer at any time.
+2. **Every entry that is usable only because of the context records who decided
+   that.** `sources.py` REQUIRES a `context_basis` for exactly those entries and
+   refuses to construct one without it. An entry usable on a decision rather than on
+   its own terms would otherwise read like an entry whose terms permit anybody.
+
+If the platform is ever commercialised, one constant changes and the gate refuses all
+three again without anybody re-reading a licence page.
 
 ## Domain facts already established
 

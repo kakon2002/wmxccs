@@ -1,20 +1,44 @@
 # Limitations
 
 What this repository does not do, does not know, and must not be read as claiming.
-Written at M0. Everything here is a live limitation unless it says it is closed.
+Written at M0 and updated through each milestone since; sections 7A to 7D were added
+after it. Everything here is a live limitation unless it says it is closed.
 
 ---
 
 ## 1. The thing that matters most
 
-**There is not one cross-platform matched ion in this repository.** The corpus is
-117 measurements, all travelling-wave, all from one laboratory, and the platform's
-entire premise is comparing the same ion measured on two different platforms.
-Nothing downstream of matched-ion construction can be built, validated or
-demonstrated on the data now held.
+**CLOSED as of 19 September 2026, and this section previously said the opposite.**
+Until real data arrived it read "There is not one cross-platform matched ion in this
+repository", which was true of the seed corpus and is no longer true of the
+repository. The correction is recorded rather than quietly made, because that
+sentence was the headline of this whole document.
 
-This is not a shortage that more of the same data would fix. It is
-over-determined, and each of these alone is sufficient:
+There are now **142 cross-platform matched ions**, all from one source: the steroid
+interplatform study, DOI 10.1021/jasms.2c00196. Two pair across two platforms, 43
+across three, 97 across all four. Section 7D describes what they are and what is
+wrong with them.
+
+What has NOT changed is the shape of the limitation, only its size:
+
+- **one source.** Every matched ion in the repository comes from a single paper by a
+  single group. Cross-platform bias measured within one study is bias between that
+  study's instruments, which is not the same quantity as bias between platforms in
+  general, and nothing here separates the two. Two more sources are registered and
+  not yet ingested (CCSbase, the Bush Lab database).
+- **one compound class.** 87 steroids. Nothing about a glycan, a peptide, a protein
+  or an antibody has a matched ion, so the biopharmaceutical identity layer built in
+  M1 has still never seen real data.
+- **no pooling across sources is possible yet**, even once the other two are
+  ingested, because these compounds are identified by this dataset's own names
+  rather than by structure. See 7D.
+- **the two Struwe seed files still pair nothing, for the three independent reasons
+  below**, and that has not changed either. They remain the only glycan data here.
+
+### The seed corpus, unchanged
+
+The 117 measurements in `data/seed/struwe*.csv` yield zero matched ions, and it is
+over-determined - each of these alone is sufficient:
 
 1. both seed files are TWIMS, so there is only one platform;
 2. the analyte sets are disjoint — the 2015 file is high-mannose N-glycans
@@ -23,37 +47,57 @@ over-determined, and each of these alone is sufficient:
 3. the 2015 rows carry `drift_gas = UNSTATED` and the 2016 rows carry `He`, and
    gas is part of the matched-ion key, so even a shared analyte could not pair.
 
-`readiness.py` reports this as a blocker, in those terms, rather than as a small
-number. That is the M0 deliverable.
+`readiness.py` reports that as a blocker, in those terms, rather than as a small
+number.
 
 ## 2. No number in this repository describes model performance
 
 No harmonization model has been fitted. No CCS value has been corrected,
 harmonized or predicted. Every readiness report carries a `MaturityStamp` of
-`provisional`, and the count beside it is the number of cross-platform matched
-ions behind it, which is zero. There is no code path that can produce a
-`validated` stamp, because the milestone that would earn one does not exist.
+`provisional`, and the count beside it is the number of cross-platform matched ions
+behind it - which was zero when this was written and is 142 for the steroid source.
+There is no code path that can produce a `validated` stamp, because the milestone
+that would earn one does not exist.
+
+The cross-platform statistics in section 7D ARE computed over real measurements and
+are `quotable`. They describe published values of real instruments, which is what
+they say they describe. None of them is a model, a correction, or a prediction.
 
 ## 3. Licences: what is settled and what is not
 
-Four of the eleven registered sources are **unverified**, and the default-deny
-gate means none of them may be ingested. Each carries a `what_to_check` field
-naming the single thing that would settle it.
+**The commercial-versus-research question is ANSWERED.** On 19 September 2026 the
+CEO stated that this is academic and research use, not commercial. That is recorded
+as `reuse.PLATFORM_USE_CONTEXT = UseContext.ACADEMIC_RESEARCH`, a named constant and
+deliberately not a parameter, and it is what reopened three sources: CCSbase, the
+Bush Lab CCS database, and the steroid interplatform study.
 
-The one that matters is the **steroid interplatform study**
-(DOI 10.1021/jasms.2c00196): 87 steroids, 142 values, DTIMS + TWIMS + TIMS. It is
-the only identified source that would supply cross-platform matched ions
-directly. ACS publishes open access under both CC-BY and CC-BY-NC-ND, and which
-one applies has not been read. One page decides whether a benchmark set exists.
+Those three are registered as `academic_only`, **not** as `open_attribution`. The
+distinction is load-bearing rather than pedantic: a reuse status says what a
+SOURCE'S TERMS permit, and the context says what WE are. Setting
+`PLATFORM_USE_CONTEXT` back to `COMMERCIAL` refuses all three again immediately,
+without anybody re-reading a licence page. Each of the three also carries a
+`context_basis` field naming who decided the platform may use it and when -
+required by `sources.py` for exactly the entries whose usability rests on a decision
+rather than on their own terms, because otherwise they read like entries whose terms
+permit anybody.
+
+Five of the eleven registered sources are usable: two `open_attribution` and the
+three `academic_only`. Two remain **unverified** (METLIN-CCS, and the 2026 Bayesian
+paper) and the default-deny gate blocks both. Two are non-commercial-no-derivatives
+and would be blocked whatever the context. Two are excluded outright. Each unverified entry carries a `what_to_check` field naming the
+single thing that would settle it.
+
+The steroid study's licence is recorded CONSERVATIVELY. Its PMC record carries an
+ACS AuthorChoice banner and Europe PMC reports "cc by" with `isOpenAccess Y`; both
+were read by this code and NEITHER is accepted as evidence, because CONTEXT.md's own
+standard lists a Europe PMC open-access flag among the things that do not count, and
+a banner is not licence text. If the article really is CC BY then `academic_only`
+understates it and `open_attribution` is correct - understating a licence costs
+nothing while this platform is academic, and overstating one cannot be undone.
 
 Nothing in this repository has read a licence. Every entry in `sources.py` records
-a report by a named person on a stated date. The code does not verify those
-reports and does not claim to.
-
-**The commercial-versus-research question is still open with the CEO.** Until it
-is answered the platform is treated as commercial, which is what blocks CCSBase.
-If the answer is internal research, CCSBase becomes usable and the data problem
-largely changes shape.
+a report by a named person on a stated date. The code does not verify those reports
+and does not claim to.
 
 ## 4. Known defects and weaknesses, carried over deliberately
 
@@ -134,7 +178,7 @@ by hand should copy.
 
 ### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
 
-Five separate instances in this repository so far, in five different shapes. They
+Six separate instances in this repository so far, in six different shapes. They
 are collected here rather than filed apart, because the shape is the point: in every
 one, the suite was green, the coverage looked complete, and a behaviour nobody was
 actually protecting could have been deleted without a single test going red.
@@ -179,11 +223,36 @@ stratum to one point. Both times the symptom was a count that was obviously wron
 if anybody looked - "1 matched ion considered" where twenty-four were expected -
 and nothing failed. Long tags are now folded rather than cut.
 
-WHAT THE FIVE HAVE IN COMMON, and what to do about it. Green is not evidence. The
-question that catches all five is not "do the tests pass" but "what would have to
+**Six: two guards whose every test used data where the wrong answer is the right
+one.** When the platform's use context arrived - the CEO's answer that this is
+academic and not commercial work - `can_train_commercial` was split from `can_use`,
+and every call site was meant to be reviewed. Two were missed: `matching.blockers`
+and the unusable-source rule in `grading.py`. Both went on asking whether a
+COMMERCIAL platform could use a record, in code that meant "may THIS platform use
+it". The suite stayed green at 1,784 tests, and the reason is the whole of this
+entry: every matching and grading test used `synthetic_fixture`, `open_attribution`
+or `unverified`, and all three give the SAME answer to both questions. The one
+branch where the two differ had no test at all.
+
+It was found by loading real data. The steroid interplatform study is
+`academic_only`, so the licence gate cleared 375 of its 521 records and matching
+then reported all 142 matched ions as blocked by a licence - two modules
+contradicting each other about the same records in the same run. Had the first real
+dataset been open-licensed instead, this would have sat undetected until the first
+academic-only source arrived, which is to say until the numbers mattered.
+
+The durable fix is not the two-line correction. It is
+`test_no_module_outside_the_three_that_should_asks_the_commercial_licence_question`,
+which asserts that only `reuse.py` and `sources.py` CALL the commercial predicate at
+all. A new call site now fails a test, so choosing between the two questions has to
+be a decision somebody writes down rather than a default nobody notices.
+
+WHAT THE SIX HAVE IN COMMON, and what to do about it. Green is not evidence. The
+question that catches all six is not "do the tests pass" but "what would have to
 break for this to go red, and is that the thing I think I am protecting". Note that
-three of the five were found by somebody asking that question about a mutation that
-had apparently behaved correctly, and none by a test going red. Concretely:
+three of the six were found by somebody asking that question about a mutation that
+had apparently behaved correctly, one by real data contradicting the code, and none
+by a test going red. Concretely:
 
 - when a mutation is killed, check WHICH test killed it and whether that test is
   about the guard. A mutation killed incidentally is a mutation with no cover.
@@ -198,9 +267,13 @@ had apparently behaved correctly, and none by a test going red. Concretely:
   uncompilable mutation is UNRUNNABLE, which this harness does not count as a
   kill, so it is a mutation nothing can ever satisfy.
 - when a fixture builds several cases, check the cases are actually distinct. Two
-  of these five were one helper quietly giving two different things the same
+  of these six were one helper quietly giving two different things the same
   identity, and in both the symptom was a count that was obviously wrong to anyone
   who looked at it.
+- when a predicate is SPLIT in two, find the inputs where the two disagree and test
+  the call site on those. A test whose data answers both questions identically
+  cannot tell which question the code is asking - and every existing test is, by
+  construction, data that passed before the split.
 
 ## 4A. Defects found during M0 and fixed
 
@@ -615,12 +688,166 @@ number from a real paper, quoted in CONTEXT.md and not read from the paper here.
 **The grading has never graded a real harmonized value**, because none exists. It
 has been exercised against synthetic strata only.
 
+## 7D. The first real data: the steroid interplatform study
+
+DOI 10.1021/jasms.2c00196, supporting file SI_3, sheet `S2_Interplatform CCS
+Database`. Converted by `tools/ingest_steroid.py`, which also writes the sheet out
+verbatim to `data/seed/as_delivered/js2c00196_si_003_S2.csv` so the conversion is
+diffable against its input from a clone with no `data/raw` directory.
+
+**142 cross-platform matched ions.** That is the first result in this project that
+describes real instruments, and it is what every remaining milestone was waiting
+for. 521 records, every row of the sheet accounted for, nothing transcribed by
+hand, no row lost. Two ions pair across two platforms, 43 across three, 97 across
+all four.
+
+### The coverage is uneven, and that is the real problem arriving early
+
+| platform | values |
+| --- | --- |
+| TWIMS, cross-laboratory average (n=12, four instruments) | 142 |
+| TIMS, timsTOF pro | 142 |
+| DTIMS single-field | 135 |
+| DTIMS stepped-field | 102 |
+
+**Forty ions have no stepped-field value at all**, and stepped-field is the only
+primary method here - the only one whose CCS is not read off a calibration curve.
+So for 40 of 142 ions there is no first-principles anchor in this dataset, and any
+harmonization of them rests on calibrated values alone. That is not a defect in
+the data; it is the condition the platform exists to handle, and it showed up in
+the very first source.
+
+### The trapped-ion calibrant is unstated, and it costs the best-agreeing platform
+
+The supporting information names the travelling-wave calibrant (Waters Major Mix)
+and the single-field drift-tube calibrant (Agilent ESI-L G1969-85000). For trapped
+ion mobility it states only the MASS calibration - "10 mM sodium formate and a 7th
+order high-performance calibration" - and then says: *"In addition to the external
+calibration, each sample was automatically post-run calibrated by injecting a 1:1
+mixture of both calibrants."*
+
+**"Both calibrants", and only one is named.** The sentence presupposes a second
+calibrant the methods never identify. The background section calls an Agilent tune
+mix typical for trapped ion mobility, with an "e.g.", and the same laboratory used
+exactly that mix for its single-field drift-tube work - so the likely answer is
+obvious. It is still an inference, and writing an inferred calibrant into a record
+as though the paper stated it is the one thing this repository is built not to do.
+So all 142 trapped-ion values carry `UNSTATED_CALIBRANT` and are HELD from
+training: present, counted, reported, and excluded from any fit.
+
+What that costs is worth stating plainly, because it is larger than it looks.
+Computed descriptively over the held records, trapped ion mobility agrees with the
+drift tube BETTER than travelling wave does - bias -0.32 per cent for [M+H]+
+against single-field DTIMS, Lin's concordance 0.998, 100 per cent of ions within 2
+per cent. Travelling wave against the same reference is -1.07 per cent. So the
+platform whose values are currently unusable is the one that agrees best.
+
+**This is the single highest-value curation action available.** One paragraph of
+one methods section, or one email to the authors, converts 142 held values into
+usable ones and takes the corpus from two technologies to three. It is recorded in
+the registry entry's `what_to_check` and it is not a code problem.
+
+### There is no pooled figure for any platform pair, and the adducts are why
+
+Each platform pair splits into three calibration-group strata, one per adduct,
+because the adduct is part of the calibration group. `statistics.py` refuses to
+pool them. That refusal was built against synthetic data and it earns itself here:
+the bias really does differ by adduct. Travelling wave against single-field DTIMS
+is -1.07 per cent for [M+H]+, -0.14 per cent for [M+Na]+ and -0.20 per cent for
+[M-H]-. A pooled number would have been an average of three different things, and
+would have looked like a finding.
+
+Negative mode is by some distance the worst case in the set: Lin's concordance
+0.963 against stepped-field DTIMS, limits of agreement spanning roughly 16 Å², and
+the largest lambda measured from reported uncertainties anywhere in this corpus
+(459.8, meaning the travelling-wave standard deviations are far larger than the
+drift tube's). Twenty-five ions is a small stratum, and nothing here separates "a
+genuinely harder measurement" from "a smaller n".
+
+### Five outliers, kept, and three compounds between them
+
+The outlier rule flagged five ion-stratum pairs, which are three compounds
+recurring across strata. The two worst are the largest and most flexible ions in
+the set: an undecylenate ester (+2.3 per cent between platforms) and a
+diglucuronide (+6.8 to +7.3 per cent). Every one stays in the data, in the
+statistics and in the reported counts.
+
+**A 7 per cent cross-platform disagreement on a real published ion is a result, not
+noise.** It is precisely where harmonization is hard, and removing it would erase
+the finding while improving every summary statistic. Whether it is a conformational
+difference, a misassigned peak or something else is a question for somebody who
+knows steroids; this repository's job was to surface it, and it did.
+
+### The shared-peak check fired on real data, four times
+
+Two different steroids - 4-androstene-17α-methyl-17β-ol-3-one and
+4-estrene-17α-ethinyl-17β-ol-3-one - are reported with an identical CCS of 177.76
+in one calibration group. Four records are held for review. Two isomers can
+genuinely agree to two decimal places, so this is not an accusation of a
+transcription fault in the paper. It is exactly what the check is for: hold it,
+name it, let a person decide. The check was written against synthetic collisions
+and had never seen a real one.
+
+### What was NOT ingested, and why
+
+The sheet carries a FIFTH platform column: a single-laboratory travelling-wave
+database from one Synapt G2-S, alongside the cross-laboratory average of four
+instruments. **It is not ingested.** Both columns are travelling wave in nitrogen
+against the same calibrant, so they land in one calibration group on one platform,
+which makes them a replicate pair - and matched-ion construction HOLDS an ion with
+replicates on one side of a comparison rather than averaging them or picking one.
+Ingesting both would have held all 142 ions and the dataset would have yielded
+nothing.
+
+That is a real limitation and not a tidy-up: 142 published values are in the
+repository's reach and are not in it. Using them needs a decision about what a
+same-platform replicate pair means for a cross-platform comparison, which is an M4
+question and is not answered by a conversion script. The count and the reason are
+printed by the adapter on every run rather than left in this file.
+
+### The compounds are identified by this dataset's names and nothing else
+
+The sheet gives a compound name, a commercial name, a formula and an m/z. Nothing
+identifies a structure - no InChIKey, no SMILES. None was invented and none was
+looked up: resolving 87 names against a structure database fails silently and
+wrongly on exactly the compounds that matter here, which are isomers with similar
+names, and a wrong structure assignment would be invisible downstream.
+
+So every compound is recorded as `steroid_jasms2022:<name>`. Within this dataset
+that is a real identity on the paper's own authority, which is what lets the 142
+ions pair at all. Across datasets it matches NOTHING, which is correct rather than
+unfortunate - and it means **this source cannot yet be pooled with CCSbase or the
+Bush Lab data even after those are ingested.** Resolving these names to structures
+is a curation act needing a provenance trail, and it is the prerequisite for any
+cross-source pairing.
+
+Two compound names carry an asterisk, which the sheet's own footnote explains as
+multiple conformations observed by drift tube or trapped ion mobility. The asterisk
+is KEPT in the recorded identity rather than stripped, because stripping it would
+merge a starred compound with an unstarred one of the same name.
+
+### The adapter reads columns by position, and nothing can mutation-test it
+
+`tools/ingest_steroid.py` reads platform columns by index, so it checks that every
+column it reads carries the header text it expects and refuses the sheet outright
+otherwise. Without that, a revised supporting file with one column inserted would
+be ingested silently, recording travelling-wave values as trapped-ion ones and
+producing a bias figure that looked like a result.
+
+That guard has a test. It does NOT have a mutation, and it cannot: the harness
+shadows `src/wmxccs` and only mutates files inside the package, by design - that
+design is what lets it guarantee it never writes the repository. So the adapter, and
+everything else under `tools/`, is tested but not mutation-verified. Given section
+4.5, that gap is named here rather than assumed harmless. Closing it means giving
+the harness a second shadow root, which touches the invariant that makes it safe,
+and was not worth doing inside this change.
+
 ## 8. Scope of the test suite
 
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 195 mutations against twelve modules. It is smaller than the
+- the catalogue holds 204 mutations against twelve modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;

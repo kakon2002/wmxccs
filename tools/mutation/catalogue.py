@@ -194,6 +194,27 @@ MUTATIONS: tuple[Mutation, ...] = (
         find='    Field(discriminator="kind_tag"),',
         replace="    Field(),",
     ),
+    Mutation(
+        label="[I] a small molecule identified by nothing at all is accepted",
+        file="identity.py",
+        find="        if self.inchikey is None and self.dataset_compound_id is None:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[I] a dataset-scoped compound stops being an identity atom, so the shared-peak check goes blind",
+        file="identity.py",
+        find='            atoms.add(f"dataset_compound:{self.dataset_compound_id}")',
+        replace="            pass",
+    ),
+    Mutation(
+        label="[I] a dataset id wins over an InChIKey, so a resolved compound stops pairing across sources",
+        file="identity.py",
+        # The PRECEDENCE reversed rather than the branch disabled. Disabling it puts
+        # None in an identity key, which breaks an import before any test of the rule
+        # runs - detected, but by an error that says nothing about precedence.
+        find='        if self.inchikey is not None:\n            return (AnalyteKind.SMALL_MOLECULE.value, "inchikey", self.inchikey)\n        return (AnalyteKind.SMALL_MOLECULE.value, "dataset_compound", self.dataset_compound_id)',
+        replace='        if self.dataset_compound_id is not None:\n            return (AnalyteKind.SMALL_MOLECULE.value, "dataset_compound", self.dataset_compound_id)\n        return (AnalyteKind.SMALL_MOLECULE.value, "inchikey", self.inchikey)',
+    ),
     # --- [M] models: the measurement and its key ------------------------------
     Mutation(
         label="[M] the matched-ion key carries the platform, so no pair can ever be found",
@@ -359,6 +380,12 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="models.py",
         find="        parts: list = [self.analyte]",
         replace="        parts: list = []",
+    ),
+    Mutation(
+        label="[M] a calibrant the source never named stops blocking training",
+        file="models.py",
+        find='        if getattr(self, "calibrant", None) == UNSTATED_CALIBRANT:',
+        replace="        if False:",
     ),
     # --- [L] licensing: the gate ----------------------------------------------
     Mutation(
@@ -841,7 +868,7 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[X] a member nobody may use stops blocking its matched set",
         file="matching.py",
-        find="            elif not can_train_commercial(status):",
+        find="            elif not can_use(status):",
         replace="            elif False:",
     ),
     Mutation(
@@ -1065,7 +1092,7 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[F] a source that may not be used stops disqualifying the correction",
         file="grading.py",
-        find="            if not can_train_commercial(status):",
+        find="            if not can_use(status):",
         replace="            if False:",
     ),
     Mutation(
@@ -1175,6 +1202,12 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="contracts.py",
         find="    matched_ions_behind_it: int = Field(\n        ge=0,",
         replace="    matched_ions_behind_it: int = Field(\n        default=0,\n        ge=0,",
+    ),
+    Mutation(
+        label="[D] the shared-peak check stops seeing dataset-scoped compounds on a row that failed",
+        file="loader.py",
+        find='        ("analyte_inchikey", "inchikey"),\n        ("analyte_dataset_compound_id", "dataset_compound"),',
+        replace='        ("analyte_inchikey", "inchikey"),',
     ),
     # --- [K] readiness: what refuses and what merely warns ---------------------
     Mutation(

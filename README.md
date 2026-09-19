@@ -14,13 +14,22 @@ Separate from the glycan platform. See `CLAUDE.md` for the constraints,
 
 **Deadline: deployable by 25 September 2026, 27 at the latest.**
 
-## Status: M0 to M3 complete, plus the API contract and the confidence scheme
+## Status: M0 to M3 complete, the API contract and confidence scheme done, and the first real data ingested
 
-The data layer is in place and the seed corpus loads. **No harmonization model
-exists, and there is not one cross-platform matched ion in the repository** — the
-117 seeded measurements are all travelling-wave from one laboratory. That is the
-expected M0 result, not a failure, and `readiness.py` reports it as a blocker with
-the reason rather than as a small number. See `LIMITATIONS.md` section 1.
+**142 cross-platform matched ions**, from the steroid interplatform study
+(DOI 10.1021/jasms.2c00196). 521 records, 375 of them clear to train, 2 ions paired
+across two platforms, 43 across three and 97 across all four. Converted by
+`tools/ingest_steroid.py`; nothing transcribed by hand.
+
+That is the first result here that describes real instruments, and it is what M4 was
+waiting for. **No harmonization model exists yet**, and every readiness report still
+stamps `provisional`. What the data does and does not support - uneven platform
+coverage, 142 trapped-ion values held by a calibrant the paper never names, compounds
+identified only within their own dataset - is in `LIMITATIONS.md` section 7D.
+
+The two Struwe seed files still pair nothing, for three independent reasons, and
+`readiness.py` reports that as a blocker with the reason rather than as a small
+number. See `LIMITATIONS.md` section 1.
 
 ## Layout
 
@@ -124,8 +133,8 @@ where a harmonization model will be confidently wrong.
 ## The API, and what it refuses
 
 Three endpoints. Two answer today; one will answer 501 until a harmonization model
-has been fitted on real cross-platform matched ions, of which this repository holds
-none.
+has been fitted. Real cross-platform matched ions now exist - 142 of them - so what
+stands between `/harmonize` and a number is the fitting itself, no longer the data.
 
 | | |
 |---|---|

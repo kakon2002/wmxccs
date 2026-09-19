@@ -52,7 +52,7 @@ from typing import Iterable, Mapping, Sequence
 
 from .identity import MatchedIonKey
 from .licensing import declares_synthetic
-from .reuse import ReuseStatus, as_reuse_status, can_train_commercial
+from .reuse import ReuseStatus, as_reuse_status, can_use
 
 # Why a matched set may not enter a fit.
 SYNTHETIC_SET = (
@@ -271,7 +271,15 @@ class MatchedIon:
                     f"the measurement from {_source_of(measurement.record)!r} has an unreadable reuse"
                     " status, so it is refused rather than assumed"
                 )
-            elif not can_train_commercial(status):
+            # can_use, NOT can_train_commercial. The two answer different
+            # questions and this line means the first: may THIS PLATFORM use the
+            # record. It asked the second until real academic_only data arrived,
+            # and then reported all 142 matched ions as blocked while the licence
+            # gate two modules away had cleared 375 of the records in them. The
+            # tests here were not wrong, they were blind: they use
+            # synthetic_fixture and open_attribution, which clear under either
+            # question, so the one branch where the questions differ never ran.
+            elif not can_use(status):
                 problems.append(
                     UNUSABLE_MEMBER.format(
                         source=_source_of(measurement.record),

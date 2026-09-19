@@ -82,6 +82,7 @@ ANALYTE_COLUMNS = (
     # small molecule
     "analyte_inchikey",
     "analyte_smiles",
+    "analyte_dataset_compound_id",
     # peptide, protein, antibody
     "analyte_sequence",
     "analyte_modifications",
@@ -822,6 +823,7 @@ def _as_failed(where: str, cells: Mapping[str, str]) -> _Failed:
     atoms = set()
     for column, namespace in (
         ("analyte_inchikey", "inchikey"),
+        ("analyte_dataset_compound_id", "dataset_compound"),
         ("analyte_wurcs", "wurcs"),
         ("analyte_glytoucan_ac", "glytoucan"),
         ("analyte_iupac_condensed", "iupac"),
