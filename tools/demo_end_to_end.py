@@ -161,6 +161,13 @@ def main() -> int:
     print(f"   maturity            {model.maturity.data_maturity.value},"
           f" {model.maturity.matched_ion_count} matched ions")
     print("   Provisional, and it cannot be otherwise while the corpus is one study.")
+    print()
+    print(f"   model version       {model.fingerprint.short}")
+    print(f"      corpus     {model.fingerprint.corpus}")
+    print(f"      parameters {model.fingerprint.parameters}")
+    print("   Two digests: the records behind the fit, and everything that decides an answer.")
+    print("   Quote them with any number from here, or it cannot be reproduced - the model is")
+    print("   refitted at every startup and nothing else records that the data or code moved.")
     return 0
 
 

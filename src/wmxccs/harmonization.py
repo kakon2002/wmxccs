@@ -81,11 +81,12 @@ reports interval WIDTH and the TAIL RATIO instead, and says so.
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
 from statistics import median
-from typing import Mapping, Sequence
+from typing import Iterable, Mapping, Sequence
 
 from .contracts import CorrectionBasis
 from .grading import Confidence, grade_correction
@@ -595,12 +596,148 @@ def fit_stratum(stratum: StratumStatistics, alpha: float = CONFORMAL_ALPHA) -> S
     )
 
 
+def _canonical(value: object) -> str:
+    """One spelling per value, so the same model always hashes the same.
+
+    Floats go through repr rather than format: repr round-trips exactly in Python 3, and a
+    rounded digest would call two different fits identical.
+    """
+    if value is None:
+        return "~"
+    if isinstance(value, float):
+        return repr(value)
+    return str(value)
+
+
+def _digest(lines: Sequence[str]) -> str:
+    """sha256 over SORTED lines, so the digest does not depend on iteration order."""
+    joined = "\n".join(sorted(lines))
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
+def corpus_digest(records: Iterable[object]) -> str:
+    """A digest of the measurements BEHIND THE FIT. Not of every file on disk.
+
+    Over the RECORDS rather than the files, so it is meaningful however the model was built
+    and so that two deployments reading the same data by different paths agree.
+
+    WHAT IT DOES NOT COVER, said plainly because the name suggests otherwise: a record that
+    feeds no correction is not in it. Loading a seed file whose measurements pair nothing -
+    the Struwe files are one platform, so they pair nothing - leaves this digest unchanged,
+    and so does deleting it. That is deliberate. The digest moves exactly when an ANSWER
+    could move, which is the promise being made; hashing every file instead would report a
+    change whenever any data moved, making two identical answers look like two models.
+    """
+    lines = []
+    for record in records:
+        analyte = getattr(record, "analyte", None)
+        identity = analyte.identity_key() if analyte is not None else None
+        lines.append(
+            "|".join(
+                _canonical(part)
+                for part in (
+                    identity,
+                    getattr(record, "adduct", None),
+                    getattr(record, "charge", None),
+                    getattr(record, "drift_gas", None),
+                    getattr(record, "ims_type", None),
+                    getattr(record, "dtims_method", None),
+                    getattr(record, "calibrant", None),
+                    getattr(record, "ccs", None),
+                    getattr(record, "ccs_uncertainty", None),
+                    getattr(record, "uncertainty_type", None),
+                    getattr(record, "conformer", None),
+                    getattr(record, "source", None),
+                    getattr(record, "doi", None),
+                )
+            )
+        )
+    return _digest(lines)
+
+
+def parameters_digest(corrections: Sequence["StratumCorrection"], alpha: float) -> str:
+    """A digest of everything that decides what a correction returns.
+
+    Includes the leave-one-out slopes, intercepts and residuals, because those set every
+    interval - a digest covering only the headline slope would call two models identical
+    while their intervals differed.
+    """
+    lines = [f"alpha|{_canonical(alpha)}"]
+    for correction in corrections:
+        robust = correction.robust
+        agreement = correction.stratum.agreement
+        loo = correction.loo
+        lines.append(
+            "|".join(
+                _canonical(part)
+                for part in (
+                    correction.reference_platform,
+                    correction.other_platform,
+                    correction.stratum.reference_group,
+                    correction.stratum.other_group,
+                    correction.n,
+                    correction.basis.value,
+                    correction.is_applied,
+                    correction.median_offset_percent,
+                    None if robust is None else robust.slope,
+                    None if robust is None else robust.intercept,
+                    None if robust is None else robust.slope_interval,
+                    agreement.deming_slope,
+                    agreement.deming_intercept,
+                    None if loo is None else loo.slopes,
+                    None if loo is None else loo.intercepts,
+                    None if loo is None else loo.residuals,
+                )
+            )
+        )
+    return _digest(lines)
+
+
+@dataclass(frozen=True)
+class ModelFingerprint:
+    """What this model is, so that two answers can be told apart or told the same.
+
+    Carried on `/health` and on every harmonized estimate. An answer without one cannot be
+    reproduced: the model is refitted at every startup, and nothing else records that the
+    data or the code behind it moved.
+
+    TWO DIGESTS, AND THE PAIR IS THE USEFUL PART:
+
+      corpus      over the records BEHIND THE FIT - not the files they came from, and not
+                  every record loaded. A measurement that feeds no correction is not in it,
+                  so data that cannot change an answer does not change this. It moves
+                  exactly when an answer could.
+      parameters  over everything that decides an answer: which stratum applies, on what
+                  basis, with which slopes, intercepts and offsets, and the leave-one-out
+                  residuals that set every interval.
+
+    A different corpus with the same parameters means the data moved without moving the fit.
+    The same corpus with different parameters means the code did. One combined hash would
+    say only that something had.
+    """
+
+    corpus: str
+    parameters: str
+
+    @property
+    def short(self) -> str:
+        """Twelve hex characters of each, for logs and for a human comparing two responses."""
+        return f"{self.corpus[:12]}/{self.parameters[:12]}"
+
+    def same_corpus_as(self, other: "ModelFingerprint") -> bool:
+        return self.corpus == other.corpus
+
+    def same_parameters_as(self, other: "ModelFingerprint") -> bool:
+        return self.parameters == other.parameters
+
+
 @dataclass(frozen=True)
 class HarmonizationModel:
     """Every stratum correction, and the scope of the corpus they were fitted on."""
 
     corrections: tuple[StratumCorrection, ...]
     scope: ScopeStamp
+    fingerprint: ModelFingerprint
     alpha: float = CONFORMAL_ALPHA
 
     @property
@@ -658,6 +795,8 @@ class HarmonizationModel:
             f"  headline basis             {self.basis_counts}",
             f"  maturity                   {self.maturity.data_maturity.value},"
             f" {self.maturity.matched_ion_count} matched ions",
+            f"  fingerprint                {self.fingerprint.short}"
+            f"   (corpus/parameters, sha256)",
             f"  SCOPE                      {self.scope.caveat()}",
             f"  {COVERAGE_IS_NOT_EVIDENCE}",
             "",
@@ -689,7 +828,22 @@ def fit_harmonization(comparison: ComparisonReport, alpha: float = CONFORMAL_ALP
         scope = stamp_over_stamps([c.scope for c in corrections])
     else:
         scope = ScopeStamp(studies=(), instruments=(), platforms=(), records_behind_it=0)
-    return HarmonizationModel(corrections=corrections, scope=scope, alpha=alpha)
+    # Over the DISTINCT records behind the fit. A record paired into several strata is one
+    # measurement and is counted once, or the digest would depend on how many comparisons
+    # happened to use it.
+    records = {
+        id(record): record
+        for correction in corrections
+        for point in correction.stratum.points
+        for record in (point.reference, point.other)
+    }
+    fingerprint = ModelFingerprint(
+        corpus=corpus_digest(records.values()),
+        parameters=parameters_digest(corrections, alpha),
+    )
+    return HarmonizationModel(
+        corrections=corrections, scope=scope, fingerprint=fingerprint, alpha=alpha
+    )
 
 
 def assert_may_be_published(model: HarmonizationModel, claim: Claim) -> None:

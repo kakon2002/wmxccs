@@ -1434,25 +1434,72 @@ packaging convenience is exactly the kind of thing this repository exists not to
 An editable install from a clone resolves `data/seed` in the source tree and serves a real
 model. That is the supported deployment and it is what was verified.
 
-### What M5 did not do, and would need deciding
+### Model versioning: DONE, and what it does and does not promise
 
-- **No authentication, no rate limiting, no CORS policy.** The server binds 127.0.0.1 by
-  default rather than 0.0.0.0, which is the only concession to this. Exposing it needs a
-  decision about who may call it.
-- **No persistence and no model versioning.** The model is refitted from the seed files at
-  every startup, so two deployments on the same data give the same answers, and a changed
-  seed file changes the answers with nothing recording that it did.
-- **One request builds no matched ions of its own.** A caller submitting two platforms'
-  values for one ion gets each corrected against the stored model; the pair they sent is
-  not added to the corpus. That is the honest behaviour for a fitted model and it means the
-  API cannot be used to grow the corpus.
+Every response carries a `model_version` with two sha256 digests, and `/health` carries the
+same pair, so an answer can be reproduced or told apart from another.
+
+| | |
+| --- | --- |
+| `corpus_sha256` | over the records BEHIND THE FIT |
+| `parameters_sha256` | over everything that decides an answer: which stratum applies, on what basis, the slopes, intercepts and offsets, and the leave-one-out residuals that set every interval |
+
+Two rather than one, because the pair says WHAT changed: a different corpus with the same
+parameters means the data moved without moving the fit; the same corpus with different
+parameters means the code did. Measured: changing one cross section by 0.001 square angstrom
+moves both.
+
+**What "corpus" does NOT mean, because the name suggests otherwise.** It covers the records
+that feed a correction, not every file on disk. The Struwe seed files pair nothing, so
+adding or removing them leaves the digest unchanged - and leaves every answer unchanged too,
+which is the point. The digest moves exactly when an answer could. Hashing every file would
+be a weaker promise: it would make two identical answers look like they came from different
+models whenever unrelated data moved.
+
+The model is still refitted at every startup. That stays, and it is now safe: the same data
+gives the same digest, so two deployments that agree can be shown to agree.
+
+### Three deliberate omissions, each with what closing it would take
+
+Recorded as decisions rather than as a to-do list. Each needs somebody to decide, not
+somebody to code.
+
+**1. No authentication and no authorisation.** The server binds `127.0.0.1` rather than
+`0.0.0.0`, which is the correct default and the only concession made. *To close it:* a
+decision from the CEO about who may call this - internal only, named collaborators, or
+public - because that decision determines the mechanism. An internal service needs a network
+boundary and nothing else; named collaborators need API keys and a way to revoke them;
+public access needs accounts. Building any of the three before the decision means building
+two of them wrongly. Note also that the licence terms bear on this: the data is
+`academic_only`, so an interface serving derived values to unknown callers is a licence
+question before it is an engineering one.
+
+**2. No CORS policy.** Nothing sets `Access-Control-Allow-Origin`, so no browser page on
+another origin can call this. That is the safe default and it is deliberate. *To close it:*
+the same decision as above, plus a list of origins. A permissive `*` would be the wrong
+answer for academic-only data regardless of who is asking.
+
+**3. No rate limiting.** *To close it:* it follows the first decision and needs one more
+piece of information - what a legitimate caller's peak volume looks like - which nobody has
+because there are no callers yet. Guessing a limit now would either throttle a real user or
+protect nothing.
+
+**And a fourth, which is a design choice rather than an omission: a request never grows the
+corpus.** A caller submitting two platforms' values for one ion gets each corrected against
+the stored model; the pair they sent is not added to anything. This is deliberate and should
+stay deliberate. Accepting submitted measurements into the corpus would mean taking
+unverified data through the licence gate on a stranger's assertion, refitting the model
+between requests so two callers get different answers from the same version, and losing the
+provenance chain that makes any of these numbers quotable. *To close it:* a curation queue
+where submissions are held, licence-checked by a named person, and merged deliberately -
+which is a product, not a feature.
 
 ## 8. Scope of the test suite
 
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 242 mutations against fifteen modules. It is smaller than the
+- the catalogue holds 248 mutations against fifteen modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;

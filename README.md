@@ -87,7 +87,7 @@ Three endpoints:
 
 | | |
 |---|---|
-| `GET /health` | version, whether a model is loaded, how many matched ions it rests on |
+| `GET /health` | version, whether a model is loaded, how many matched ions it rests on, and the model's two sha256 digests |
 | `GET /confidence/rules` | the grading scheme as data, so it can be challenged |
 | `POST /harmonize` | 200 with harmonized values, or 501 where the model covers nothing |
 
@@ -119,7 +119,7 @@ what the result may and may not be called. It asserts nothing; the assertions ar
 ### Checking it
 
 ```
-.venv/Scripts/python -m pytest                  # 2060 tests
+.venv/Scripts/python -m pytest                  # 2094 tests
 PYTHONPATH=. .venv/Scripts/python -c "import sys; sys.argv=['r']; from tools.mutation.runner import main; raise SystemExit(main())"
 ```
 
@@ -234,7 +234,7 @@ stands between `/harmonize` and a number is the fitting itself, no longer the da
 
 | | |
 |---|---|
-| `GET /health` | version, whether a model is loaded, how many matched ions it rests on |
+| `GET /health` | version, whether a model is loaded, how many matched ions it rests on, and the model's two sha256 digests |
 | `GET /confidence/rules` | the grading scheme as data, so it can be argued with |
 | `POST /harmonize` | **501**, with your measurements returned untouched |
 

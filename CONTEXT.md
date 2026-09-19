@@ -312,11 +312,19 @@ packaging convenience, is the sort of thing this project exists not to do. If a 
 deployment is ever wanted, that decision has to be taken explicitly and recorded in the
 registry.
 
-Not done, and each needs a decision rather than code: authentication, rate limiting and CORS
-(the server binds 127.0.0.1, which is the only concession); model versioning, since the model
-is refitted from the seed files at every startup and a changed seed file changes the answers
-with nothing recording that it did; and growing the corpus from submitted measurements, which
-the API deliberately does not do.
+**Model versioning is DONE.** Every estimate and /health carry two sha256 digests: one over
+the records behind the fit, one over the fitted parameters including the leave-one-out
+residuals that set every interval. Two rather than one, because the pair says what changed -
+data or code. Changing one cross section by 0.001 square angstrom moves both. Refitting per
+startup stays, and is now safe because the same data gives the same digest.
+
+Left undone DELIBERATELY, each needing a decision rather than code, and each recorded in
+LIMITATIONS 7G with what closing it would take: authentication and authorisation (the server
+binds 127.0.0.1, the correct default; the mechanism depends on a CEO decision about who may
+call it, and the academic_only licence bears on that before the engineering does); CORS; rate
+limiting (nobody knows a legitimate caller's peak volume because there are no callers);
+and growing the corpus from submitted measurements, which is a curation product rather than a
+feature and should stay undone.
 
 ## Domain facts already established
 

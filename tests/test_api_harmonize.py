@@ -232,3 +232,150 @@ def test_a_malformed_request_is_still_a_422_and_not_a_refusal(served):
     """Validation happens before any of this. A 501 swallowing bad input would mislead."""
     assert served.post("/harmonize", json={"measurements": []}).status_code == 422
     assert served.post("/harmonize", json={"nonsense": 1}).status_code == 422
+
+
+# --- model versioning: what makes an answer repeatable ----------------------------------------
+#
+# The model is refitted from the seed files at every startup. That is fine. What is not fine
+# is a changed seed file changing the answers with nothing recording it: two deployments
+# could give different numbers for one input and neither response would say so. These tests
+# are the difference between a demonstration and something somebody can rely on twice.
+
+
+def test_the_fingerprint_is_identical_across_two_fits_of_the_same_data():
+    """Deterministic, or it identifies nothing.
+
+    sha256 over a sorted canonical form with floats written by repr. No paths, no timestamps,
+    no dict ordering - all three would make two fits of one corpus look like two models.
+    """
+    first = build_default_model(SEED_DIRECTORY)
+    second = build_default_model(SEED_DIRECTORY)
+    assert first.fingerprint == second.fingerprint
+    assert first.fingerprint.corpus == second.fingerprint.corpus
+    assert first.fingerprint.parameters == second.fingerprint.parameters
+
+
+def test_the_same_data_reached_by_a_different_path_gives_the_same_fingerprint(tmp_path):
+    """Over the RECORDS, not the files, so a copy of the corpus is the same corpus."""
+    import shutil
+
+    for source in SEED_DIRECTORY.glob("*.csv"):
+        shutil.copy(source, tmp_path / source.name)
+    assert build_default_model(tmp_path).fingerprint == build_default_model(SEED_DIRECTORY).fingerprint
+
+
+def test_changing_one_cross_section_by_a_thousandth_changes_both_digests(tmp_path):
+    """The property the whole mechanism exists for.
+
+    A digest that did not move on a changed measurement would be decoration. Both move: the
+    corpus because a record changed, the parameters because the fit did.
+    """
+    import csv
+    import shutil
+
+    for source in SEED_DIRECTORY.glob("*.csv"):
+        shutil.copy(source, tmp_path / source.name)
+    before = build_default_model(tmp_path).fingerprint
+
+    target = tmp_path / "steroid_jasms2022.csv"
+    rows = list(csv.DictReader(target.open(newline="", encoding="utf-8")))
+    rows[0]["ccs"] = str(float(rows[0]["ccs"]) + 0.001)
+    with target.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+    after = build_default_model(tmp_path).fingerprint
+    assert not after.same_corpus_as(before), "a changed measurement must change the corpus digest"
+    assert not after.same_parameters_as(before), "and the fit it feeds"
+
+
+def test_dropping_measurements_that_feed_a_correction_changes_the_fingerprint(tmp_path):
+    """Removing data the fit uses is a change, and a digest that missed it would be worse than none."""
+    import csv
+    import shutil
+
+    for source in SEED_DIRECTORY.glob("*.csv"):
+        shutil.copy(source, tmp_path / source.name)
+    full = build_default_model(tmp_path).fingerprint
+
+    target = tmp_path / "steroid_jasms2022.csv"
+    rows = list(csv.DictReader(target.open(newline="", encoding="utf-8")))
+    with target.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator=chr(10))
+        writer.writeheader()
+        writer.writerows(rows[:-40])
+
+    assert build_default_model(tmp_path).fingerprint != full
+
+
+def test_removing_data_that_feeds_no_correction_leaves_the_fingerprint_alone(tmp_path):
+    """Deliberate, and the opposite of what the name "corpus" suggests.
+
+    The Struwe seed files are all travelling-wave from one laboratory, so they pair nothing,
+    enter no stratum and can change no answer. Removing them therefore changes nothing a
+    caller could observe, and the digest says so.
+
+    This was written the other way round first, on the assumption that a digest called
+    "corpus" covers everything on disk. It does not, and the weaker promise would be worse:
+    hashing every file would make two identical answers look like they came from different
+    models whenever unrelated data moved.
+    """
+    import shutil
+
+    for source in SEED_DIRECTORY.glob("*.csv"):
+        shutil.copy(source, tmp_path / source.name)
+    full = build_default_model(tmp_path).fingerprint
+
+    struwe = tmp_path / "struwe2016_chemcommun.csv"
+    assert struwe.exists()
+    struwe.unlink()
+
+    assert build_default_model(tmp_path).fingerprint == full
+
+
+def test_the_two_digests_answer_different_questions():
+    """Which is why there are two rather than one combined hash.
+
+    A different corpus with the same parameters means the data moved without moving the fit;
+    the same corpus with different parameters means the code did. One hash says only that
+    something changed.
+    """
+    model = build_default_model(SEED_DIRECTORY)
+    assert model.fingerprint.corpus != model.fingerprint.parameters
+    assert len(model.fingerprint.corpus) == 64
+    assert len(model.fingerprint.parameters) == 64
+    assert model.fingerprint.short.count("/") == 1
+
+
+def test_health_serves_the_version_of_the_model_it_is_running(served):
+    payload = served.get("/health").json()
+    expected = build_default_model(SEED_DIRECTORY).fingerprint
+    assert payload["model_version"]["corpus_sha256"] == expected.corpus
+    assert payload["model_version"]["parameters_sha256"] == expected.parameters
+
+
+def test_health_reports_no_version_where_no_model_is_loaded():
+    """Absent, not a placeholder hash. There is no model to identify."""
+    payload = TestClient(create_app(None)).get("/health").json()
+    assert payload["model_loaded"] is False
+    assert payload["model_version"] is None
+
+
+def test_every_harmonized_estimate_carries_the_version_that_produced_it(served, records):
+    """Required with no default: an answer that cannot say which model made it cannot be repeated."""
+    estimate = served.post("/harmonize", json=body_for(a_covered_record(records))).json()[
+        "measurements"
+    ][0]["harmonized"]
+    expected = build_default_model(SEED_DIRECTORY).fingerprint
+    assert estimate["model_version"]["corpus_sha256"] == expected.corpus
+    assert estimate["model_version"]["parameters_sha256"] == expected.parameters
+
+
+def test_the_version_on_an_estimate_matches_the_one_on_health(served, records):
+    """So a caller can tell whether the answer they hold came from the model now running."""
+    health = served.get("/health").json()["model_version"]
+    estimate = served.post("/harmonize", json=body_for(a_covered_record(records))).json()[
+        "measurements"
+    ][0]["harmonized"]["model_version"]
+    assert health == estimate

@@ -36,8 +36,10 @@ from pydantic import ValidationError
 
 from wmxccs import sources
 from wmxccs.api import CONFIDENCE_NOTE, create_app, provenance_of
+from wmxccs.harmonization import ModelFingerprint
 from wmxccs.scope import ComparisonScope, ScopeStamp
 from wmxccs.contracts import (
+    ModelVersion,
     ScopeReport,
     ConfidenceReport,
     CorrectionBasis,
@@ -82,6 +84,7 @@ class _StubModel:
         )
         self.applied = ()
         self.corrections = ()
+        self.fingerprint = ModelFingerprint(corpus="c" * 64, parameters="d" * 64)
         # `harmonize` reads the model's scope to report it on a refusal, so the stub
         # carries a real one rather than a mock: a scope is derived from provenance and
         # there is nothing about it to fake.
@@ -521,6 +524,7 @@ def good_estimate(**overrides) -> dict:
         scope=ScopeReport(**good_scope()),
         interval_is_informative=True,
         guaranteed_coverage=0.80,
+        model_version=ModelVersion(corpus_sha256="a" * 64, parameters_sha256="b" * 64),
     )
     fields.update(overrides)
     return fields

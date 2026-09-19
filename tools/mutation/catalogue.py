@@ -1452,6 +1452,42 @@ MUTATIONS: tuple[Mutation, ...] = (
         find="        scope=ScopeReport.of(result.scope),",
         replace="        scope=ScopeReport.of(correction.stratum.points[0].ion.key),",
     ),
+    Mutation(
+        label="[H] the corpus digest stops depending on the measurement values",
+        file="harmonization.py",
+        find='                    getattr(record, "ccs", None),',
+        replace="                    None,",
+    ),
+    Mutation(
+        label="[H] the parameters digest stops covering the leave-one-out residuals that set every interval",
+        file="harmonization.py",
+        find="                    None if loo is None else loo.residuals,",
+        replace="                    None,",
+    ),
+    Mutation(
+        label="[H] the digest is order-dependent, so one model hashes two ways",
+        file="harmonization.py",
+        find='    joined = "\\n".join(sorted(lines))',
+        replace='    joined = "\\n".join(lines)',
+    ),
+    Mutation(
+        label="[H] floats are rounded into the digest, so two different fits hash the same",
+        file="harmonization.py",
+        find="    if isinstance(value, float):\n        return repr(value)",
+        replace='    if isinstance(value, float):\n        return f"{value:.3f}"',
+    ),
+    Mutation(
+        label="[A] an estimate is served with a model version that is not the one that produced it",
+        file="api.py",
+        find="        model_version=ModelVersion.of(fingerprint),",
+        replace='        model_version=ModelVersion.of(type(fingerprint)(corpus="0" * 64, parameters="0" * 64)),',
+    ),
+    Mutation(
+        label="[A] health stops reporting which model it is running",
+        file="api.py",
+        find="            model_version=None if loaded is None else ModelVersion.of(loaded.fingerprint),",
+        replace="            model_version=None,",
+    ),
     # --- [K] readiness: what refuses and what merely warns ---------------------
     Mutation(
         label="[K] a single-platform corpus is reported as ready to compare",

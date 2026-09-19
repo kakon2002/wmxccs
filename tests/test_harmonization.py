@@ -15,6 +15,7 @@ import pytest
 from wmxccs.contracts import CorrectionBasis
 from wmxccs.harmonization import (
     PRIMARY_REFERENCE,
+    corpus_digest,
     fit_harmonization,
     harmonize,
     jackknife_plus,
@@ -388,3 +389,94 @@ def test_two_adducts_of_one_platform_get_different_corrections(model):
     assert len(set(offsets.values())) == 3, "three adducts must give three different offsets"
     # and they differ by more than rounding: -0.44, -0.08, -0.76
     assert max(offsets.values()) - min(offsets.values()) > 0.5
+
+
+# --- the digest internals ------------------------------------------------------------------
+#
+# These are function-level on purpose. The end-to-end versioning tests change a measurement,
+# which moves the records, the fit and the residuals together - so they cannot establish
+# which of those the digest actually depends on. All three properties below survived the
+# mutation sweep until they were tested directly.
+
+
+def test_the_digest_does_not_depend_on_the_order_the_lines_arrive_in():
+    """Sorted before hashing, or one model hashes two ways on two runs.
+
+    Dict and set iteration order is stable within a run and not guaranteed across changes to
+    the code that builds them. A digest that moved with it would report a model change on
+    every refactor.
+    """
+    from wmxccs.harmonization import _digest
+
+    lines = ["gamma|3", "alpha|1", "beta|2"]
+    assert _digest(lines) == _digest(list(reversed(lines)))
+    assert _digest(lines) == _digest(sorted(lines))
+    # and it still depends on the CONTENT
+    assert _digest(lines) != _digest(lines + ["delta|4"])
+
+
+def test_the_corpus_digest_does_not_depend_on_record_order(report):
+    records = list(report.cleared)
+    assert corpus_digest(records) == corpus_digest(list(reversed(records)))
+    assert corpus_digest(records) != corpus_digest(records[:-1])
+
+
+def test_floats_enter_the_digest_exactly_and_are_not_rounded():
+    """A rounded digest calls two different fits identical.
+
+    repr round-trips exactly in Python 3. Formatting to a few decimal places would make any
+    change below that precision invisible - and a slope differing in the ninth decimal is a
+    different fit, however little it matters to an answer.
+    """
+    from wmxccs.harmonization import _canonical
+
+    assert _canonical(1.0) != _canonical(1.000000001)
+    assert _canonical(0.1 + 0.2) != _canonical(0.3)
+    assert float(_canonical(1.2345678901234567)) == 1.2345678901234567
+
+
+def test_a_change_far_below_three_decimal_places_still_moves_the_corpus_digest(report):
+    """The end-to-end test changes a value by 0.001, which survives rounding. This does not."""
+    records = list(report.cleared)
+    nudged = [records[0].model_copy(update={"ccs": records[0].ccs + 1e-9})] + records[1:]
+    assert corpus_digest(nudged) != corpus_digest(records)
+
+
+def test_the_parameters_digest_covers_the_residuals_that_set_every_interval(model):
+    """Two models with identical fits and different residuals are two models.
+
+    The residuals decide every interval, so a digest omitting them would call a model with
+    twice the interval width identical to this one. Nothing in the end-to-end tests can see
+    that, because changing the data changes the slopes too.
+    """
+    import dataclasses
+
+    from wmxccs.harmonization import parameters_digest
+
+    corrections = list(model.applied)
+    original = parameters_digest(corrections, model.alpha)
+
+    first = corrections[0]
+    widened = dataclasses.replace(
+        first, loo=dataclasses.replace(first.loo, residuals=tuple(r * 2 for r in first.loo.residuals))
+    )
+    altered = [widened] + corrections[1:]
+
+    assert parameters_digest(altered, model.alpha) != original
+
+
+def test_the_parameters_digest_covers_alpha(model):
+    """The coverage level is part of what an answer is, so it is part of the digest."""
+    from wmxccs.harmonization import parameters_digest
+
+    corrections = list(model.applied)
+    assert parameters_digest(corrections, 0.10) != parameters_digest(corrections, 0.05)
+
+
+def test_the_parameters_digest_does_not_depend_on_stratum_order(model):
+    from wmxccs.harmonization import parameters_digest
+
+    corrections = list(model.applied)
+    assert parameters_digest(corrections, model.alpha) == parameters_digest(
+        list(reversed(corrections)), model.alpha
+    )

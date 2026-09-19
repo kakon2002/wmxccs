@@ -57,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
             f" {model.maturity.matched_ion_count} matched ions,"
             f" maturity {model.maturity.data_maturity.value}"
         )
+        print(f"  model version: {model.fingerprint.short}  (corpus/parameters, sha256)")
         print(f"  SCOPE: {model.scope.caveat()}")
     print(f"  serving on http://{args.host}:{args.port}  (docs at /docs)")
 

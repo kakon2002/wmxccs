@@ -54,6 +54,7 @@ from .contracts import (
     HarmonizeResponse,
     HealthResponse,
     IntervalKind,
+    ModelVersion,
     ScopeReport,
     SourceProvenance,
 )
@@ -143,7 +144,7 @@ def build_default_model(directory: Path | None = None) -> HarmonizationModel | N
     return model if model.applied else None
 
 
-def _estimate_of(result) -> HarmonizedEstimate:
+def _estimate_of(result, fingerprint) -> HarmonizedEstimate:
     """Convert a harmonization result into the contract's estimate.
 
     Both coverage figures travel: `interval_coverage` is the nominal level the quantiles
@@ -166,6 +167,7 @@ def _estimate_of(result) -> HarmonizedEstimate:
         scope=ScopeReport.of(result.scope),
         interval_is_informative=band.interval_is_informative,
         guaranteed_coverage=band.guaranteed_coverage,
+        model_version=ModelVersion.of(fingerprint),
     )
 
 
@@ -222,7 +224,7 @@ def _harmonized_measurement(model: HarmonizationModel | None, record) -> Harmoni
     return HarmonizedMeasurement(
         original=record,
         provenance=provenance,
-        harmonized=_estimate_of(result),
+        harmonized=_estimate_of(result, model.fingerprint),
         confidence=confidence,
     )
 
@@ -262,6 +264,7 @@ def create_app(model: HarmonizationModel | None = None) -> FastAPI:
             version=__version__,
             model_loaded=loaded is not None,
             matched_ions_available=0 if loaded is None else loaded.maturity.matched_ion_count,
+            model_version=None if loaded is None else ModelVersion.of(loaded.fingerprint),
         )
 
     @app.get("/confidence/rules", response_model=ConfidenceRulesResponse)

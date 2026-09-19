@@ -48,6 +48,47 @@ from .readiness import DataMaturity, MaturityStamp
 from .reuse import ReuseStatus
 
 
+class ModelVersion(BaseModel):
+    """Which model produced an answer, so the answer can be reproduced or told apart.
+
+    TWO DIGESTS rather than one, and the pair is the useful part. A different corpus with
+    the same parameters means the data moved without moving the fit; the same corpus with
+    different parameters means the code did. A single combined hash would say only that
+    something had.
+
+    The model is refitted from the seed files at every startup, which is fine. What is not
+    fine is a changed seed file changing the answers with nothing recording it - two
+    deployments could give different numbers for one input and neither response would say
+    so. This is what makes an answer repeatable.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    corpus_sha256: str = Field(
+        min_length=64,
+        max_length=64,
+        description="Over the records BEHIND THE FIT - not the files they came from, and not every record"
+        " loaded. A measurement that feeds no correction is not in it, so data that cannot change an"
+        " answer does not change this digest. It moves exactly when an answer could.",
+    )
+    parameters_sha256: str = Field(
+        min_length=64,
+        max_length=64,
+        description="Over everything that decides an answer: which stratum applies, on what basis, with"
+        " which slopes and offsets, and the leave-one-out residuals that set every interval.",
+    )
+
+    @property
+    def short(self) -> str:
+        return f"{self.corpus_sha256[:12]}/{self.parameters_sha256[:12]}"
+
+    @classmethod
+    def of(cls, fingerprint) -> "ModelVersion":
+        return cls(
+            corpus_sha256=fingerprint.corpus, parameters_sha256=fingerprint.parameters
+        )
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     version: str
@@ -57,8 +98,12 @@ class HealthResponse(BaseModel):
     )
     matched_ions_available: int = Field(
         ge=0,
-        description="Cross-platform matched ions the loaded model rests on. Zero while none exist, which"
-        " is why no model does.",
+        description="Cross-platform matched ions the loaded model rests on. Zero where none is loaded.",
+    )
+    model_version: ModelVersion | None = Field(
+        default=None,
+        description="Absent only where no model is loaded. Compare it against the version on an estimate"
+        " to know whether two answers came from the same model.",
     )
 
 
@@ -206,6 +251,10 @@ class HarmonizedEstimate(BaseModel):
     scope: ScopeReport = Field(
         description="REQUIRED, no default. What this correction may be quoted as. A harmonized cross"
         " section cannot be serialised without it."
+    )
+    model_version: ModelVersion = Field(
+        description="REQUIRED, no default. Which model produced this number. Without it the same input"
+        " could give two different answers on two days with nothing saying which was which."
     )
     interval_is_informative: bool = Field(
         description="False where the interval is the full observed range - honest, and excluding nothing."
