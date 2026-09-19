@@ -247,6 +247,45 @@ Two things about how it is recorded, both deliberate:
 If the platform is ever commercialised, one constant changes and the gate refuses all
 three again without anybody re-reading a licence page.
 
+## M4 is built, and one piece of the guidance for it turned out to be wrong
+
+Built 19 September 2026 on the 93 four-platform matched ions that clear the gate.
+`robust.py`, `scope.py`, `harmonization.py`. See LIMITATIONS 7F.
+
+The guidance was: report both the slope-derived and median-derived correction, prefer a
+robust fit, keep the leverage check. Two of those held. The third needs correcting, and
+the correction came from the data rather than from an argument:
+
+**"Prefer a robust fit" is right; "prefer the robust SLOPE" is not.** Passing-Bablok
+does exactly what was wanted - on one clean line, wrecking a single point moves the Deming
+slope from 1.04 to over 6 and does not move the robust slope at all, and in negative mode
+it flattens Deming slopes of 1.11-1.19 back to 1.00-1.07. But having flattened them, the
+slope is then indistinguishable from 1 in 8 of 18 strata, and an affine correction fitted
+through a slope that is indistinguishable from 1 is a constant offset with extra
+extrapolation risk. So the headline basis is DERIVED:
+
+    ROBUST_SLOPE   where the Passing-Bablok rank interval on the slope excludes 1
+    MEDIAN         otherwise
+
+All three corrections are still computed and reported every time, exactly as instructed.
+
+**The leverage check is kept, it never fires on this corpus, and on half the strata it
+cannot even be computed.** Measured: leverage runs 0.044 to 0.340 per cent against a limit
+of 0.5, so `correction_driven_by_outliers` is silent on all 18 strata - and in 8 of the 18
+`slope_leverage_percent` returns None, because those strata have no outliers to exclude or
+too few points left once they are. So the check is silent on ten and inert on eight.
+
+That is recorded rather than tuned. The threshold is anchored to published stepped-field
+DTIMS interlaboratory reproducibility, and lowering it until something fired would be
+fitting the guard to the data. But "it never fires" and "it cannot fire here" are
+different statements, and the second one is the one that should worry a reader: a check
+that returns None on 44 per cent of strata is not covering them.
+
+**One number in this document was a pre-gate count presented as trainable.** "97 across
+all four" is the histogram over all 521 records; over the 517 that clear the gate it is
+93, the difference being four records the shared-peak check holds. Both are true and they
+answer different questions. Corrected in place here and in LIMITATIONS 7D.
+
 ## Domain facts already established
 
 - Interlab DTIMS reproducibility: 0.29% RSD stepped field, 0.54% bias single field

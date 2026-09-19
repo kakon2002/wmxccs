@@ -14,18 +14,41 @@ Separate from the glycan platform. See `CLAUDE.md` for the constraints,
 
 **Deadline: deployable by 25 September 2026, 27 at the latest.**
 
-## Status: M0 to M3 complete, the API contract and confidence scheme done, and the first real data ingested
+## Status: M0 to M4 complete. A harmonization model fitted on real cross-platform data
 
 **142 cross-platform matched ions**, from the steroid interplatform study
 (DOI 10.1021/jasms.2c00196). 521 records, 517 of them clear to train, 2 ions paired
-across two platforms, 43 across three and 97 across all four. Converted by
+across two platforms, 43 across three and 97 across all four - and 93 of those 97 span
+four platforms in records that may TRAIN, the other four being held by the shared-peak
+check. Converted by
 `tools/ingest_steroid.py`; nothing transcribed by hand.
 
-That is the first result here that describes real instruments, and it is what M4 was
-waiting for. **No harmonization model exists yet**, and every readiness report still
-stamps `provisional`. What the data does and does not support - uneven platform
-coverage, 142 trapped-ion values held by a calibrant the paper never names, compounds
-identified only within their own dataset - is in `LIMITATIONS.md` section 7D.
+**M4 is built on those ions.** Eighteen strata - six platform pairs by three adducts,
+never pooled - each fitted three ways, of which only the nine anchored on stepped-field
+DTIMS are ever applied. 417 of 517 cleared records are corrected; the other 100 are
+already on the primary platform. The original measurement is returned untouched beside
+every corrected one.
+
+Three things about it are worth knowing before reading any number it produces:
+
+- **The headline correction is chosen, not fixed.** Passing-Bablok where its rank interval
+  on the slope excludes 1, the median offset otherwise - 10 strata and 8. All three
+  corrections are always reported, because they diverge exactly when a few ions are
+  levering the fit. On one clean line, wrecking a single point moves the Deming slope from
+  1.04 to over 6 and does not move the robust slope at all.
+- **The interval is guaranteed at 80 per cent, not 90.** Grouped leave-one-compound-out
+  jackknife+ needs no train/calibrate split, which matters because a split-conformal
+  interval on these stratum sizes would be the full observed range. The method proves
+  1-2*alpha, and both numbers travel with every interval.
+- **Coverage is not evidence.** Measured leave-one-out coverage equals the arithmetically
+  pinned value in all nine applied strata, so it could not have come out otherwise. What
+  is reported instead is the interval width and the tail ratio.
+
+Every M4 output carries a scope that is DERIVED from the provenance of its data rather
+than declared: `ComparisonScope` has no member for interlaboratory reproducibility, so
+that claim is not representable, and a harmonized cross section cannot be serialised
+without its scope. The maturity stays `provisional` and cannot be otherwise while the
+corpus is one study. See `LIMITATIONS.md` sections 7D and 7F.
 
 The two Struwe seed files still pair nothing, for three independent reasons, and
 `readiness.py` reports that as a blocker with the reason rather than as a small

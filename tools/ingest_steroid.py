@@ -41,6 +41,41 @@ WHAT THE SHEET ACTUALLY LOOKS LIKE, and it is not tidy
   primary value at all, which is the "present on one platform only" problem
   arriving immediately rather than theoretically.
 
+WHOSE MEASUREMENTS THESE ARE, and it is not one laboratory
+----------------------------------------------------------
+Read from the article, not assumed, and it changes what a correction fitted on this
+corpus means:
+
+- The DRIFT TUBE and TRAPPED ION values are NEW, measured by the authors on their own
+  Agilent 6560 and timsTOF Pro. One laboratory, two instruments, four platform
+  variants counting the two drift-tube methods.
+- The TRAVELLING WAVE values are NOT theirs. "TWIM-MS data sets were reported in two
+  of our previous publications and publicly available data was used for all
+  comparisons." The column ingested here is the INTERLABORATORY library - an average
+  over four Waters instruments (two Synapt G2-S/G2-Si, two Vion) across several
+  laboratories - published in Hernandez-Mesa et al., Anal. Chem. 2020, 92, 5013-5022,
+  doi:10.1021/acs.analchem.9b05247. The column NOT ingested is the single-laboratory
+  library, doi:10.1021/acs.analchem.7b05117.
+
+So the scope of any correction fitted here is NOT uniformly "between instruments in
+one laboratory":
+
+  DTIMS single-field vs DTIMS stepped-field   one laboratory, one instrument, two methods
+  DTIMS (either) vs TIMS                      one laboratory, two instruments
+  TWIMS vs anything                           one laboratory's value against an
+                                              interlaboratory aggregate from a 2020 paper
+
+It is still NOT an interlaboratory reproducibility figure, and the reason is worth
+being precise about: an aggregate on one side and a single laboratory on the other
+gives no distribution across laboratories and no n on the drift-tube side. It is one
+number against one number. But it is not within-laboratory either, and a scope caveat
+that said "one laboratory" flatly would be wrong for half the platform pairs.
+
+Licence-wise nothing changes and no laundering is implied: the values were obtained
+from the steroid study's own supporting information, whose terms are what the registry
+records, and Hernandez-Mesa, Dervilly and Le Bizec are authors of both papers - this is
+the same group republishing its own earlier data.
+
 WHAT THIS PRODUCED
 ------------------
 142 cross-platform matched ions - 2 across two platforms, 43 across three, 97 across
@@ -176,7 +211,13 @@ ESI_L = "Agilent ESI-L tune mix (G1969-85000)"
 PLATFORMS = (
     (
         7, 8, "Average TWCCSN2 (Å2) (n=12; four TWIMS platforms)",
-        "TWIMS", "", MAJOR_MIX, 12, "cross-laboratory average over four Waters TWIM-MS systems",
+        # NOT THIS STUDY'S OWN MEASUREMENTS. See "WHOSE MEASUREMENTS THESE ARE" in the
+        # module docstring: these are republished from Hernandez-Mesa et al. 2020,
+        # doi:10.1021/acs.analchem.9b05247, and are an average over four instruments in
+        # several laboratories. It matters for what a TWIMS comparison means.
+        "TWIMS", "", MAJOR_MIX, 12,
+        "four Waters TWIM-MS systems (2x Synapt G2-S/G2-Si, 2x Vion), interlaboratory average,"
+        " republished from doi:10.1021/acs.analchem.9b05247",
     ),
     (
         10, 11, "Average TIMCCSN2 (Å2) (n=3-6)",

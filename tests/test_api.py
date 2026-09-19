@@ -35,7 +35,9 @@ from pydantic import ValidationError
 
 from wmxccs import sources
 from wmxccs.api import CONFIDENCE_NOTE, create_app
+from wmxccs.scope import ComparisonScope
 from wmxccs.contracts import (
+    ScopeReport,
     ConfidenceReport,
     CorrectionBasis,
     HarmonizationUnavailable,
@@ -410,6 +412,19 @@ def test_no_endpoint_returns_the_200_shape_today(app):
 # --- 9. the contract refuses a placeholder estimate at the model level ---------------------------------
 
 
+def good_scope(**overrides) -> dict:
+    """The scope every estimate must carry. Within-study, because that is what the corpus is."""
+    fields = dict(
+        scope=ComparisonScope.WITHIN_STUDY,
+        studies=("doi:10.1021/jasms.2c00196",),
+        platforms=("DTIMS/stepped_field", "TWIMS"),
+        records_behind_it=62,
+        caveat="WITHIN ONE STUDY. Not interlaboratory reproducibility.",
+    )
+    fields.update(overrides)
+    return fields
+
+
 def good_estimate(**overrides) -> dict:
     """A well-formed estimate, so each refusal below is about the one field it changes."""
     fields = dict(
@@ -421,9 +436,61 @@ def good_estimate(**overrides) -> dict:
         interval_kind=IntervalKind.LIMITS_OF_AGREEMENT,
         reference_platform="DTIMS/stepped_field",
         matched_ions_behind_it=24,
+        scope=ScopeReport(**good_scope()),
+        interval_is_informative=True,
+        guaranteed_coverage=0.80,
     )
     fields.update(overrides)
     return fields
+
+
+# --- the scope is REQUIRED and cannot be widened by declaring it -------------------------------
+
+
+def test_a_harmonized_estimate_without_a_scope_is_refused():
+    """No default. A number whose scope could be omitted is a number quoted without it."""
+    fields = good_estimate()
+    del fields["scope"]
+    with pytest.raises(ValidationError):
+        HarmonizedEstimate(**fields)
+
+
+def test_a_scope_report_may_not_claim_more_than_its_studies_support():
+    """The scope is DERIVED from the provenance, so declaring a wider one is refused.
+
+    This is the structural half of the requirement: widening the claim means naming a
+    second study, which is data somebody has to produce, not a field somebody can set.
+    """
+    with pytest.raises(ValidationError, match="does not follow from"):
+        ScopeReport(**good_scope(scope=ComparisonScope.CROSS_STUDY))
+    # and naming two studies makes it legitimate
+    across = ScopeReport(
+        **good_scope(
+            scope=ComparisonScope.CROSS_STUDY,
+            studies=("doi:10.1021/jasms.2c00196", "doi:10.1021/acs.analchem.9b05247"),
+        )
+    )
+    assert across.scope is ComparisonScope.CROSS_STUDY
+    # the other direction too: two studies may not be called within-study
+    with pytest.raises(ValidationError, match="does not follow from"):
+        ScopeReport(
+            **good_scope(
+                scope=ComparisonScope.WITHIN_STUDY,
+                studies=("doi:a/1", "doi:b/2"),
+            )
+        )
+
+
+def test_a_scope_report_needs_at_least_one_study_and_one_platform():
+    with pytest.raises(ValidationError):
+        ScopeReport(**good_scope(studies=()))
+    with pytest.raises(ValidationError):
+        ScopeReport(**good_scope(platforms=()))
+
+
+def test_no_scope_member_means_interlaboratory_reproducibility():
+    """The claim is not representable, so it cannot be recorded or returned."""
+    assert {member.value for member in ComparisonScope} == {"within_study", "cross_study"}
 
 
 def test_a_well_formed_harmonized_estimate_is_accepted():

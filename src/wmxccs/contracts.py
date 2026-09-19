@@ -39,10 +39,11 @@ from datetime import date
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .grading import ConfidenceGrade
 from .models import CCSMeasurement
+from .scope import ComparisonScope
 from .readiness import DataMaturity, MaturityStamp
 from .reuse import ReuseStatus
 
@@ -116,6 +117,57 @@ class IntervalKind(StrEnum):
     LIMITS_OF_AGREEMENT = "limits_of_agreement"
 
 
+class ScopeReport(BaseModel):
+    """What the correction behind a number is entitled to be quoted as.
+
+    REQUIRED on every harmonized estimate, and there is no default. A number whose scope
+    could be omitted is a number that will be quoted without it.
+
+    `scope` is not settable independently: it is filled from `scope.ScopeStamp`, where it is
+    a property of the studies rather than a field, and a validator here re-derives it from
+    `studies` so that a hand-built report cannot widen the claim without naming a second
+    study. There is deliberately no member for interlaboratory reproducibility anywhere in
+    this package - see scope.ComparisonScope.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    scope: ComparisonScope
+    studies: tuple[str, ...] = Field(
+        min_length=1, description="The studies behind the fit, as DOIs where known. At least one."
+    )
+    platforms: tuple[str, ...] = Field(min_length=1)
+    records_behind_it: int = Field(ge=1)
+    caveat: str = Field(
+        min_length=1,
+        description="The scope in words, to be printed WITH the number and never instead of it.",
+    )
+
+    @model_validator(mode="after")
+    def scope_matches_the_studies(self) -> "ScopeReport":
+        expected = (
+            ComparisonScope.CROSS_STUDY if len(set(self.studies)) > 1 else ComparisonScope.WITHIN_STUDY
+        )
+        if self.scope is not expected:
+            raise ValueError(
+                f"scope {self.scope.value!r} does not follow from {len(set(self.studies))} study(ies):"
+                f" it must be {expected.value!r}. The scope is DERIVED from the provenance, so widening it"
+                f" means naming another study, which is data somebody has to produce"
+            )
+        return self
+
+    @classmethod
+    def of(cls, stamp) -> "ScopeReport":
+        """Build from a scope.ScopeStamp. The only intended construction path."""
+        return cls(
+            scope=ComparisonScope(stamp.scope.value),
+            studies=tuple(stamp.studies),
+            platforms=tuple(stamp.platforms),
+            records_behind_it=stamp.records_behind_it,
+            caveat=stamp.caveat(),
+        )
+
+
 class HarmonizedEstimate(BaseModel):
     """The corrected value. ABSENT, never empty, while no model exists."""
 
@@ -144,6 +196,20 @@ class HarmonizedEstimate(BaseModel):
     reference_platform: str = Field(description="The platform the correction refers the value to.")
     matched_ions_behind_it: int = Field(
         ge=0, description="How many matched ions the correction was fitted on. Travels with the number."
+    )
+    scope: ScopeReport = Field(
+        description="REQUIRED, no default. What this correction may be quoted as. A harmonized cross"
+        " section cannot be serialised without it."
+    )
+    interval_is_informative: bool = Field(
+        description="False where the interval is the full observed range - honest, and excluding nothing."
+        " See readiness.smallest_informative_calibration_set."
+    )
+    guaranteed_coverage: float = Field(
+        gt=0,
+        lt=1,
+        description="What the interval method PROVES, as against the nominal level its quantile is taken at."
+        " Jackknife+ guarantees 1-2*alpha, so a nominally 90% interval is guaranteed at 80%.",
     )
 
 
@@ -204,12 +270,35 @@ class HarmonizedMeasurement(BaseModel):
 
 
 class HarmonizeResponse(BaseModel):
-    """The 200 body. Not reachable until a model exists; specified so callers can build against it."""
+    """The 200 body.
+
+    Carries a validator rather than only a docstring: a validated maturity beside a
+    within-study scope is incoherent, and an incoherent response is the artefact somebody
+    would quote.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     measurements: tuple[HarmonizedMeasurement, ...]
     maturity: MaturityStamp
+
+    @model_validator(mode="after")
+    def validated_maturity_needs_more_than_one_study(self) -> "HarmonizeResponse":
+        if self.maturity.data_maturity is not DataMaturity.VALIDATED:
+            return self
+        within = [
+            estimate.scope.studies
+            for measurement in self.measurements
+            if (estimate := measurement.harmonized) is not None
+            and estimate.scope.scope is ComparisonScope.WITHIN_STUDY
+        ]
+        if within:
+            raise ValueError(
+                "a response may not report maturity 'validated' while a correction in it is within-study."
+                " Validation means checked against data the model was not fitted on, and a single-study"
+                f" corpus has none by definition. {len(within)} estimate(s) here are within-study"
+            )
+        return self
 
 
 class HarmonizationUnavailable(BaseModel):

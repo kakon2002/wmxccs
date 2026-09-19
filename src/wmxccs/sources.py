@@ -330,6 +330,21 @@ STEROID_INTERPLATFORM_2022 = SourceLicence(
         " trapped-ion values now train and this corpus has three technologies. THE GENERAL LESSON: the"
         " supporting information is NOT the source, it is one document of it, and it omitted a method the"
         " article states plainly. Check the article before recording any calibrant as unstated.",
+        "THE TRAVELLING-WAVE VALUES IN THIS FILE ARE NOT THIS STUDY'S OWN MEASUREMENTS, which matters for"
+        " what a correction fitted on them means. The article: 'TWIM-MS data sets were reported in two of our"
+        " previous publications and publicly available data was used for all comparisons.' The column"
+        " ingested here is the INTERLABORATORY library - an average over four Waters instruments across"
+        " several laboratories - from Hernandez-Mesa et al., Anal. Chem. 2020, 92, 5013-5022,"
+        " doi:10.1021/acs.analchem.9b05247. The single-laboratory library, which is NOT ingested, is"
+        " doi:10.1021/acs.analchem.7b05117. The drift-tube and trapped-ion values ARE the authors' own, new"
+        " for this paper. So a DTIMS-versus-TIMS correction is within one laboratory and a TWIMS-versus-"
+        " anything correction is one laboratory against an interlaboratory aggregate - which is still not an"
+        " interlaboratory reproducibility figure, because there is an aggregate on one side and a single"
+        " laboratory on the other, but it is not within-laboratory either.",
+        "NO LICENCE LAUNDERING IS IMPLIED BY THAT. The values were obtained from this study's own supporting"
+        " information, which is the artefact whose terms are recorded here, and Hernandez-Mesa, Dervilly and"
+        " Le Bizec are authors of both papers: this is the same group republishing its own earlier data. The"
+        " origin is recorded because provenance should name it, not because the licence chain needs it.",
         "THE PAPER ALSO SETTLES WHICH PLATFORMS SHARE A CALIBRANT, which is its own central finding:"
         " 'DT CCS N2 and TIM CCS N2 are routinely calibrated with the same commercially available compound"
         " mixture (i.e., reference ions and reference values) established by Stow et al., while TW CCS N2"

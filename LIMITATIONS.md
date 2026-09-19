@@ -15,9 +15,18 @@ repository. The correction is recorded rather than quietly made, because that
 sentence was the headline of this whole document.
 
 There are now **142 cross-platform matched ions**, all from one source: the steroid
-interplatform study, DOI 10.1021/jasms.2c00196. Two pair across two platforms, 43
-across three, 97 across all four. Section 7D describes what they are and what is
-wrong with them.
+interplatform study, DOI 10.1021/jasms.2c00196. Section 7D describes what they are and
+what is wrong with them.
+
+Two histograms, and it matters which one is quoted:
+
+| over | two platforms | three | four |
+| --- | --- | --- | --- |
+| all 521 records the file holds | 2 | 43 | **97** |
+| the 517 that clear the gate, the only set that may train | 2 | 47 | **93** |
+
+The difference is four records the shared-peak check holds, each of which drops its ion
+from four platforms to three. **M4 is fitted on the 93.**
 
 What has NOT changed is the shape of the limitation, only its size:
 
@@ -290,6 +299,24 @@ the full observed range - for every n from nine to eighteen. The repository was 
 for ten through eighteen, which is precisely where M4's strata land, and a test
 asserted that silence at ten. So the wrong belief was pinned rather than merely held:
 correcting the code turned three tests red. Section 4.7 has the detail.
+
+**M4 PRODUCED THREE MORE AND THE HARNESS CAUGHT ALL THREE BEFORE THEY SHIPPED**, which is
+the first time that has happened and is worth recording as the process working rather
+than as three more failures. The sweep reported them as survivors:
+
+- a test for the Passing-Bablok shift overflow that branched on the result and asserted
+  something true in BOTH branches, so a clamped answer satisfied it;
+- leave-one-COMPOUND-out and leave-one-ION-out being indistinguishable on this corpus,
+  because every compound contributes exactly one ion per stratum - the same shape as
+  instance four, a guard whose case does not occur in the data it was written against;
+- a correction matched on the platform alone rather than on the calibration group, which
+  every existing test passed because all three adducts' corrections are small enough to
+  look plausible when swapped.
+
+All three now have tests that fail when the guard is removed, and all three needed a
+FIXTURE rather than the real corpus, because the real corpus cannot distinguish the
+correct behaviour from the broken one. That is the lesson repeated: the data you have
+does not exercise the guard you wrote.
 
 WHAT THE NINE HAVE IN COMMON, and what to do about it. Green is not evidence. The
 question that catches all nine is not "do the tests pass" but "what would have to
@@ -824,8 +851,12 @@ diffable against its input from a clone with no `data/raw` directory.
 **142 cross-platform matched ions.** That is the first result in this project that
 describes real instruments, and it is what every remaining milestone was waiting
 for. 521 records, every row of the sheet accounted for, nothing transcribed by
-hand, no row lost. Two ions pair across two platforms, 43 across three, 97 across
-all four.
+hand, no row lost. Over ALL 521 records, two ions pair across two platforms, 43 across
+three and 97 across all four. Over the 517 that clear the gate - the only set that may
+train, and the one every M4 figure comes from - it is 2, 47 and **93**: the four records
+the shared-peak check holds each drop their ion from four platforms to three. This
+document quoted only the first triple until 19 September 2026, which read as though 97
+ions were trainable when 93 are.
 
 ### The coverage is uneven, and that is the real problem arriving early
 
@@ -1161,12 +1192,141 @@ keeps it honest in the meantime: these compounds pair inside their own source an
 nowhere else, which is the correct answer until the work is done rather than a
 limitation to route around.
 
+## 7F. M4: the harmonization model
+
+Built 19 September 2026 on the 93 four-platform matched ions that clear the gate, from
+one study. `robust.py`, `scope.py` and `harmonization.py`.
+
+### What it produces
+
+Eighteen strata - six platform pairs by three adducts, never pooled - each fitted three
+ways. **Only nine are ever applied**: the ones whose reference is stepped-field DTIMS, the
+only primary method in the corpus. A correction between two CALIBRATED platforms anchors
+nothing, since both sides already rest on somebody else's reference values, so those nine
+are published as diagnostics and never applied to a measurement. There is no transitive
+composition: this package will not refer TWIMS to TIMS and then TIMS to the drift tube.
+
+Of 517 cleared records, **417 are corrected** and 100 are already on the primary platform,
+which is not a failure but the correct answer for a value with nothing to be referred to.
+
+### The headline correction is chosen by a rule, not by preference
+
+    basis = ROBUST_SLOPE   if the Passing-Bablok rank interval on the slope EXCLUDES 1
+            MEDIAN         otherwise
+
+Measured: ROBUST_SLOPE in 10 of 18 strata, MEDIAN in 8. Where the slope cannot be
+distinguished from 1, a slope-derived correction and a constant offset describe the same
+data and the offset is the one that does not extrapolate. All three corrections - Deming,
+Passing-Bablok and the median offset - are computed and reported for every stratum
+whichever is chosen, because they diverge exactly when a few ions are levering the fit.
+
+**Why Passing-Bablok, in one measurement.** On a clean line of eleven points, wrecking one
+point moves the Deming slope from 1.04 to over 6 and does not move the robust slope at
+all. On the real corpus the same effect is concentrated in negative mode:
+
+| stratum | Deming | Passing-Bablok |
+| --- | --- | --- |
+| DTIMS/stepped vs TWIMS [M-H]- | 1.19024 | 1.05052 |
+| DTIMS/stepped vs TIMS [M-H]- | 1.14698 | 1.00160 |
+| DTIMS/single vs TIMS [M-H]- | 1.10959 | 1.01609 |
+
+Those Deming slopes carry intercepts of -31 to -40 square angstrom to compensate. A slope
+of 1.147 between two platforms whose median difference is -0.6 per cent is two leveraged
+ions and an intercept, and Lin's concordance above 0.97 in the same strata flags none of it.
+
+### The interval, and why there is no train/calibrate split
+
+Section 4.7 establishes that a 90 per cent split-conformal interval is the FULL OBSERVED
+RANGE for any calibration set below 19. The strata hold 23, 29 and 41 ions, so a split
+would either starve the fit or produce an interval that excludes nothing.
+
+Grouped leave-one-compound-out **jackknife+** avoids the split: every ion serves as both
+fit and calibration, so n_cal = n = 23/29/41 and every interval is informative. The price
+is stated rather than hidden - jackknife+ proves coverage of 1-2*alpha, so a nominally 90
+per cent interval is **guaranteed at 80**, and both numbers travel with every interval.
+
+Widths at a typical ion run from **0.55 per cent of CCS** (single-field DTIMS, [M+Na]+) to
+**3.73 per cent** (TIMS, [M+H]+).
+
+An interval is a property of the QUERY, not of the stratum. The first implementation
+reduced it to one band per stratum and produced intervals of 170 to 217 square angstrom -
+the entire range of steroid cross sections - which is what a spread looks like when it is
+mislabelled as an interval.
+
+### COVERAGE IS NOT EVIDENCE, and this is the most important limitation here
+
+Nested leave-one-compound-out coverage on the nine applied strata: 27/29, 37/41, 21/23,
+28/31, 42/46, 21/23, 28/31, 42/46, 21/23. Every one of those is **exactly**
+ceil(n(1-alpha))/n. The rate is pinned by the quantile index and could not have come out
+otherwise, so it says nothing whatever about whether the interval is well calibrated.
+`CoverageCheck.is_evidence_of_calibration` returns False, always, as a property rather
+than as a sentence in a docstring.
+
+It is not useless: it is falsifiable against GROSS error. Scaling every residual by 0.5
+takes coverage to 0.759, by 0.25 to 0.448, by 0.1 to 0.069 - all below the 0.80 guarantee.
+So the check catches an interval that is plainly too narrow and catches nothing subtler.
+**The informative figures are the WIDTH and the TAIL RATIO**, and those are what the
+reports carry.
+
+Three of the four independent designs proposed coverage as validation and one gated
+`DataMaturity.VALIDATED` on it.
+
+### The scope caveat is structural
+
+`scope.ScopeStamp` has NO `scope` field. `scope` is a computed property of `studies`, so
+there is no constructor argument to set and widening the claim requires naming a second
+study - which is data somebody has to produce. `ComparisonScope` has two members and
+neither is "interlaboratory reproducibility": the claim is not representable anywhere in
+this package, so it cannot be recorded, serialised or returned.
+`assert_may_be_quoted_as` raises for that claim on EVERY stamp however many studies it
+holds, because a comparison between platforms is not a reproducibility figure for either
+of them.
+
+`contracts.ScopeReport` is REQUIRED on every `HarmonizedEstimate` with no default, and
+re-derives the scope from the studies so a hand-built report cannot widen it.
+`HarmonizeResponse` refuses a validated maturity beside a within-study scope.
+
+**The scope is not uniform across the platform pairs, and this is a refinement of the
+obvious statement.** The drift-tube and trapped-ion values are the authors' own; the
+travelling-wave values are republished from doi:10.1021/acs.analchem.9b05247 and are
+themselves an interlaboratory average over four instruments. So a DTIMS-versus-TIMS
+correction is within one laboratory, and a TWIMS-versus-anything correction is one
+laboratory against an aggregate from another paper. Neither is an interlaboratory
+reproducibility figure. See 7D.
+
+### What M4 is not
+
+- **Not validated, and validation is not reachable from this corpus.** The maturity stamp
+  is PROVISIONAL and cannot be otherwise while the scope is within-study, because
+  validation means checked against data the model was not fitted on and one study has
+  none by definition.
+- **Not tested on anything but steroids.** 66 compounds, one chemical class, three
+  adducts, all small molecules. Nothing here has seen a glycan, a peptide or a protein.
+- **The corrections are small and the intervals are not.** A typical correction moves a
+  value by 0.1 to 1.0 per cent; a typical interval is 0.5 to 3.7 per cent wide. For most
+  ions the interval contains the uncorrected value, which is an honest statement of how
+  much this corpus supports and not a flaw in the arithmetic.
+- **The rank interval on the slope is a normal approximation** (the Kendall tau variance),
+  and at n=23 it is indicative rather than exact. It is also the BASIS SELECTOR, so a
+  stratum near the boundary could pick the other basis on a slightly different corpus.
+- **Nothing measures whether a LINEAR correction is the right model.** A slope and an
+  intercept fitted robustly are still a slope and an intercept.
+- **The leverage check is silent on ten strata and INERT on eight.** Measured leverage
+  runs 0.044 to 0.340 per cent against a 0.5 per cent limit, so
+  `correction_driven_by_outliers` fires nowhere - and on 8 of the 18 strata
+  `slope_leverage_percent` returns None outright, because they have no outliers to exclude
+  or too few points left once they are. "It never fires" and "it cannot fire here" are
+  different statements and the second is the one that matters: a check returning None on
+  44 per cent of strata is not covering them. The threshold is NOT lowered to make it
+  fire, because it is anchored to published stepped-field DTIMS reproducibility and
+  tuning a guard until it triggers is fitting the guard to the data.
+
 ## 8. Scope of the test suite
 
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 213 mutations against twelve modules. It is smaller than the
+- the catalogue holds 235 mutations against fifteen modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;

@@ -34,6 +34,9 @@ Sections:
   [T] statistics.py - cross-platform statistics (M3)
   [F] grading.py    - the confidence rules
   [A] api.py, contracts.py - the response contract
+  [P] robust.py    - Passing-Bablok, the slope a few ions cannot move (M4)
+  [Q] scope.py     - what a figure may be quoted as (M4)
+  [H] harmonization.py - the harmonization model itself (M4)
 """
 
 from __future__ import annotations
@@ -1270,6 +1273,141 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="readiness.py",
         find="    return math.ceil((held + 1) * (1 - alpha))",
         replace="    return math.ceil(held * (1 - alpha))",
+    ),
+    # --- [P] robust: a slope a few ions cannot move ---------------------------
+    Mutation(
+        label="[P] the Passing-Bablok shift is dropped, so an inverted stratum gets the wrong median",
+        file="robust.py",
+        find="    k = sum(1 for slope in slopes if slope < -1.0)",
+        replace="    k = 0",
+    ),
+    Mutation(
+        label="[P] the robust slope stops being robust: the mean of pairwise slopes instead of the median",
+        file="robust.py",
+        find="    shifted = _shifted_median(slopes, k)",
+        replace="    shifted = (sum(slopes) / len(slopes), False)",
+    ),
+    Mutation(
+        label="[P] tied reference values are dropped without being counted",
+        file="robust.py",
+        find="                tied += 1\n                continue",
+        replace="                continue",
+    ),
+    Mutation(
+        label="[P] a missing slope interval reads as 'the slope is 1' rather than as 'cannot tell'",
+        file="robust.py",
+        find="        if self.slope_interval is None:\n            return False",
+        replace="        if self.slope_interval is None:\n            return True",
+    ),
+    Mutation(
+        label="[P] the slope interval stops excluding 1, so every stratum looks size-dependent",
+        file="robust.py",
+        find="        return not (low <= 1.0 <= high)",
+        replace="        return True",
+    ),
+    Mutation(
+        label="[P] too few points are fitted anyway instead of refused",
+        file="robust.py",
+        find="    if n < MIN_POINTS_FOR_ROBUST_SLOPE:",
+        replace="    if False:",
+    ),
+    Mutation(
+        label="[P] a shift running past the end of the slope list is clamped instead of refused",
+        file="robust.py",
+        find="        index = (count + 1) // 2 - 1 + k\n        if index >= count:\n            return None",
+        replace="        index = min((count + 1) // 2 - 1 + k, count - 1)\n        if False:\n            return None",
+    ),
+    # --- [Q] scope: what a figure may be quoted as ----------------------------
+    Mutation(
+        label="[Q] one study is reported as cross-study, so a single paper looks like two",
+        file="scope.py",
+        find="        return ComparisonScope.CROSS_STUDY if len(self.studies) > 1 else ComparisonScope.WITHIN_STUDY",
+        replace="        return ComparisonScope.CROSS_STUDY",
+    ),
+    Mutation(
+        label="[Q] interlaboratory reproducibility becomes a supported claim",
+        file="scope.py",
+        find="        allowed = {Claim.PLATFORM_DIFFERENCE_WITHIN_A_STUDY}",
+        replace="        allowed = {Claim.PLATFORM_DIFFERENCE_WITHIN_A_STUDY, Claim.INTERLABORATORY_REPRODUCIBILITY}",
+    ),
+    Mutation(
+        label="[Q] the scope gate stops raising, so any claim passes",
+        file="scope.py",
+        find="    if claim in stamp.supports:\n        return",
+        replace="    if True:\n        return",
+    ),
+    Mutation(
+        label="[Q] a stamp over no records is allowed and reads as the narrowest scope",
+        file="scope.py",
+        find="    if not count:\n        raise ScopeExceededError(NO_PROVENANCE)",
+        replace="    if False:\n        raise ScopeExceededError(NO_PROVENANCE)",
+    ),
+    Mutation(
+        label="[Q] combining stamps narrows to the first instead of unioning the provenance",
+        file="scope.py",
+        find="        studies=tuple(sorted({s for stamp in stamps for s in stamp.studies})),",
+        replace="        studies=tuple(stamps[0].studies),",
+    ),
+    Mutation(
+        label="[Q] a study identified only by a citation string stops flagging the overstatement risk",
+        file="scope.py",
+        find='        return any(not study.startswith("doi:") for study in self.studies)',
+        replace="        return False",
+    ),
+    # --- [H] harmonization: the model -----------------------------------------
+    Mutation(
+        label="[H] the headline basis stops being derived and is always the robust slope",
+        file="harmonization.py",
+        find="        if self.robust is not None and self.robust.slope_distinguishable_from_unity:\n            return CorrectionBasis.ROBUST_SLOPE",
+        replace="        if self.robust is not None:\n            return CorrectionBasis.ROBUST_SLOPE",
+    ),
+    Mutation(
+        label="[H] a correction anchored on a calibrated platform is applied as though it anchored something",
+        file="harmonization.py",
+        find="        return self.reference_platform == PRIMARY_REFERENCE and self.loo is not None",
+        replace="        return self.loo is not None",
+    ),
+    Mutation(
+        label="[H] the leave-one-out groups become ions instead of compounds",
+        file="harmonization.py",
+        find="    return str(point.ion.key.analyte)",
+        replace="    return str(point.ion.key)",
+    ),
+    Mutation(
+        label="[H] the jackknife interval stops depending on the query, becoming a stratum-wide band",
+        file="harmonization.py",
+        find="            predicted = (other_ccs - intercept) / slope",
+        replace="            predicted = (self.residuals[0] - intercept) / slope",
+    ),
+    Mutation(
+        label="[H] the interval is quoted at its nominal level instead of what jackknife+ guarantees",
+        file="harmonization.py",
+        find="            guaranteed_coverage=1.0 - 2.0 * self.alpha,",
+        replace="            guaranteed_coverage=1.0 - self.alpha,",
+    ),
+    Mutation(
+        label="[H] coverage claims to be evidence of calibration",
+        file="harmonization.py",
+        find='        """Always False. Kept as a property so the answer is in the code, not only in prose."""\n        return False',
+        replace='        """Always False. Kept as a property so the answer is in the code, not only in prose."""\n        return True',
+    ),
+    Mutation(
+        label="[H] the model reports validated maturity on a single-study corpus",
+        file="harmonization.py",
+        find="        return MaturityStamp(data_maturity=DataMaturity.PROVISIONAL, matched_ion_count=ions)",
+        replace="        return MaturityStamp(data_maturity=DataMaturity.VALIDATED, matched_ion_count=ions)",
+    ),
+    Mutation(
+        label="[H] a value already on the primary platform is corrected against itself",
+        file="harmonization.py",
+        find="    if platform == PRIMARY_REFERENCE:",
+        replace="    if False:",
+    ),
+    Mutation(
+        label="[H] a correction is matched on the platform alone, pooling two adducts",
+        file="harmonization.py",
+        find="        if candidate.other_platform == platform and candidate.stratum.other_group == group:",
+        replace="        if candidate.other_platform == platform:",
     ),
     # --- [K] readiness: what refuses and what merely warns ---------------------
     Mutation(
