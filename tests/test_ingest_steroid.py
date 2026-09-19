@@ -110,20 +110,39 @@ def test_the_registry_backs_what_every_row_claims(rows) -> None:
     assert STEROID_INTERPLATFORM_2022.context_basis.strip()
 
 
-def test_the_calibrants_are_recorded_as_the_supporting_information_states_them(rows) -> None:
-    """Three different statements, recorded as three different things.
+def test_the_calibrants_are_recorded_as_the_source_states_them(rows) -> None:
+    """Three calibration situations, recorded as three different things.
 
-    Two platforms name a calibrant. One states only its MASS calibration, so its
-    CCS calibrant is UNSTATED. One is primary and uses none, which is an empty
-    calibrant and NOT the same claim as UNSTATED.
+    Two platforms share a calibrant, one uses a different one, and one is primary
+    and uses none - an empty calibrant, which is NOT the same claim as UNSTATED.
     """
     by_platform = {
         (row["ims_type"], row["dtims_method"]): row["calibrant"] for row in rows
     }
     assert by_platform[("TWIMS", "")] == "Waters Major Mix"
     assert by_platform[("DTIMS", "single_field")] == "Agilent ESI-L tune mix (G1969-85000)"
-    assert by_platform[("TIMS", "")] == UNSTATED_CALIBRANT
+    assert by_platform[("TIMS", "")] == "Agilent ESI-L tune mix (G1969-85000)"
     assert by_platform[("DTIMS", "stepped_field")] == ""
+    # NOTHING here is unstated any more. Held for one day and resolved from the
+    # article; see the next test.
+    assert UNSTATED_CALIBRANT not in {row["calibrant"] for row in rows}
+
+
+def test_the_drift_tube_and_trapped_ion_records_share_one_calibrant_string(rows) -> None:
+    """Because the paper says they are the same mixture, not because the spellings matched.
+
+    The Results section: "DT CCS N2 and TIM CCS N2 are routinely calibrated with the
+    same commercially available compound mixture (i.e., reference ions and reference
+    values) established by Stow et al., while TW CCS N2 systems were calibrated using
+    a different commercial calibrant mix."
+
+    That is also the paper's own explanation for its central finding, and this corpus
+    reproduces it: the two platforms sharing a calibrant agree to within a third of a
+    per cent, and the one that does not is three times further out.
+    """
+    by_platform = {(row["ims_type"], row["dtims_method"]): row["calibrant"] for row in rows}
+    assert by_platform[("DTIMS", "single_field")] == by_platform[("TIMS", "")]
+    assert by_platform[("TWIMS", "")] != by_platform[("TIMS", "")]
 
 
 def test_the_gas_the_values_refer_to_is_stated_and_the_gas_in_the_cell_is_not(rows) -> None:
@@ -241,19 +260,37 @@ def test_every_row_loads_and_nothing_is_lost(report) -> None:
     assert report.unknown_columns == ()
 
 
-def test_the_trapped_ion_records_are_held_from_training_by_the_unstated_calibrant(report) -> None:
-    """142 real values, held rather than refused, and held for one stated reason.
+def test_the_trapped_ion_records_train_because_the_article_named_their_calibrant(report) -> None:
+    """142 values held for one day, then released by one sentence. Both halves matter.
 
-    This is the single largest thing standing between this repository and a
-    three-technology harmonization, and it is one paragraph of somebody's methods
-    away. Recorded as a held record with a reason, not dropped.
+    HELD: the supporting information gives only the mass calibration and then refers
+    to "a 1:1 mixture of both calibrants" having named one. On that document alone the
+    honest record was UNSTATED_CALIBRANT, and the obvious guess - the Agilent mix,
+    which the SI background calls typical for TIM-MS with an "e.g." - was deliberately
+    not written in.
+
+    RELEASED: the ARTICLE states it. "TIM CCS N2 was calibrated using ions from Agilent
+    ESI-L Tune Mix via a linear function." The guess was right, and that it was right
+    is not what makes the value usable - the sentence is.
+
+    The lesson is the one that generalises: the supporting information is not the
+    source, it is one document of the source, and it omitted a method the article
+    states plainly. Check the article before recording anything as unstated.
     """
-    held = [record for record in report.records if record not in report.cleared]
     tims = [record for record in report.records if record.ims_type.value == "TIMS"]
     assert len(tims) == 142
-    assert all(record.calibrant == UNSTATED_CALIBRANT for record in tims)
-    assert not set(tims) & set(report.cleared), "no unstated-calibrant record may train"
-    assert len(held) == 146  # the 142, plus 4 the shared-peak check flagged
+    assert all(record.calibrant == "Agilent ESI-L tune mix (G1969-85000)" for record in tims)
+    assert all(record.training_blockers() == [] for record in tims)
+    assert set(tims) <= set(report.cleared), "every trapped-ion value may now train"
+
+
+def test_only_the_shared_peak_holds_remain(report) -> None:
+    """517 of 521 records clear. The four held are a real collision, not a licence."""
+    assert report.records_cleared == 517
+    assert report.records_refused == 4
+    assert set(report.gate_counts) == {
+        "suspected shared peak: identical CCS for different analytes in one calibration group"
+    }
 
 
 def test_the_shared_peak_check_fires_on_real_data(report) -> None:
@@ -287,17 +324,27 @@ def test_the_real_matched_ions(report) -> None:
 
 
 def test_the_matched_ions_that_may_actually_train(report) -> None:
-    """Fewer, because the trapped-ion values are held: 140 across three platforms.
+    """All 142, across up to four platforms, once the calibrant was resolved.
 
-    Two ions drop to a single platform once the trapped-ion value is held, which is
-    why this is asserted separately from the count above. Both numbers are true and
-    they answer different questions.
+    Before the article was read this was 140 ions across at most THREE platforms,
+    because the trapped-ion values were held. It is now every ion the file holds.
+
+    93 rather than 97 ions reach four platforms, and the difference is the
+    shared-peak check: four records are held for reporting an identical CCS against a
+    different analyte in one calibration group, which drops their ions to three
+    trainable platforms. Both numbers are true and they answer different questions -
+    97 ions HAVE four platforms, 93 have four that may train.
     """
     matching = build_matched_ions(report.cleared)
-    assert len(matching.matched) == 140
-    assert len(matching.single_platform) == 2
-    assert len(matching.usable) == 140
-    assert matching.widest_match == 3
+    assert len(matching.matched) == 142
+    assert matching.single_platform == ()
+    assert len(matching.usable) == 142
+    assert matching.widest_match == 4
+    assert dict(sorted(Counter(len(ion.platforms) for ion in matching.matched).items())) == {
+        2: 2,
+        3: 47,
+        4: 93,
+    }
 
 
 def test_the_comparison_is_stratified_by_calibration_group_and_never_pooled(report) -> None:
@@ -310,8 +357,8 @@ def test_the_comparison_is_stratified_by_calibration_group_and_never_pooled(repo
     comparison = compare_platforms(build_matched_ions(report.cleared))
     assert comparison.quotable, "these are real instruments and may be quoted"
     assert comparison.refusal() is None
-    assert len(comparison.pairs) == 3
-    assert comparison.ions_considered == 140
+    assert len(comparison.pairs) == 6, "four platforms give six pairs once TIMS is trainable"
+    assert comparison.ions_considered == 142
     for pair in comparison.pairs:
         assert len(pair.strata) == 3, "one stratum per adduct"
         assert pair.pooled is None, "values calibrated differently are not one comparison"
@@ -325,11 +372,11 @@ def test_the_outliers_are_reported_and_kept(report) -> None:
     harmonization is hard, and it is exactly what removing outliers would erase.
     """
     comparison = compare_platforms(build_matched_ions(report.cleared))
-    assert len(comparison.outliers) == 5
+    assert len(comparison.outliers) == 11
     named = {point.ion.key.analyte for point in comparison.outliers}
-    assert len(named) == 3, "the same few compounds recur across strata"
+    assert len(named) == 5, "the same few compounds recur across strata"
     # and nothing was dropped to achieve that
-    assert comparison.n_points == 326
+    assert comparison.n_points == 701
 
 
 def test_the_uncertainty_columns_hold_four_different_things_and_all_are_accounted_for(rows) -> None:

@@ -242,7 +242,7 @@ or `unverified`, and all three give the SAME answer to both questions. The one
 branch where the two differ had no test at all.
 
 It was found by loading real data. The steroid interplatform study is
-`academic_only`, so the licence gate cleared 375 of its 521 records and matching
+`academic_only`, so the licence gate cleared most of its 521 records and matching
 then reported all 142 matched ions as blocked by a licence - two modules
 contradicting each other about the same records in the same run. Had the first real
 dataset been open-licensed instead, this would have sat undetected until the first
@@ -774,7 +774,10 @@ harmonization of them rests on calibrated values alone. That is not a defect in
 the data; it is the condition the platform exists to handle, and it showed up in
 the very first source.
 
-### The trapped-ion calibrant is unstated, and it costs the best-agreeing platform
+### The trapped-ion calibrant was unstated for one day, and the article resolved it
+
+**CLOSED 19 September 2026.** The history is kept because the first reading was
+right and was still not the end of it.
 
 The supporting information names the travelling-wave calibrant (Waters Major Mix)
 and the single-field drift-tube calibrant (Agilent ESI-L G1969-85000). For trapped
@@ -783,26 +786,46 @@ order high-performance calibration" - and then says: *"In addition to the extern
 calibration, each sample was automatically post-run calibrated by injecting a 1:1
 mixture of both calibrants."*
 
-**"Both calibrants", and only one is named.** The sentence presupposes a second
-calibrant the methods never identify. The background section calls an Agilent tune
-mix typical for trapped ion mobility, with an "e.g.", and the same laboratory used
-exactly that mix for its single-field drift-tube work - so the likely answer is
-obvious. It is still an inference, and writing an inferred calibrant into a record
-as though the paper stated it is the one thing this repository is built not to do.
-So all 142 trapped-ion values carry `UNSTATED_CALIBRANT` and are HELD from
-training: present, counted, reported, and excluded from any fit.
+**"Both calibrants", and only one named.** On the SI alone the honest record was
+`UNSTATED_CALIBRANT`, and all 142 trapped-ion values were held. The obvious guess -
+the Agilent mix, which the SI background calls typical for TIM-MS with an "e.g.",
+and which this same laboratory used for its drift-tube work - was deliberately NOT
+written in, because an inference recorded as a stated method is indistinguishable
+downstream from a fact.
 
-What that costs is worth stating plainly, because it is larger than it looks.
-Computed descriptively over the held records, trapped ion mobility agrees with the
-drift tube BETTER than travelling wave does - bias -0.32 per cent for [M+H]+
-against single-field DTIMS, Lin's concordance 0.998, 100 per cent of ions within 2
-per cent. Travelling wave against the same reference is -1.07 per cent. So the
-platform whose values are currently unusable is the one that agrees best.
+**The article states it.** The Experimental section, read from the Europe PMC open
+full text for PMC9545150:
 
-**This is the single highest-value curation action available.** One paragraph of
-one methods section, or one email to the authors, converts 142 held values into
-usable ones and takes the corpus from two technologies to three. It is recorded in
-the registry entry's `what_to_check` and it is not a code problem.
+> "Prior to analysis, the instrument was mass calibrated with sodium formate
+> clusters (10 mM in 50:50 2-propanol/water) and TIM CCS N2 was calibrated using
+> ions from **Agilent ESI-L Tune Mix** via a linear function."
+
+So "both calibrants" is sodium formate for mass and the Agilent mix for mobility.
+The guess was right, and that it was right is not what makes the value usable - the
+sentence is. **142 values moved from held to trainable and the corpus gained its
+third technology:** 517 of 521 records now clear, six platform pairs instead of
+three, 701 paired points instead of 326.
+
+**The general lesson, which is why this is written at length: the supporting
+information is not the source.** It is one document of the source, and it omitted a
+method the article states plainly. Any future `UNSTATED_CALIBRANT` should be checked
+against the article's own Experimental section before anybody emails an author.
+
+It also settles which platforms share a calibrant, which is the paper's own central
+finding: *"DT CCS N2 and TIM CCS N2 are routinely calibrated with the same
+commercially available compound mixture (i.e., reference ions and reference values)
+established by Stow et al., while TW CCS N2 systems were calibrated using a
+different commercial calibrant mix."* This corpus reproduces that directly - the two
+platforms sharing a calibrant agree to within a third of a per cent (bias -0.32%,
+CCC 0.998), and the one that does not is three times further out (-1.07%). The
+drift-tube single-field and trapped-ion records therefore carry the SAME calibrant
+string here, on the paper's authority rather than because two spellings looked
+alike.
+
+One methodological difference from the paper, which is why our figures will not
+match theirs exactly: they *"excluded"* ions whose residuals fell outside the
+whiskers from their linear models. This repository reports outliers and never
+removes them, and uses Deming rather than OLS.
 
 ### There is no pooled figure for any platform pair, and the adducts are why
 
@@ -944,7 +967,8 @@ code problem:
    paper resolved unlocks its own records.
 2. **8,388 records name no calibrant.** `CCS method` reads "single field, calibrated"
    for 5,233 DT and 2,950 TIMS records, and "?" for 205 more. Those take
-   `UNSTATED_CALIBRANT` and are held, exactly as the steroid trapped-ion values are.
+   `UNSTATED_CALIBRANT` and are held - exactly as the steroid trapped-ion values were until
+   the article resolved them, which is the first thing to try here too.
 3. **PROVENANCE IS TWO-LAYERED.** The values belong to 36 primary papers; CCSbase is
    the compilation. Its terms govern the compilation and were the terms read on
    11 September 2026, so a record's `source` should be CCSbase - that is where the

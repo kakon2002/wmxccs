@@ -59,32 +59,43 @@ THE THREE JUDGEMENT CALLS, all reversible, none silent
    cross-laboratory column is ingested because it is the one the paper presents as
    its interplatform reference, and it carries its own n and standard deviation.
    The other column is counted and reported, never silently dropped.
-2. THE TRAPPED-ION CALIBRANT IS RECORDED AS UNSTATED, and the paper does not merely
-   omit it - it refers to a calibrant it never names. The supporting information
-   states the travelling-wave calibrant (Waters Major Mix) and the single-field
-   drift-tube calibrant (Agilent ESI-L G1969-85000) explicitly. For trapped ion
-   mobility, page 7 gives only the MASS calibration - "The TOFMS was calibrated
-   using 10 mM sodium formate and a 7th order high-performance calibration" - and
-   then says:
+2. THE TRAPPED-ION CALIBRANT: HELD AS UNSTATED, THEN RESOLVED FROM THE ARTICLE.
+   Worth keeping the whole history, because the first reading was right and was still
+   not the end of it.
+
+   The supporting information states the travelling-wave calibrant (Waters Major Mix)
+   and the single-field drift-tube calibrant (Agilent ESI-L G1969-85000) explicitly.
+   For trapped ion mobility, SI page 7 gives only the MASS calibration - "The TOFMS
+   was calibrated using 10 mM sodium formate and a 7th order high-performance
+   calibration" - and then says:
 
        "In addition to the external calibration, each sample was automatically
         post-run calibrated by injecting a 1:1 mixture of BOTH calibrants."
 
-   Both calibrants. One is named. The sentence presupposes a second one, which is
-   the mobility calibrant, and the methods never identify it.
+   Both calibrants; one named. A sentence presupposing a second calibrant it never
+   identifies. On the SI alone the honest record was UNSTATED_CALIBRANT, and that is
+   what these 142 values carried: held out of any fit, visible, countable, and keyed
+   apart from every named calibrant. The obvious guess - the Agilent mix, which the SI
+   background calls typical "e.g." for TIM-MS and which this same laboratory used for
+   its drift-tube work - was deliberately NOT written in, because an inference
+   recorded as a stated method is indistinguishable downstream from a fact.
 
-   The likely answer is not a mystery: the background section calls an Agilent tune
-   mix typical for trapped ion mobility, and this same laboratory used exactly that
-   mix for its single-field drift-tube work. But "typical" with an "e.g." is not a
-   statement about this experiment, and an obvious inference written into a record as
-   though the paper stated it is indistinguishable, downstream, from a fact. So the
-   calibrant is UNSTATED: those 142 rows are held out of any fit, stay visible and
-   countable, and key apart from every named calibrant so they cannot pool with one.
+   THE ARTICLE STATES IT. The SI was not the whole source. The Experimental section
+   of the paper itself, read from the Europe PMC open full text for PMC9545150:
 
-   This costs more than it appears to. Computed descriptively, the trapped-ion values
-   agree with the drift tube BETTER than the travelling-wave ones do. The platform
-   currently excluded is the one that agrees best, and one paragraph of somebody's
-   methods would admit it. Recorded in the registry entry's what_to_check.
+       "Prior to analysis, the instrument was mass calibrated with sodium formate
+        clusters (10 mM in 50:50 2-propanol/water) and TIM CCS N2 was calibrated
+        using ions from Agilent ESI-L Tune Mix via a linear function."
+
+   So "both calibrants" is sodium formate for mass and the Agilent ESI-L tune mix for
+   mobility. The guess was right and it does not matter that it was: what makes the
+   value usable is the sentence, not the plausibility. 142 values moved from held to
+   trainable and this corpus gained its third technology.
+
+   THE LESSON, which is the reason this paragraph is long: the supporting information
+   is not the source. It is one document of the source, and it omitted a method detail
+   the article states plainly. Any future UNSTATED_CALIBRANT should be checked against
+   the article's own Experimental section before anybody emails an author.
 3. COMPOUNDS ARE IDENTIFIED BY THIS DATASET'S OWN NAMES. The sheet carries a
    compound name, a commercial name, a formula and an m/z, and nothing that
    identifies a structure. No InChIKey is invented and none is looked up: a
@@ -140,9 +151,16 @@ assert STEROID_INTERPLATFORM_2022.reuse_status is ReuseStatus.ACADEMIC_ONLY
 # would let one record's registry entry vouch for another's analyte.
 CITATION = "Feuerstein et al., J. Am. Soc. Mass Spectrom. 2022"
 
-# The calibrants, each as the supporting information states it. See the module
-# docstring for why the trapped-ion one is UNSTATED.
+# The calibrants, each as the SOURCE states it - two of them from the supporting
+# information and the third from the article itself. See judgement call 2.
 MAJOR_MIX = "Waters Major Mix"
+# ONE STRING FOR TWO PLATFORMS, and deliberately so. The article's Results section
+# states that "DT CCS N2 and TIM CCS N2 are routinely calibrated with the same
+# commercially available compound mixture (i.e., reference ions and reference values)
+# established by Stow et al." They are the same mixture, so they get the same string.
+# Not because the two spellings looked alike - the SI writes "Agilent ESI-L
+# G1969-85000" for the drift tube and the article writes "Agilent ESI-L Tune Mix" for
+# the trapped ion - but because the paper says the mixture is the same.
 ESI_L = "Agilent ESI-L tune mix (G1969-85000)"
 
 # (ccs column, sd column, header the ccs column must carry, ims_type, dtims_method,
@@ -164,7 +182,12 @@ PLATFORMS = (
         10, 11, "Average TIMCCSN2 (Å2) (n=3-6)",
         # n is a RANGE in the header, so no single replicate count is true of every
         # row. Left absent rather than reduced to one end of it.
-        "TIMS", "", UNSTATED_CALIBRANT, None, "timsTOF pro",
+        #
+        # THE CALIBRANT WAS UNSTATED_CALIBRANT UNTIL 19 SEPTEMBER 2026 and is now the
+        # Agilent mix, because the ARTICLE states what the supporting information did
+        # not. See judgement call 2. That change alone moved 142 values from held to
+        # trainable and gave this corpus its third technology.
+        "TIMS", "", ESI_L, None, "timsTOF Pro, TIMCCSN2 calibrated via a linear function",
     ),
     (
         13, 14, "Average DTCCSN2 (Å2) (n=3)",

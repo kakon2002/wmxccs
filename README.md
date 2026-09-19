@@ -17,7 +17,7 @@ Separate from the glycan platform. See `CLAUDE.md` for the constraints,
 ## Status: M0 to M3 complete, the API contract and confidence scheme done, and the first real data ingested
 
 **142 cross-platform matched ions**, from the steroid interplatform study
-(DOI 10.1021/jasms.2c00196). 521 records, 375 of them clear to train, 2 ions paired
+(DOI 10.1021/jasms.2c00196). 521 records, 517 of them clear to train, 2 ions paired
 across two platforms, 43 across three and 97 across all four. Converted by
 `tools/ingest_steroid.py`; nothing transcribed by hand.
 
