@@ -185,7 +185,7 @@ by hand should copy.
 
 ### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
 
-Seven separate instances in this repository so far, in seven different shapes. They
+Nine separate instances in this repository so far, in nine different shapes. They
 are collected here rather than filed apart, because the shape is the point: in every
 one, the suite was green, the coverage looked complete, and a behaviour nobody was
 actually protecting could have been deleted without a single test going red.
@@ -264,12 +264,40 @@ noticed there was a question. Section 4.6 has the detail. Found, again, by real 
 CCSbase states no gas for 25,020 records across three platforms, so the rule was one
 ingest away from manufacturing cross-platform pairs in bulk.
 
-WHAT THE SEVEN HAVE IN COMMON, and what to do about it. Green is not evidence. The
-question that catches all seven is not "do the tests pass" but "what would have to
+**Eight: a guard that existed only in its own documentation.**
+`SmallMoleculeAnalyte.dataset_compound_id` carries two paragraphs explaining that the
+namespace is the whole safety property - that within a dataset the id is a real
+identity and across datasets it matches NOTHING because the namespace differs - and
+it had no validator. A BARE COMPOUND NAME was accepted, and two bare names written by
+two different adapters matched each other. That is compound-name matching, which this
+package refuses everywhere else, arriving through the one field built to prevent it.
+
+Nothing would have failed. The key is well formed, the record validates, the pair
+looks like a cross-source matched ion, and the resulting figure would have been
+reported as inter-platform bias. The reasoning was written down, reviewed, and
+believed, and belief is not enforcement.
+
+It was found by looking for the hole deliberately, after the owner said "do not bridge
+on compound names" - that is, by asking what would actually stop it rather than
+checking whether the intention was recorded. That is the only one of the eight found
+by reading a guard's documentation and then testing the guard against it.
+
+**A NINTH, in the same session and the same shape, worth counting separately because
+the mechanism differs.** `calibration_warning` fired only at a calibration set of
+exactly nine, the conformal floor. But the quantile index is ceil((n+1)(1-alpha)), and
+that index equals n - making the quantile the largest observed score and the interval
+the full observed range - for every n from nine to eighteen. The repository was silent
+for ten through eighteen, which is precisely where M4's strata land, and a test
+asserted that silence at ten. So the wrong belief was pinned rather than merely held:
+correcting the code turned three tests red. Section 4.7 has the detail.
+
+WHAT THE NINE HAVE IN COMMON, and what to do about it. Green is not evidence. The
+question that catches all nine is not "do the tests pass" but "what would have to
 break for this to go red, and is that the thing I think I am protecting". Note that
-three of the seven were found by somebody asking that question about a mutation that
-had apparently behaved correctly, two by real data contradicting the code, and none
-by a test going red. Concretely:
+three were found by somebody asking that question about a mutation that had apparently
+behaved correctly, two by real data contradicting the code, two by reading a guard's
+own documentation and then testing the guard against it, and NONE by a test going red.
+Concretely:
 
 - when a mutation is killed, check WHICH test killed it and whether that test is
   about the guard. A mutation killed incidentally is a mutation with no cover.
@@ -293,8 +321,16 @@ by a test going red. Concretely:
   construction, data that passed before the split.
 - when a rule is written for one "the source did not say" case, ask which OTHER
   fields have the same case, and whether the same rule holds for them. Two of these
-  seven were one rule that should have been two, and in both the second place had no
+  were one rule that should have been two, and in both the second place had no
   test because nobody had noticed there was a question to answer.
+- **when a docstring explains why something is safe, go and find the code that makes
+  it safe.** If there is none, the docstring is the guard, and a docstring stops
+  nothing. Two of these nine were exactly that: a namespace described as load-bearing
+  with no validator behind it, and a degeneracy described correctly at one value and
+  enforced only there.
+- when a guard fires on a THRESHOLD, check the whole range the threshold was meant to
+  cover rather than the single value in the test. A boundary condition tested at one
+  point is a boundary condition believed, not established.
 
 ### 4.6 An unstated drift gas keyed records together; an unstated carrier did not
 
@@ -331,6 +367,39 @@ corpus states N2 throughout and its 142 matched ions are unaffected.
 What it cost: the 2015 seed file went from 46 shared keys to 89 unmatchable ones,
 which is a documented count that changed. The M0 conclusion is strengthened rather
 than weakened by it - see section 1.
+
+### 4.7 The conformal floor was enforced at one point of a ten-wide range
+
+CLOSED 19 September 2026, found while sizing M4's strata and before any M4 code existed.
+
+Split conformal takes the k-th smallest conformity score as its quantile, where
+k = ceil((n+1)(1-alpha)). There are THREE regimes, and the repository modelled two:
+
+| | |
+| --- | --- |
+| k > n | no such score exists, so no finite interval: **refused** |
+| k == n | the quantile IS the maximum, so the interval is the **full observed range** - valid, correctly derived, and excluding nothing that was seen |
+| k < n | informative |
+
+At 90 per cent coverage `k == n` holds for every n from 9 to 18. `calibration_warning`
+warned only at 9, so nothing was said for 10 through 18 - and
+`test_only_a_calibration_set_exactly_at_the_floor_carries_the_degenerate_warning`
+asserted no warning at 10, so the wrong belief was pinned. Correcting the derivation
+turned three tests red, which is the signature of a belief rather than an oversight.
+
+**It would have mattered immediately.** M4's strata are 23, 29 and 41 ions grouped by
+66 compounds, so a grouped split lands calibration sets at roughly 11, 14 and 20 - two
+of the three inside the silent range. M4 would have quoted full-observed-range
+intervals as 90 per cent prediction intervals, with no warning attached.
+
+Two derived sizes now exist, both computed from alpha rather than tabulated:
+
+- `smallest_calibration_set` - an interval EXISTS: 9 at 90 per cent, 19 at 95.
+- `smallest_informative_calibration_set` - it is narrower than the observed data:
+  19 at 90 per cent, 39 at 95. Solving ceil((n+1)(1-a)) <= n-1 gives n >= (2-a)/a.
+
+The warning now tests the quantile index itself rather than comparing against a
+remembered number, so the floor, the refusal and the warning cannot drift apart.
 
 ## 4A. Defects found during M0 and fixed
 
@@ -1097,7 +1166,7 @@ limitation to route around.
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 206 mutations against twelve modules. It is smaller than the
+- the catalogue holds 213 mutations against twelve modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;

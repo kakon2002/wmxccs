@@ -215,6 +215,30 @@ MUTATIONS: tuple[Mutation, ...] = (
         find='        if self.inchikey is not None:\n            return (AnalyteKind.SMALL_MOLECULE.value, "inchikey", self.inchikey)\n        return (AnalyteKind.SMALL_MOLECULE.value, "dataset_compound", self.dataset_compound_id)',
         replace='        if self.dataset_compound_id is not None:\n            return (AnalyteKind.SMALL_MOLECULE.value, "dataset_compound", self.dataset_compound_id)\n        return (AnalyteKind.SMALL_MOLECULE.value, "inchikey", self.inchikey)',
     ),
+    Mutation(
+        label="[I] a bare compound name is accepted as a dataset id, so two datasets bridge on a name",
+        file="identity.py",
+        find="    if not separator:\n        raise ValueError(DATASET_ID_NOT_NAMESPACED.format(value=value))",
+        replace="    if False:\n        raise ValueError(DATASET_ID_NOT_NAMESPACED.format(value=value))",
+    ),
+    Mutation(
+        label="[I] anything before a colon counts as a dataset tag, so a compound name poses as one",
+        file="identity.py",
+        find="    if not _DATASET_NAMESPACE.fullmatch(namespace):",
+        replace="    if False:",
+    ),
+    Mutation(
+        label="[I] the dataset namespace pattern accepts any case, splitting one dataset into two",
+        file="identity.py",
+        find='_DATASET_NAMESPACE = re.compile(r"[a-z][a-z0-9_]+")',
+        replace='_DATASET_NAMESPACE = re.compile(r"[A-Za-z][A-Za-z0-9_]+")',
+    ),
+    Mutation(
+        label="[I] a dataset id naming no compound at all is accepted",
+        file="identity.py",
+        find="    if not identifier.strip():",
+        replace="    if False:",
+    ),
     # --- [M] models: the measurement and its key ------------------------------
     Mutation(
         label="[M] the matched-ion key carries the platform, so no pair can ever be found",

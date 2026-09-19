@@ -923,3 +923,95 @@ def test_a_dataset_scoped_id_is_an_identity_atom_the_shared_peak_check_can_see()
     assert analyte.identity_atoms()
     for atom in analyte.identity_atoms():
         assert str(analyte.identity_key()[2]) in atom
+
+
+# --- the namespace on a dataset-scoped id, which IS the safety property ---------------------
+#
+# Added 19 September 2026 after finding it documented and not enforced. The class
+# docstring explained at length that the namespace is what stops two tables listing one
+# compound name from pairing - and a bare name was accepted, so two bare names from two
+# adapters matched each other. Name bridging, through the field built to prevent it,
+# with nothing failing anywhere.
+#
+# The owner instruction is explicit: do not bridge on compound names. These tests are
+# that instruction made structural rather than written down.
+
+
+def test_a_bare_compound_name_is_refused_as_a_dataset_scoped_id():
+    """The hole that existed. A bare name matches every other bare name."""
+    with pytest.raises(ValidationError, match="has no namespace"):
+        small_molecule(inchikey=None, dataset_compound_id="trenbolone")
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["Trenbolone:17-beta", "PC(18:1/16:0)", "X:y", "17:beta", "CCSBASE:trenbolone"],
+)
+def test_a_namespace_that_is_not_a_dataset_tag_is_refused(bad):
+    """So a compound name containing a colon cannot pose as a namespaced id.
+
+    Real compound names do carry colons - the lipid nomenclature in CCSbase is full of
+    them, PC(18:1/16:0) and worse - so "contains a colon" is not enough to make an id
+    namespaced. An uppercase tag is refused too, because two spellings of one namespace
+    would split one dataset into two.
+    """
+    with pytest.raises(ValidationError):
+        small_molecule(inchikey=None, dataset_compound_id=bad)
+
+
+def test_a_namespace_with_no_compound_after_it_is_refused():
+    with pytest.raises(ValidationError, match="names a dataset and no compound"):
+        small_molecule(inchikey=None, dataset_compound_id="ccsbase:")
+
+
+def test_the_real_dataset_tags_are_accepted():
+    """The three sources this repository has actually met. Not a hypothetical pattern."""
+    for good in (
+        "steroid_jasms2022:4-androstene-17-methyl-17-ol-3-one",
+        "ccsbase:CCSBASE_A4F2E9AA6E",
+        "bushlab:melittin",
+    ):
+        analyte = small_molecule(inchikey=None, dataset_compound_id=good)
+        assert analyte.identity_key()[2] == good
+
+
+def test_a_compound_name_containing_a_colon_survives_inside_the_identifier():
+    """The split is on the FIRST colon, so a lipid name keeps its own."""
+    analyte = small_molecule(inchikey=None, dataset_compound_id="ccsbase:PC(18:1/16:0)")
+    assert analyte.identity_key()[2] == "ccsbase:PC(18:1/16:0)"
+
+
+def test_one_compound_name_in_two_datasets_still_does_not_pair():
+    """The whole point, asserted now that the namespace is enforced.
+
+    Why it matters concretely: "androstenedione" names both 4-androstene-3,17-dione and
+    5-androstene-3,17-dione, and betamethasone and dexamethasone are C16 epimers. 30 of
+    the 87 steroid compounds share a commercial name with a CCSbase compound, so this is
+    a live 30-wide temptation rather than a hypothetical one.
+    """
+    here = small_molecule(inchikey=None, dataset_compound_id="steroid_jasms2022:androstenedione")
+    there = small_molecule(inchikey=None, dataset_compound_id="ccsbase:androstenedione")
+    assert here.identity_key() != there.identity_key()
+    assert not (here.identity_atoms() & there.identity_atoms())
+
+
+def test_a_display_name_is_never_part_of_the_identity_surface():
+    """Neither the key nor the atoms may carry it, so nothing can match on it.
+
+    Both surfaces are checked because they license different things: the key decides
+    what PAIRS, and a shared ATOM licenses a MERGE in the shared-peak check. A name
+    reaching either one would bridge two compounds.
+    """
+    analyte = small_molecule(
+        inchikey=None, dataset_compound_id="ccsbase:CCSBASE_1", display_name="Betamethasone"
+    )
+    assert "Betamethasone" not in str(analyte.identity_key())
+    assert not any("Betamethasone" in atom for atom in analyte.identity_atoms())
+    # and two records sharing ONLY a display name are two compounds
+    other = small_molecule(
+        inchikey=None,
+        dataset_compound_id="steroid_jasms2022:9-fluoro-16-methylprednisolone",
+        display_name="Betamethasone",
+    )
+    assert analyte.identity_key() != other.identity_key()
+    assert not (analyte.identity_atoms() & other.identity_atoms())

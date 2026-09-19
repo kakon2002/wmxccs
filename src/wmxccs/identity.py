@@ -602,6 +602,42 @@ _IUPAC_LINKAGE = re.compile(r"\([ab?]?[0-9?]+-[0-9?]+(?:/[0-9?]+)*\)")
 _PEPTIDE_SEQUENCE = re.compile(r"[ACDEFGHIKLMNPQRSTVWYUO]+")
 
 
+# A dataset tag: lowercase, starts with a letter, at least two characters. Every real
+# one so far fits - steroid_jasms2022, ccsbase, bushlab - and the point of the pattern
+# is to refuse things that are not dataset names, so that a compound name carrying a
+# colon cannot pass itself off as a namespaced id.
+_DATASET_NAMESPACE = re.compile(r"[a-z][a-z0-9_]+")
+
+DATASET_ID_NOT_NAMESPACED = (
+    "a dataset-scoped compound id must be written 'dataset:identifier', and {value!r} has no namespace."
+    " THE NAMESPACE IS THE WHOLE SAFETY PROPERTY of this field: it is what stops two tables that both"
+    " list a compound under the same name from pairing as though somebody had established they are the"
+    " same molecule. A bare name here would match every other bare name, which is the compound-name"
+    " matching this package refuses everywhere else, arriving through the one field built to prevent it."
+    " Write the source's own tag, as in 'ccsbase:{value}'"
+)
+DATASET_ID_BAD_NAMESPACE = (
+    "{namespace!r} is not a dataset tag: write it in lowercase, starting with a letter, at least two"
+    " characters, as in 'steroid_jasms2022' or 'ccsbase'. The pattern exists so that a compound name"
+    " containing a colon cannot pass itself off as a namespaced identifier"
+)
+DATASET_ID_NO_IDENTIFIER = (
+    "{value!r} names a dataset and no compound within it. A namespace alone identifies nothing"
+)
+
+
+def _check_dataset_compound_id(value: str) -> str:
+    """Enforce 'dataset:identifier'. Split on the FIRST colon; a compound name may contain others."""
+    namespace, separator, identifier = value.partition(":")
+    if not separator:
+        raise ValueError(DATASET_ID_NOT_NAMESPACED.format(value=value))
+    if not _DATASET_NAMESPACE.fullmatch(namespace):
+        raise ValueError(DATASET_ID_BAD_NAMESPACE.format(namespace=namespace))
+    if not identifier.strip():
+        raise ValueError(DATASET_ID_NO_IDENTIFIER.format(value=value))
+    return value
+
+
 def _check_inchikey(value: str) -> str:
     if not _INCHIKEY.fullmatch(value):
         raise ValueError(
@@ -760,6 +796,13 @@ class SmallMoleculeAnalyte(_Analyte):
     Resolving a dataset id to an InChIKey is a curation act with a provenance
     trail, not something the loader does. Until somebody does it, a
     dataset-identified compound pairs inside its own source and nowhere else.
+
+    THE NAMESPACE IS ENFORCED, not merely described. It was described here and not
+    enforced until 19 September 2026, which meant a bare compound name was accepted as
+    a dataset id and two bare names from two adapters matched each other - name
+    bridging, through the field built to prevent it, with nothing failing anywhere.
+    `_check_dataset_compound_id` now refuses an id with no namespace, a namespace that
+    is not a dataset tag, and a namespace with no compound after it.
     """
 
     kind_tag: Literal[AnalyteKind.SMALL_MOLECULE] = AnalyteKind.SMALL_MOLECULE
@@ -768,9 +811,10 @@ class SmallMoleculeAnalyte(_Analyte):
         default=None,
         description="Optional, and never the key: one molecule has many valid SMILES and one InChIKey.",
     )
-    dataset_compound_id: _Text | None = Field(
+    dataset_compound_id: Annotated[_Text, AfterValidator(_check_dataset_compound_id)] | None = Field(
         default=None,
         description="A compound as ONE NAMED DATASET identifies it, written 'dataset:identifier'."
+        " The namespace is REQUIRED and enforced: a bare name here would match every other bare name."
         " A fallback, and a weak one: see the class docstring.",
     )
 
