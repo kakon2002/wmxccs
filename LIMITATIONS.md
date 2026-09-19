@@ -47,6 +47,13 @@ over-determined - each of these alone is sufficient:
 3. the 2015 rows carry `drift_gas = UNSTATED` and the 2016 rows carry `He`, and
    gas is part of the matched-ion key, so even a shared analyte could not pair.
 
+Reason 3 became stronger on 19 September 2026. A record whose drift gas the source
+never stated now keys UNIQUELY TO ITSELF, so the 2015 file holds no key capable of
+pairing with anything - not 46 keys shared among its 89 rows, but 89 unmatchable
+ones. `matched_ion_keys_held` is 0 for that file and `unmatchable_held` is 89. It
+does not merely fail to pair with the 2016 file; it cannot pair at all until
+somebody reads Hofmann 2014 and records the gas. See 4.6.
+
 `readiness.py` reports that as a blocker, in those terms, rather than as a small
 number.
 
@@ -178,7 +185,7 @@ by hand should copy.
 
 ### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
 
-Six separate instances in this repository so far, in six different shapes. They
+Seven separate instances in this repository so far, in seven different shapes. They
 are collected here rather than filed apart, because the shape is the point: in every
 one, the suite was green, the coverage looked complete, and a behaviour nobody was
 actually protecting could have been deleted without a single test going red.
@@ -247,11 +254,21 @@ which asserts that only `reuse.py` and `sources.py` CALL the commercial predicat
 all. A new call site now fails a test, so choosing between the two questions has to
 be a decision somebody writes down rather than a default nobody notices.
 
-WHAT THE SIX HAVE IN COMMON, and what to do about it. Green is not evidence. The
-question that catches all six is not "do the tests pass" but "what would have to
+**Seven: a rule applied to one unknown and not to its twin.** An unstated charge
+carrier made a matched-ion key unique to its own record, so two such records could
+never match. An unstated DRIFT GAS did the opposite and matched every other
+gas-unstated record, across platforms. Both are "the source did not say", both sit
+in the same key, and the argument for keying the first uniquely applies to the
+second word for word. There was no test either way for the gas, because nobody had
+noticed there was a question. Section 4.6 has the detail. Found, again, by real data:
+CCSbase states no gas for 25,020 records across three platforms, so the rule was one
+ingest away from manufacturing cross-platform pairs in bulk.
+
+WHAT THE SEVEN HAVE IN COMMON, and what to do about it. Green is not evidence. The
+question that catches all seven is not "do the tests pass" but "what would have to
 break for this to go red, and is that the thing I think I am protecting". Note that
-three of the six were found by somebody asking that question about a mutation that
-had apparently behaved correctly, one by real data contradicting the code, and none
+three of the seven were found by somebody asking that question about a mutation that
+had apparently behaved correctly, two by real data contradicting the code, and none
 by a test going red. Concretely:
 
 - when a mutation is killed, check WHICH test killed it and whether that test is
@@ -274,6 +291,46 @@ by a test going red. Concretely:
   the call site on those. A test whose data answers both questions identically
   cannot tell which question the code is asking - and every existing test is, by
   construction, data that passed before the split.
+- when a rule is written for one "the source did not say" case, ask which OTHER
+  fields have the same case, and whether the same rule holds for them. Two of these
+  seven were one rule that should have been two, and in both the second place had no
+  test because nobody had noticed there was a question to answer.
+
+### 4.6 An unstated drift gas keyed records together; an unstated carrier did not
+
+CLOSED 19 September 2026, and recorded because the asymmetry stood for four
+milestones without anybody deciding it.
+
+A record whose CHARGE CARRIER the source never named - `[M+24?]24+` - has always
+keyed uniquely to itself, so it can never match another record, including another
+unstated-carrier one. That was built in M0 on an explicit instruction, and the
+reason is that two papers both reporting "the 24+ ion" of one protein have not
+reported the same ion: one may be 24 protons and the other 24 ammonium adducts,
+408 Da apart.
+
+A record whose DRIFT GAS the source never stated did the opposite. `DriftGas.UNSTATED`
+is one enum value, so every gas-unstated record matched every other one - **including
+across platforms.** The argument against that is the carrier argument word for word: a
+value referenced to helium and a value referenced to nitrogen are not values of the
+same ion, which is precisely why the gas is one of the five key components. "Neither
+source said" is the absence of evidence, not evidence of agreement.
+
+**It was found by real data, and it was about to do damage at scale.** CCSbase holds
+25,020 measurements across DTIMS, TWIMS and TIMS and states no gas per record.
+Ingesting it under the old rule would have manufactured cross-platform matched ions
+in bulk - a helium drift-tube value sitting against a nitrogen travelling-wave value
+as though they were one ion - and every one of those pairs would have fed a bias
+figure that looked like a finding.
+
+Now both unknowns make a key unmatchable, the key names which one is missing (so a
+curator knows whether resolving the gas is enough), and a record missing both says
+both. Nothing narrows for records that DO state their gas: two laboratories on two
+platforms both stating nitrogen still pair, which is what the key is for. The steroid
+corpus states N2 throughout and its 142 matched ions are unaffected.
+
+What it cost: the 2015 seed file went from 46 shared keys to 89 unmatchable ones,
+which is a documented count that changed. The M0 conclusion is strengthened rather
+than weakened by it - see section 1.
 
 ## 4A. Defects found during M0 and fixed
 
@@ -842,12 +899,181 @@ everything else under `tools/`, is tested but not mutation-verified. Given secti
 the harness a second shadow root, which touches the invariant that makes it safe,
 and was not worth doing inside this change.
 
+## 7E. CCSbase and the Bush Lab database: retrieved, characterised, not ingested
+
+Both were downloaded on 19 September 2026 and neither has been converted. What
+follows is what they turn out to hold, recorded because in both cases it differs from
+what CONTEXT.md assumed.
+
+### CCSbase: 25,020 records, three platforms, and no stated drift gas
+
+**There is no bulk download.** The site's `/download` button returns a 182-byte
+`batch_query.csv` - the TEMPLATE for the batch-query upload feature, not an export.
+The paper behind it (Ross, Cho & Xu 2020, Anal. Chem.) is not open access and has no
+supplementary data in Europe PMC. The table is paginated at ten rows over 2,502 pages.
+
+What worked is the site's own search form, which POSTs to `/results`: one broad query
+returned all 25,020 rows in a single 19.5 MB response. That is the site used as
+intended rather than crawled - one request, not 2,502 - and the terms restrict the
+PURPOSE of use (academic, non-commercial) rather than the method. There is no
+robots.txt. The response is kept in `data/raw/ccsbase/` with its sha256.
+
+The table carries twelve columns, and they are better than expected:
+
+| column | what it gives |
+| --- | --- |
+| ID | a stable per-record id, `CCSBASE_A4F2E9AA6E` |
+| Name, Adduct, m/z, CCS, Z | the measurement |
+| SMI | **SMILES**, so a structural identity is reachable |
+| Type | compound class |
+| Ref | one of 36 primary papers, each linked to its DOI |
+| CCS Type | **the platform**: DT 10,967, TW 8,529, TIMS 5,524 |
+| CCS method | 23 distinct methods, most naming a calibrant |
+
+So CCSbase is genuinely platform-aware, as CONTEXT.md said, and it carries the
+calibration method too. Three things stand between it and ingestion, and none is a
+code problem:
+
+1. **THE DRIFT GAS IS NOT A COLUMN.** Not for any of the 25,020 records. One method
+   string mentions "helium and nitrogen drift gas" (120 records), which is proof that
+   the database is not uniformly nitrogen and therefore that assuming nitrogen would
+   be writing in a method detail. Under the keying rule of section 4.6 every one of
+   these records is unmatchable until its gas is resolved, so **CCSbase currently
+   contributes zero matched ions.** The gas is stated in the 36 primary papers, so
+   this is a bounded curation task - 36 papers - rather than an open one, and each
+   paper resolved unlocks its own records.
+2. **8,388 records name no calibrant.** `CCS method` reads "single field, calibrated"
+   for 5,233 DT and 2,950 TIMS records, and "?" for 205 more. Those take
+   `UNSTATED_CALIBRANT` and are held, exactly as the steroid trapped-ion values are.
+3. **PROVENANCE IS TWO-LAYERED.** The values belong to 36 primary papers; CCSbase is
+   the compilation. Its terms govern the compilation and were the terms read on
+   11 September 2026, so a record's `source` should be CCSbase - that is where the
+   value was obtained and whose terms permit the use - with the primary paper's
+   reference and DOI recorded in `source_locator`. That keeps the licence claim
+   backed by the entry that actually covers it, and keeps the real origin visible.
+   It does NOT establish that each of the 36 papers permits reuse, and nothing here
+   should be read as claiming it does.
+
+Also newly read, verbatim, from the site's own terms and not previously recorded:
+*"Any derivative works (e.g. softwares, websites) must reproduce the above copyright
+notice"*, and use *"must be for academic, non-commercial purposes only"*, with
+commercial users directed to Dr Libin Xu and UW CoMotion. The notice-reproduction
+clause is an obligation this repository would take on by ingesting, and it is
+stronger than the plain citation requirement the registry recorded.
+
+### The Bush Lab database: the only real biopharmaceutical data identified
+
+Downloaded from the documented published-to-web xlsx URL, which needs no
+workaround. 213 KB, eight sheets, roughly 6,500 rows:
+
+| sheet | rows |
+| --- | --- |
+| Native-Like Protein Cations | 1,000 |
+| Native-Like Protein Cations and (complexes) | 989 |
+| Denatured Protein Cations | 1,000 |
+| Polyalanine Cations | 33 |
+| Anionic Homopolymers | 1,000 |
+| Other Peptides | 1,000 |
+| Small Molecular Ions | 24 |
+| MicroSource Collection | 1,441 |
+
+This is the data the M1 biopharmaceutical identity layer was built for and has never
+seen: native-like and denatured protein cations, protein complexes, peptides. Five
+things are visible from opening the sheets, and each one changes what a converter has
+to do.
+
+**1. The gas IS stated, in the column headers.** `Ω(He) / nm^2` and `Ω(N2) / nm^2`,
+exactly as the steroid sheet states its gas in `TWCCSN2`. So unlike CCSbase, these
+records are MATCHABLE the moment they are converted - the blocker of section 4.6 does
+not apply. Most ions carry both a helium and a nitrogen value, which become two
+records on two keys rather than one: a helium value and a nitrogen value are not
+values of the same ion, which is the whole reason the gas is in the key.
+
+**2. THE UNITS DIFFER BETWEEN SHEETS, by a factor of 100.** The protein and peptide
+sheets report nm², the polyalanine, homopolymer, small-molecule and MicroSource sheets
+report Å². Getting this wrong would put a protein cross section out by two orders of
+magnitude. It is the single most dangerous detail in the file and the easiest to miss,
+because both spellings look like a unit and neither looks like a mistake.
+
+**3. THE PROTEIN SHEETS CARRY NO ADDUCT, only a charge.** A row says z = 3 and never
+says what the three charges are. This is precisely the case CONTEXT.md predicted would
+be common rather than rare in this source, and the `[M+24?]24+` form was built in M0
+for it. **Prediction confirmed.** Every such record keys uniquely to itself and can
+never pair, so the native and denatured protein data - roughly 3,000 rows - arrives
+unmatchable unless the carrier can be established from the cited papers.
+
+**4. The MicroSource Collection is the clean part.** 1,441 drug-like molecules with a
+stated adduct (`[M+H]+`), charge, nitrogen CCS, a per-row standard deviation in
+`s / Å^2`, a formula, a CAS number and a reference. Adduct, charge, gas and
+uncertainty all stated: this is the most immediately usable table found in any source
+so far, including the steroid study.
+
+**5. 41 cells in one sheet are corrupt**, holding date serials far outside any valid
+range (21955915 in C99, 9677161 in C108, and 39 more) which openpyxl refuses to read.
+A converter must count and report them, never let them arrive as nulls.
+
+One discrepancy to settle before ingesting: the registry records these values as
+DTIMS, and the database page describes the ions as *"primarily from traveling-wave ion
+mobility spectrometry"*. Those are different platforms and the difference is the
+entire subject of this repository. The per-row `Ref` column names the paper for each
+value, so this is answerable per row rather than per file, and it must be answered
+rather than assumed.
+
+Its terms ask only that users cite the appropriate publications, which is the
+lightest obligation of the three sources, and the registry records it as
+`academic_only` on the conservative reading.
+
+### The bridge between sources is compound identity, and it is 30 compounds wide
+
+Worth stating on its own, because it is the highest-value thing found while
+characterising these two sources and it is not obvious from either.
+
+Every matched ion in this repository is INSIDE one study. Bias measured that way is
+bias between that study's own instruments, which is not the quantity this platform
+exists to report. Pairing ACROSS sources would give bias between laboratories, and
+what stands in the way is not the platforms or the gases - it is that nobody has
+established which compound is which.
+
+Measured, not estimated:
+
+- **2 of 87** steroid compounds share their SYSTEMATIC name with a CCSbase compound.
+- **30 of 87** share their COMMERCIAL name. Betamethasone, dexamethasone, cortisone,
+  danazol, androstenedione, 17-hydroxyprogesterone and 24 more.
+
+So a bridge exists and it is 30 compounds wide. **It must not be crossed on the
+names.** The trap is visible in that very list: "androstenedione" names both
+4-androstene-3,17-dione and 5-androstene-3,17-dione, which are different molecules
+with different cross sections, and betamethasone and dexamethasone are C16 epimers of
+one another. A name-based join would pair some of these correctly and some
+incorrectly, and the incorrect ones would appear as inter-laboratory bias of a few per
+cent - indistinguishable from the real thing, which is the entire measurement.
+
+The resolution is asymmetric between the sources, and that asymmetry decides the order
+of work:
+
+- **CCSbase can be resolved by machine.** All 25,020 records carry SMILES, with no
+  exceptions. SMILES to InChIKey is a deterministic computation, so every CCSbase
+  compound has a structural identity available.
+- **The Bush Lab MicroSource sheet can be resolved too**, carrying a molecular formula
+  and a CAS number for each of its 1,441 compounds.
+- **The steroid study cannot be resolved at all without a person.** It carries no
+  structure, no SMILES, no CAS, no InChIKey. Its systematic names do fully specify the
+  structures to a reader who knows steroid nomenclature -
+  "4-androstene-17alpha-methyl-17beta-ol-3-one" is a complete description - so this is
+  a bounded task of 87 compounds for somebody competent to do it, not an impossible
+  one. It is simply not a task code can do silently.
+
+None of this is implemented, and the dataset-scoped identity in `identity.py` is what
+keeps it honest in the meantime: these compounds pair inside their own source and
+nowhere else, which is the correct answer until the work is done rather than a
+limitation to route around.
+
 ## 8. Scope of the test suite
 
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 204 mutations against twelve modules. It is smaller than the
+- the catalogue holds 206 mutations against twelve modules. It is smaller than the
   glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone. The floor in the catalogue test
   is the real current count and goes up, never quietly down;

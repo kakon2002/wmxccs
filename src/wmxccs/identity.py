@@ -1468,28 +1468,44 @@ class MatchedIonKey(NamedTuple):
     charge: int
     drift_gas: DriftGas
     state: tuple
-    # None for every ion whose charge carrier the source named, which is every
+    # None for every ion whose carrier AND gas the source named, which is every
     # ordinary record and which leaves the key behaving exactly as the five
     # components above describe.
     #
-    # For an ion written [M+24?]24+ this holds the record's own provenance, which
-    # makes the key UNIQUE TO THAT RECORD and therefore incapable of matching
-    # anything, including another unstated-carrier record.
+    # Otherwise this holds the record's own provenance, which makes the key UNIQUE
+    # TO THAT RECORD and therefore incapable of matching anything, including
+    # another record missing the same thing. Two things put a key here, and the
+    # argument is the same one twice:
     #
-    # That is the point, and it is structural rather than a rule somebody
-    # downstream has to remember. Two papers both reporting "the 24+ ion" of one
-    # protein have not reported the same ion: one may be twenty-four protons and
-    # the other twenty-four ammonium adducts, which differ by 408 Da and do not
-    # have the same cross section. Letting the two land on one key would pair
-    # them, and the pipeline would report the difference between two different
-    # ions as inter-platform bias - silently, and most often in exactly the
-    # native-MS protein data the biopharmaceutical layer is built on, where the
-    # carrier is very often not stated.
+    # THE CHARGE CARRIER, for an ion written [M+24?]24+. Two papers both reporting
+    # "the 24+ ion" of one protein have not reported the same ion: one may be
+    # twenty-four protons and the other twenty-four ammonium adducts, which differ
+    # by 408 Da and do not have the same cross section. Most often unstated in
+    # exactly the native-MS protein data the biopharmaceutical layer is built on.
+    #
+    # THE DRIFT GAS, for a record carrying DriftGas.UNSTATED. A value referenced to
+    # helium and a value referenced to nitrogen are not values of the same ion -
+    # which is precisely why the gas is one of the five components above. A record
+    # that does not say which it is cannot be placed, and "neither source said" is
+    # the absence of evidence rather than evidence of agreement. Pairing on it
+    # would report the difference between a helium value and a nitrogen value as
+    # inter-platform bias.
+    #
+    # The gas was added here on 19 September 2026, after CCSbase - 25,020 records
+    # across DTIMS, TWIMS and TIMS, stating no gas per record - would otherwise
+    # have manufactured cross-platform matched ions at scale on a premise nobody
+    # had checked. Until then the two unknowns were treated differently, and the
+    # difference was not a decision anybody had made.
+    #
+    # Both are structural rather than a rule somebody downstream has to remember.
     unmatchable: tuple | None = None
 
     @property
     def matchable(self) -> bool:
-        """Whether this key may ever pair with another. False when the carrier is unstated."""
+        """Whether this key may ever pair with another.
+
+        False when the source stated neither the charge carrier nor the drift gas.
+        """
         return self.unmatchable is None
 
     def __str__(self) -> str:

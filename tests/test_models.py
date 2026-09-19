@@ -784,3 +784,75 @@ def test_two_records_whose_calibrant_is_unstated_still_describe_one_group():
     one = measurement(calibrant=UNSTATED_CALIBRANT)
     two = measurement(calibrant=UNSTATED_CALIBRANT, source="another laboratory")
     assert one.calibration_group == two.calibration_group
+
+
+# --- a drift gas the source never stated -------------------------------------------------
+#
+# The twin of the unstated-charge-carrier rule, and added on 19 September 2026
+# because the two unknowns had been treated differently and nobody had decided
+# that. A record whose gas the source never stated used to match every other
+# gas-unstated record freely, INCLUDING ACROSS PLATFORMS.
+#
+# Found by real data. CCSbase states no gas per record for 25,020 measurements
+# across DTIMS, TWIMS and TIMS, so ingesting it under the old rule would have
+# manufactured cross-platform matched ions at scale on a premise nobody checked.
+
+
+def test_two_records_whose_drift_gas_is_unstated_never_match_each_other():
+    """The argument is the carrier argument, unchanged.
+
+    A value referenced to helium and a value referenced to nitrogen are not values
+    of the same ion - which is exactly why the gas is in the key. A record that
+    does not say which it is cannot be placed, and "neither source said" is the
+    absence of evidence rather than evidence that the two agree.
+    """
+    one = measurement(drift_gas=DriftGas.UNSTATED, source="one laboratory", doi="10.1000/aaa")
+    other = measurement(drift_gas=DriftGas.UNSTATED, source="another laboratory", doi="10.1000/bbb")
+    assert one.matched_ion_key != other.matched_ion_key
+    assert one.matched_ion_key.matchable is False
+    assert other.matched_ion_key.matchable is False
+
+
+def test_two_platforms_whose_drift_gas_is_unstated_do_not_produce_a_cross_platform_pair():
+    """The case that matters, because this one would become a bias figure.
+
+    Pairing these would report the difference between a value referenced to one gas
+    and a value referenced to another as inter-platform bias, silently.
+    """
+    twims = measurement(
+        drift_gas=DriftGas.UNSTATED, ims_type=IMSType.TWIMS, source="one laboratory", doi="10.1000/aaa"
+    )
+    tims = measurement(
+        drift_gas=DriftGas.UNSTATED, ims_type=IMSType.TIMS, source="another laboratory", doi="10.1000/bbb"
+    )
+    assert twims.matched_ion_key != tims.matched_ion_key
+
+
+def test_the_same_two_platforms_DO_pair_once_the_gas_is_stated():
+    """The other side, and the reason this is a keying rule rather than a refusal.
+
+    Nothing about the fix narrows matching for records that say what gas they refer
+    to. Two laboratories on two platforms, both stating nitrogen, still pair - which
+    is the entire purpose of the key.
+    """
+    twims = measurement(drift_gas=DriftGas.N2, ims_type=IMSType.TWIMS, source="one laboratory", doi="10.1000/aaa")
+    tims = measurement(drift_gas=DriftGas.N2, ims_type=IMSType.TIMS, source="another laboratory", doi="10.1000/bbb")
+    assert twims.matched_ion_key == tims.matched_ion_key
+    assert twims.matched_ion_key.matchable is True
+
+
+def test_a_record_missing_both_the_carrier_and_the_gas_says_so_in_its_key():
+    """One reason or two, the key names what is missing rather than only that it is unmatchable.
+
+    A curator reading a held record needs to know whether resolving the gas is
+    enough, or whether the carrier has to be settled as well.
+    """
+    record = measurement(adduct="[M+2?]2+", charge=2, drift_gas=DriftGas.UNSTATED)
+    reason = record.matched_ion_key.unmatchable[0]
+    assert "charge carrier not stated" in reason
+    assert "drift gas not stated" in reason
+    # and one unknown alone names only itself
+    gas_only = measurement(drift_gas=DriftGas.UNSTATED)
+    assert gas_only.matched_ion_key.unmatchable[0] == "drift gas not stated"
+    carrier_only = measurement(adduct="[M+2?]2+", charge=2)
+    assert carrier_only.matched_ion_key.unmatchable[0] == "charge carrier not stated"

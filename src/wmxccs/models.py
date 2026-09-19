@@ -629,18 +629,30 @@ class CCSMeasurement(MeasurementConditions):
         adduct, the signed charge and the gas the value REFERS TO. It carries no
         platform, no calibrant, no instrument and no DOI: a DTIMS value and a
         TWIMS value of one ion land on one key, which is the whole point.
+
+        A key is UNMATCHABLE when the source did not state the charge carrier or
+        did not state the drift gas. Both make the key unique to its own record.
         """
         from .identity import MatchedIonKey
 
-        # An ion whose charge carrier the source never named cannot be matched
-        # with anything, including another record of the same shape, so its key
-        # carries its own provenance and is unique to it. See MatchedIonKey.
+        # TWO UNKNOWNS MAKE A KEY UNMATCHABLE, and for one reason stated once: a
+        # record missing either of them is not known to be of the same ion as any
+        # other record, and "neither source said" is not evidence that two values
+        # agree. Such a key carries the record's own provenance, which makes it
+        # unique to that record and therefore incapable of matching anything,
+        # including another record missing the same thing. See MatchedIonKey.
+        #
         # Derived from the record rather than generated, so the key is stable
         # across runs and a report is reproducible.
-        unmatchable = None
+        reasons = []
         if adduct_carrier_is_unstated(self.adduct):
+            reasons.append("charge carrier not stated")
+        if self.drift_gas is DriftGas.UNSTATED:
+            reasons.append("drift gas not stated")
+        unmatchable = None
+        if reasons:
             unmatchable = (
-                "charge carrier not stated",
+                " and ".join(reasons),
                 self.source,
                 self.doi,
                 self.source_locator,

@@ -371,8 +371,28 @@ def test_no_matched_ion_key_in_the_seeded_corpus_is_held_on_more_than_one_platfo
     assert paired == set(), f"{len(paired)} matched ions are claimed on two platforms"
 
     # The keys are disjoint between the files too, so the corpus holds exactly as
-    # many distinct ions as the two files hold separately: nothing was matched.
-    assert len(platforms_by_key) == report_2016.matched_ion_keys_held + report_2015.matched_ion_keys_held
+    # many distinct keys as the two files hold separately: nothing was matched.
+    #
+    # UNMATCHABLE KEYS ARE COUNTED SEPARATELY, which is why both terms appear. Since
+    # 19 September 2026 a record whose drift gas the source never stated keys
+    # uniquely to itself, exactly as one whose charge carrier was never stated does,
+    # so all 89 rows of the 2015 file are unmatchable rather than 46 keys shared
+    # between them. `matched_ion_keys_held` therefore reports 0 for that file and
+    # `unmatchable_held` reports 89. Both numbers are in this sum because both kinds
+    # of key are in `platforms_by_key`.
+    #
+    # The M0 result is STRONGER for the change, not weaker: the 2015 file does not
+    # merely fail to pair with the 2016 file, it holds no key that could pair with
+    # anything at all until somebody reads Hofmann 2014 and records the gas.
+    assert len(platforms_by_key) == (
+        report_2016.matched_ion_keys_held
+        + report_2016.unmatchable_held
+        + report_2015.matched_ion_keys_held
+        + report_2015.unmatchable_held
+    )
+    assert report_2015.matched_ion_keys_held == 0
+    assert report_2015.unmatchable_held == 89
+    assert report_2016.unmatchable_held == 0, "the 2016 file states helium, so its keys are matchable"
     # Not a vacuous zero: there are ions there to pair, they simply never pair.
     assert len(platforms_by_key) > 0
 

@@ -31,6 +31,19 @@ The two Struwe seed files still pair nothing, for three independent reasons, and
 `readiness.py` reports that as a blocker with the reason rather than as a small
 number. See `LIMITATIONS.md` section 1.
 
+The other two licence-clear sources are retrieved and characterised, not ingested:
+
+- **CCSbase** - 25,020 records read in full, DT 10,967 / TW 8,529 / TIMS 5,524, with
+  SMILES and a per-record calibration method. **Its drift gas is not a column**, so
+  every record is unmatchable and it yields no matched ions until the gas is resolved
+  from the 36 primary papers it aggregates.
+- **Bush Lab** - eight sheets, about 6,500 rows of protein, peptide and drug-like
+  ions: the only real data the biopharmaceutical layer has been offered. Its gas IS
+  stated, so it is matchable. Its protein sheets state a charge with no adduct, which
+  is the unstated-charge-carrier case CONTEXT.md predicted for exactly this source.
+
+Both are in `LIMITATIONS.md` section 7E, with what each one still needs.
+
 ## Layout
 
 ```

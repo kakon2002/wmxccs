@@ -387,6 +387,22 @@ MUTATIONS: tuple[Mutation, ...] = (
         find='        if getattr(self, "calibrant", None) == UNSTATED_CALIBRANT:',
         replace="        if False:",
     ),
+    Mutation(
+        label="[M] an unstated drift gas no longer makes its key unique to its record",
+        file="models.py",
+        find="        if self.drift_gas is DriftGas.UNSTATED:\n            reasons.append(\"drift gas not stated\")",
+        replace="        if False:\n            reasons.append(\"drift gas not stated\")",
+    ),
+    Mutation(
+        label="[M] a key missing the carrier or the gas stops carrying its own provenance, so all such records merge",
+        file="models.py",
+        # The reasons are still collected, so the key still reports itself
+        # unmatchable - but every record missing the same thing now carries the SAME
+        # unmatchable tuple, so they all merge into one key. Worse than losing the
+        # rule outright, because `matchable` still says False and the count is wrong.
+        find='        unmatchable = None\n        if reasons:\n            unmatchable = (\n                " and ".join(reasons),\n                self.source,\n                self.doi,\n                self.source_locator,\n                self.ccs,\n                self.conformer,\n            )',
+        replace='        unmatchable = None\n        if reasons:\n            unmatchable = (" and ".join(reasons),)',
+    ),
     # --- [L] licensing: the gate ----------------------------------------------
     Mutation(
         label="[L] the gate reports a refusal instead of raising one",

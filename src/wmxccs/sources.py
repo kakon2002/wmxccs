@@ -375,8 +375,12 @@ BUSH_LAB_CCS = SourceLicence(
     title="(not recorded)",
     licence="No terms of use posted; the page asks only that users cite the appropriate publications",
     reuse_status=ReuseStatus.ACADEMIC_ONLY,
-    content="Native and denatured proteins, peptides and small molecules. Most ions measured in BOTH helium"
-    " and nitrogen by similar DTIMS methods. Downloadable as a Google Sheet.",
+    content="DOWNLOADED 19 September 2026 and counted from the file rather than reported: 213 KB, eight"
+    " sheets, roughly 6,500 rows. Native-Like Protein Cations 1,000; Native-Like Protein Cations and"
+    " complexes 989; Denatured Protein Cations 1,000; Polyalanine Cations 33; Anionic Homopolymers 1,000;"
+    " Other Peptides 1,000; Small Molecular Ions 24; MicroSource Collection 1,441. Retrieved from the"
+    " documented published-to-web xlsx URL, which needs no workaround. Most ions are reported to be measured"
+    " in BOTH helium and nitrogen by similar DTIMS methods, which has not yet been checked against the file.",
     evidence=(
         'The page asks only that users "cite the appropriate publication(s)". Read by Shawon Chakrabarty'
         " Kakon; reported again 19 September 2026.",
@@ -395,6 +399,28 @@ BUSH_LAB_CCS = SourceLicence(
         " the matched-ion key was built to carry.",
         "Also the only named source measuring the same ions in both helium and nitrogen, which would let the"
         " gas-reference question be tested rather than assumed.",
+        "WHAT THE FILE SHOWS BEFORE ANY CONVERSION, from opening the sheets on 19 September 2026. (1) THE"
+        " GAS IS STATED, in the column headers - 'Omega(He)' and 'Omega(N2)' - so unlike CCSbase these"
+        " records are matchable as soon as they are converted. Most ions carry both, which becomes two"
+        " records on two keys rather than one. (2) THE UNITS DIFFER BETWEEN SHEETS BY A FACTOR OF 100: the"
+        " protein and peptide sheets report nm^2, the polyalanine, homopolymer, small-molecule and"
+        " MicroSource sheets report A^2. Getting this wrong puts a protein cross section out by two orders"
+        " of magnitude, and both spellings look like a unit. (3) THE PROTEIN SHEETS CARRY NO ADDUCT, only a"
+        " charge: a row says z = 3 and never says what the three charges are. CONTEXT.md predicted exactly"
+        " this for exactly this source and the [M+24?]24+ form was built for it in M0 - PREDICTION"
+        " CONFIRMED - so roughly 3,000 protein rows arrive unmatchable. (4) The MicroSource Collection is"
+        " the clean part: 1,441 drug-like molecules with adduct, charge, nitrogen CCS, a per-row standard"
+        " deviation, a formula, a CAS number and a reference. The most immediately usable table found in"
+        " any source so far. (5) 41 cells in one sheet are corrupt, holding date serials far outside any"
+        " valid range - 21955915 in C99, 9677161 in C108, and 39 more - which openpyxl refuses to read."
+        " They must be counted and reported, never allowed to arrive as nulls.",
+        "A DISCREPANCY TO SETTLE BEFORE INGESTING. This entry records the values as DTIMS; the database page"
+        " describes the ions as 'primarily from traveling-wave ion mobility spectrometry'. Those are"
+        " different platforms and the difference is the entire subject of this repository. The per-row Ref"
+        " column names the paper for each value, so it is answerable per row rather than per file - and it"
+        " must be answered rather than assumed.",
+        "NOT INGESTED. The file is in hand and the adapter is not written; it is third in the stated order,"
+        " after the steroid study and CCSbase.",
         "THE ONE RESERVATION ON THIS ENTRY, recorded because it is the only one of the three that rests on"
         " inference rather than on stated terms. A source posting NO terms defaults to all rights reserved,"
         " which is how AllCCS2 was treated and why AllCCS2 is excluded. This entry reads the citation"
@@ -437,14 +463,34 @@ CCSBASE = SourceLicence(
     title="(not recorded)",
     licence="Academic, non-commercial use only",
     reuse_status=ReuseStatus.ACADEMIC_ONLY,
-    content="25,020 entries, mostly lipids and metabolites. Platform-aware experimental database.",
+    content="25,020 records, READ IN FULL on 19 September 2026 and counted from the response rather than"
+    " reported: DT 10,967, TW 8,529, TIMS 5,524, across 23 named calibration methods and 36 primary"
+    " references. Twelve columns: a stable per-record id, name, adduct, m/z, CCS, charge, SMILES, compound"
+    " class, the reference, the platform and the calibration method. THE DRIFT GAS IS NOT ONE OF THEM, for"
+    " any record - see notes, because that one absence decides whether any of this can pair.",
     evidence=(
         "The About page states that use must be for academic non-commercial purposes, and directs commercial"
         " users to Libin Xu and UW CoMotion.",
+        "READ AGAIN ON 19 SEPTEMBER 2026 at https://ccsbase.net/about, and it says more than was recorded"
+        " the first time. Verbatim: use 'must be for academic, non-commercial purposes only'; 'Any derivative"
+        " works (e.g. softwares, websites) must reproduce the above copyright notice'; and published work"
+        " must cite Ross, Cho & Xu 2020, Anal. Chem., doi:10.1021/acs.analchem.9b05772. The"
+        " notice-reproduction clause is an OBLIGATION THIS PLATFORM WOULD TAKE ON by ingesting, and it is"
+        " stronger than the plain citation requirement recorded before.",
     ),
     reported_by="Shawon Chakrabarty Kakon",
     reported_on=date(2026, 9, 11),
-    attribution="None available to this platform while it is treated as commercial.",
+    attribution="TWO obligations, both from the About page read 19 September 2026. (1) Cite Ross, Cho & Xu"
+    " 2020, Anal. Chem., doi:10.1021/acs.analchem.9b05772. (2) Reproduce the site's copyright notice in any"
+    " derivative work, which includes software and websites - so a deployed platform carrying these values"
+    " has to carry the notice, not merely a citation. Each record also names one of 36 primary papers, and"
+    " those are the origin of the values; citing the compilation does not cite them.",
+    what_to_check="THE DRIFT GAS, per reference. It is not a column, so every record is unmatchable under"
+    " the keying rule in LIMITATIONS 4.6 and CCSbase currently contributes ZERO matched ions. This is a"
+    " bounded task rather than an open one: each record names one of 36 primary papers, those papers state"
+    " the gas, and each paper resolved unlocks its own records. Do NOT default the database to nitrogen -"
+    " one of its own method strings reads 'stepped-field DT-IMS, helium and nitrogen drift gas' for 120"
+    " records, which is proof that the database is not uniformly nitrogen.",
     context_basis="The CEO answered on 19 September 2026 that this platform is academic and research use, not commercial. That answer is the question CONTEXT.md records as the one deciding the data plan, and it is recorded in reuse.PLATFORM_USE_CONTEXT. The source's own terms are unchanged and are still recorded as what they are, so the gate refuses this row again on its own if the platform is ever commercialised.",
     notes=(
         "REOPENED 19 September 2026. This was the source most affected by the open question put to the CEO,"
@@ -453,7 +499,24 @@ CCSBASE = SourceLicence(
         "The terms are the clearest of the three reopened sources: the About page states the restriction"
         " explicitly and names where commercial users should go instead. This is what academic_only is for.",
         "Platform-aware, and that is why it matters here: it records which instrument a value came from,"
-        " so it can supply the same compound on more than one platform.",
+        " so it can supply the same compound on more than one platform. CONFIRMED against the data on"
+        " 19 September 2026: the CCS Type column holds DT, TW or TIMS for every one of the 25,020 records,"
+        " and a CCS method column names the calibrant for most of them.",
+        "HOW IT WAS RETRIEVED, because it is not a downloadable file and CONTEXT.md implied it was. The"
+        " site's /download button returns a 182-byte batch_query.csv, which is the TEMPLATE for the"
+        " batch-query upload feature and not an export. The paper behind the site is not open access and has"
+        " no supplementary data in Europe PMC. The table is paginated at ten rows over 2,502 pages. What"
+        " worked was the site's own search form, which POSTs to /results: one broad query returned all"
+        " 25,020 rows in a single response. One request rather than 2,502, the site used as intended rather"
+        " than crawled, no robots.txt present, and the terms restrict the PURPOSE of use rather than the"
+        " method. The response is kept with its sha256 under data/raw/ccsbase/.",
+        "NOT INGESTED, and the reason is the drift gas rather than the licence. See what_to_check.",
+        "PROVENANCE IS TWO-LAYERED and this entry covers only the outer layer. The values belong to 36"
+        " primary papers; CCSbase is the compilation, and these are the compilation's terms. A converted"
+        " record should therefore name CCSbase as its source - that is where the value was obtained and"
+        " whose terms permit the use - and carry the primary paper's reference and DOI in source_locator."
+        " NOTHING HERE ESTABLISHES that each of those 36 papers permits reuse, and this entry must not be"
+        " read as claiming it does.",
     ),
 )
 
