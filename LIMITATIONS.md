@@ -15,7 +15,7 @@ one kind of instrument; 93 of them on all four.
 values differ by roughly 0.1 to 1.1 per cent depending on the instrument pair and the ion.
 The corrections move a value by about that much.
 
-### Five things it would be easy to read into these numbers that are not there
+### Six things it would be easy to read into these numbers that are not there
 
 **1. "Drift tube versus trapped ion" is one laboratory comparing its own two instruments.**
 Those measurements were made by the study's authors on their own equipment. If a different
@@ -45,6 +45,22 @@ a correction is being driven by a handful of unusual ions rather than by the dat
 On this corpus it never triggers, and on eight of the eighteen comparisons it cannot even be
 calculated. Its threshold has deliberately NOT been lowered to make it trigger, because
 adjusting a safety check until it fires is fitting the check to the data.
+
+**6. A second safety check cannot run at all for a molecule we have not already measured.**
+One of the checks asks "is this particular ion a known bad case - one where the correction
+is already known not to work?" It answers that by looking the ion up in our own data. A
+molecule that is not in our data cannot be looked up, so for a new molecule the check does
+not say "fine", it says nothing. **A new molecule is the ordinary case for anyone using
+this service.** Until 20 September 2026 the response reported that silence as though the
+check had passed. It now says which checks could not be run, and lowers the confidence
+grade by one step when any of them could not. That step is not a claim the value is wrong -
+it means less was verified than the grading scheme describes.
+
+If you are bringing a molecule this platform has not measured, **expect that check to be
+unavailable every single time, not now and then.** Counting it across our own stored data
+makes it look like an occasional gap, roughly one time in three; that count is misleading
+because our own stored data is, by definition, data we already have. For anything new, the
+check simply does not apply.
 
 ### What to do with a number from this platform
 
@@ -252,7 +268,7 @@ by hand should copy.
 
 ### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
 
-Nine separate instances in this repository so far, in nine different shapes. They
+Ten separate instances in this repository so far, in ten different shapes. They
 are collected here rather than filed apart, because the shape is the point: in every
 one, the suite was green, the coverage looked complete, and a behaviour nobody was
 actually protecting could have been deleted without a single test going red.
@@ -434,6 +450,66 @@ Concretely:
 - when a guard fires on a THRESHOLD, check the whole range the threshold was meant to
   cover rather than the single value in the test. A boundary condition tested at one
   point is a boundary condition believed, not established.
+
+**Ten: a rule that could not answer, reported as a rule that passed.** CLOSED 20 September
+2026, and the worst of the ten because the system was making a positive claim rather than
+merely failing to check. `flagged_as_an_outlier` is a CORPUS LOOKUP: it asks whether the
+submitted ion is among the ions this stratum already recorded as not transferring. For an
+ion that is not in the corpus there is nothing to look in, and it returned `None` - the same
+value it returns for an ion that IS in the corpus and is fine. `grade_correction` read
+`None` as "checked and clean". `not_checked` came back empty, and an empty `not_checked` is
+used throughout this API as a positive assertion that every rule was evaluated. It is not
+vestigial: it populates on 133 of 417 graded responses from the seed corpus, which is what
+makes the empty case a claim rather than an absence.
+
+So the only rule in the scheme that speaks about the SUBMITTED ION rather than about the
+stratum around it was inert for every ion not already in the corpus - which is the entire
+population this platform exists to serve - while the response asserted it had been applied.
+Found by renaming a corpus ion and resubmitting it: the service returned a value it had just
+refused for the same measurement under its real name, with a 90 per cent interval that
+excluded that ion's own true DTIMS values.
+
+The fix is in three parts, because the first two alone would have left the same hole one
+level up. Evaluability is decided BEFORE the rules run, so "found nothing" and "could not
+look" are different answers. An unevaluable rule is named in `not_checked` and demotes the
+grade one notch - not to `unsupported`, because the ion may be perfectly fine, but a grade
+resting on fewer checks than the scheme advertises is not the same grade. And the demotion
+itself is published in `/confidence/rules`, because a demotion a caller can receive but
+cannot look up is a demotion they cannot argue with.
+
+The third part caught a fresh instance of the same class on the way in. `applies_to` - the
+field carrying the scope limit - was added to the scheme and served to nobody, because the
+endpoint hand-copied five fields by name and the test that checked the endpoint against the
+scheme hand-listed the same four. Both passed, because both only checked the fields they
+already knew about. The endpoint now builds the response model straight from the scheme
+dict, `ConfidenceRule` sets `extra="forbid"` so the next added key raises instead of being
+dropped, and the test compares the two key sets rather than a list of names.
+
+Effect on the seed corpus, measured rather than estimated: grades moved from 395 qualified /
+15 weak / 7 unsupported to **186 qualified / 216 weak / 15 unsupported**, and values served
+fell from 410 to 402.
+
+**Do not carry the corpus figure forward as the real one.** Replaying the seed corpus reports
+the outlier rule as unevaluable on 124 of 417 graded responses - about 30 per cent - and that
+number flatters itself, because every record in the replay is BY DEFINITION already in the
+corpus it is being looked up in. For the use this platform exists for, an ion it has not
+measured, the rule is inert on **100 per cent** of requests. The corpus figure is not a
+smaller version of the true one; it is a measurement of a different population, and 30 per
+cent reads like a minor gap where the truth is that the scheme's only ion-specific rule never
+applies to the intended user at all.
+
+- when a predicate returns None, ask whether it has TWO reasons to do so - "I looked and
+  found nothing" and "I could not look" - and whether the call site can tell them apart. If
+  it cannot, the caller is being told the stronger of the two. This is the split-predicate
+  lesson above, arrived at from the other end: there the split was visible in the source and
+  the call site was untested; here the split was invisible because one function was quietly
+  answering two questions with one value.
+- when a response field means "nothing to report", check whether anything ever populates it.
+  If it does, an empty one is a CLAIM, and it needs the same evidence as any other claim the
+  response makes.
+- when a rule is keyed on identity, ask which population it can answer for, and whether that
+  population is the one the software is for. A check that works perfectly on the data you
+  have and not at all on the data you expect is worse than no check, because it reports.
 
 ### 4.6 An unstated drift gas keyed records together; an unstated carrier did not
 
@@ -916,6 +992,80 @@ number from a real paper, quoted in CONTEXT.md and not read from the paper here.
 
 **The grading has never graded a real harmonized value**, because none exists. It
 has been exercised against synthetic strata only.
+
+### One of the five rules cannot answer for an ion that is not already in the corpus
+
+Stated here as a scope limit on the product rather than only as a per-response field,
+because a caller decides whether to trust this service BEFORE they send anything to it.
+
+Four of the five rules are properties of the CALIBRATION GROUP - how many ions it holds, how
+far the submitted value sits outside its range, whether a source behind it may be used, how
+much its slope is levered by ions that do not transfer. Those answer for any ion, because
+they are not about the ion.
+
+`flagged as an outlier in its own stratum` is the exception and the only rule that is about
+the submitted ion. It is a lookup against ions already measured on both platforms here, so
+it cannot answer for an ion the corpus has not seen - and an ion the corpus has not seen is
+the ordinary case for anyone using this service.
+
+**For that ordinary case the rule is inert always, not occasionally.** The figure to carry is
+100 per cent, not the 30 per cent that replaying this corpus against itself produces: that
+replay consists entirely of ions already present, so it measures a population nobody using
+this service belongs to. Stated this way round because 124 of 417 reads like a minor gap, and
+the true figure for the intended use is different in kind - the scheme publishes five
+substantive rules and a caller bringing new chemistry is graded by four of them.
+
+Where it cannot run:
+
+- it is named in the response's `not_checked`, with why;
+- the grade is demoted one notch, and the demotion names it;
+- it is never counted as passed.
+
+The scope limit is served on `/confidence/rules` in each rule's `applies_to` field. It is
+the only rule there whose `applies_to` is not "any ion", and a test asserts that it stays
+the only one - a caveat carried by every rule marks nothing.
+
+### Relabelling an ion still extracts a value the service refuses under its real name
+
+OPEN, and it cannot be closed by grading. Measured on 20 September 2026, after the fix above.
+
+Of the 15 seed records the service refuses outright under their own identity, **5 return a
+value when the same measurement is resubmitted with a new compound name**. Worked example:
+androstanedione's travelling-wave record is refused as itself - the corpus has it flagged as
+an ion that does not transfer, and that rule falls straight to `unsupported`. Renamed to a
+compound the corpus has never seen, the same numbers come back as 176.774 with an interval
+of 173.358 to 180.054, graded `weak`.
+
+The mechanism is not a bug in the fix; it is the fix working as ruled. The outlier rule is
+the only rule keyed on the analyte's identity, identity is supplied by the caller and cannot
+be verified here, and the ruling of 20 September 2026 is explicit that an unevaluable rule
+demotes ONE NOTCH rather than refusing - because a genuinely new ion may be perfectly fine,
+and refusing every new ion would refuse the platform's entire purpose. So a relabelled
+outlier is indistinguishable from a new ion, and gets a new ion's treatment.
+
+**What changed is what the response says**, and that is the whole of the improvement. Before,
+the renamed record came back with `not_checked: []` - a positive claim that every rule had
+been evaluated, including the one that would have refused it. Now it comes back a grade
+lower, with the outlier check named as unevaluable and a demotion saying the grade rests on
+fewer checks than the scheme advertises. The number is still served; the claim that it was
+fully checked is not.
+
+This is the identity analogue of a limit already recorded for licences in
+`SourceProvenance`: a field the caller supplies cannot gate anything, because a caller
+refused on its value edits it and resubmits. It obstructs only honest callers. The same
+holds here, and the honest disclosure is that **this service cannot tell a new ion from a
+renamed one, and does not claim to.**
+
+Closing it needs corpus growth or structure-based identity, not a stricter rule: an ion
+resubmitted under a new name but with the same InChIKey already matches, and it is only the
+dataset-local compound name that can be freely rewritten.
+
+**What would remove the limit** is not a code change. The rule can only answer for ions
+measured on both platforms of a pair, so it becomes generally useful exactly as the corpus
+grows toward covering the chemistry callers actually send. Lowering it to a distance check
+against the stratum median would make it fire for everyone, but that is a different rule
+answering a different question, and it would no longer mean "this ion is known not to
+transfer".
 
 ## 7D. The first real data: the steroid interplatform study
 
@@ -1487,6 +1637,63 @@ rather than returned with a warning, because that grade's definition is "do not 
 number" and handing over a number while saying not to use it is a contradiction a caller
 resolves in favour of the number. The grade and its reasons are still returned, so the
 caller learns why.
+
+### What a submitted record's licence status does, and does not, decide
+
+**Found by adversarial testing on 20 September 2026, not by a test.** `/harmonize` applied
+no licence check to submitted measurements at all: a record claiming `unverified`,
+`excluded`, `non_commercial_no_derivatives` or `synthetic_fixture` was corrected and a
+number returned. `assert_trainable` and `claim_problem` were called nowhere in `api.py`.
+
+The two halves of that turned out to need opposite answers.
+
+**`synthetic_fixture` IS NOW REFUSED.** It is not a licence claim - it declares that the
+record was built in code and is not a measurement. The loader has always refused the
+identical claim in a file, with the reasoning that "a row in a file is a real record"; the
+API accepted it over HTTP. **The same declaration was fatal at one entrance and ignored at
+the other**, and a number derived from a record that declares itself invented is
+indistinguishable, once returned, from one derived from data. Refused now whether or not a
+model is loaded, because the objection is to the record rather than to the state of the
+service.
+
+**THE LICENCE STATUSES DELIBERATELY DO NOT GATE THE ANSWER**, and this is a decision
+recorded rather than an oversight left standing:
+
+- The licence gate governs what may enter a FIT. The model is already fitted, on records
+  that passed the gate. A submitted measurement enters no fit and changes no parameter.
+- **The status is self-asserted and unverifiable.** A caller refused for `excluded` edits
+  the field to `open_attribution` and resubmits. A gate on a field the caller supplies
+  protects nothing and obstructs only honest callers. Shipping it would be theatre.
+- The caller's relationship to their own data is not knowable here. They may be its author.
+
+**Responsibility for the input's terms therefore remains the caller's**, and that is now a
+stated disclosure in `contracts.SourceProvenance` rather than an inference. It matters most
+for `non_commercial_no_derivatives`, where the no-derivatives clause bears directly on the
+fact that a harmonized value IS a derivative of the input: a caller holding data under
+those terms is the party making a derivative of it, and this service does not and cannot
+check that. Recorded as a reservation rather than treated as settled.
+
+### A response could contradict itself about a licence, and now cannot
+
+Also found by the same testing. `SourceProvenance.reuse_status` was named as though it were
+established fact and carried the RECORD'S CLAIM, while the registry contributed only its
+licence TEXT - so a response could show `reuse_status: "excluded"` beside
+`licence: "ACS AuthorChoice open access"` and a reader had to notice the contradiction
+unaided. CLAUDE.md constraint 2 says a claim is valid only when a registry entry backs it,
+and nothing said whether one did.
+
+Worse, `provenance_of`'s own docstring already promised the two were "reported together
+precisely so a caller can see when they disagree". **The intention was written down and half
+implemented** - the ninth instance of the pattern in section 4.5, and the second where a
+docstring stood in for the code.
+
+Three fields now, and the names carry the distinction:
+
+| field | what it is |
+| --- | --- |
+| `reuse_status_claimed` | what the submitted record says. A claim, self-asserted. |
+| `reuse_status_in_registry` | what the registry holds for that DOI, or None if unregistered. |
+| `claim_backed_by_registry` | whether they agree. **None** where unregistered, so there is nothing to agree with; **False** is the interesting case. |
 
 ### Deployment is from a checkout, and a wheel is not enough
 

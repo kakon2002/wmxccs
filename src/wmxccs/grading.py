@@ -230,6 +230,38 @@ def flagged_as_an_outlier(matched_ion_key: object, stratum: StratumStatistics) -
     return None
 
 
+def the_outlier_rule_can_run_for(matched_ion_key: object, stratum: StratumStatistics) -> bool:
+    """Whether `flagged_as_an_outlier` is capable of answering for THIS ion.
+
+    IT IS A CORPUS LOOKUP. It asks whether this ion's key is among the ions the stratum
+    already reported as not transferring, and a key that is not in the stratum at all
+    cannot be among them. So for any ion NOT IN THE SEED CORPUS the rule does not return
+    "not an outlier" - it returns nothing, having been unable to look.
+
+    That distinction was invisible until 20 September 2026: the rule returned None either
+    way, `grade_correction` treated None as "checked and fine", and every novel ion was
+    graded as though the check had passed. The population this platform exists to serve is
+    precisely the ions that are NOT already in its corpus, so the only ion-specific rule in
+    the scheme was inert for all of them while the response asserted it had run.
+    """
+    return any(point.ion.key == matched_ion_key for point in stratum.points)
+
+
+OUTLIER_RULE_UNEVALUABLE = (
+    "outlier check: this ion is not in the stratum's own data, so whether it is one of the ions that"
+    " already fail to transfer COULD NOT BE LOOKED UP. The rule is a corpus lookup keyed on identity and"
+    " it can only ever answer for ions already measured on both platforms here. For a new ion it is not"
+    " 'passed', it is unanswered - and this rule is the only one in the scheme that speaks about THIS ion"
+    " rather than about the stratum around it. If you are bringing chemistry this platform has not"
+    " measured, expect this note on EVERY response rather than occasionally: for that use the rule is"
+    " inert always"
+)
+UNEVALUABLE_DEMOTION = (
+    "{count} rule(s) of the scheme could not be evaluated for this ion, so this grade rests on fewer"
+    " checks than the scheme advertises and is not the same grade as one that passed them all: {names}"
+)
+
+
 def unverified_source_behind_it(stratum: StratumStatistics) -> Demotion | None:
     """Some measurement the correction rests on may not be used.
 
@@ -331,22 +363,32 @@ def correction_driven_by_outliers(stratum: StratumStatistics) -> Demotion | None
 def grade_correction(ccs: float, matched_ion_key: object, stratum: StratumStatistics) -> Confidence:
     """Every rule, applied to one ion against the stratum that would correct it.
 
-    The grade is the worst demotion found. There is no scoring and no offsetting:
-    a well-populated stratum does not make an extrapolation safe, and a licence
-    that may not be used is not redeemed by anything at all.
+    The grade is the worst demotion found. There is no scoring and no offsetting: a
+    well-populated stratum does not make an extrapolation safe, and a licence that may not
+    be used is not redeemed by anything at all.
+
+    A RULE THAT CANNOT BE EVALUATED IS NEVER SILENTLY SKIPPED. It is named in
+    `not_checked` with why it could not run, AND it demotes the grade by one notch. The
+    second half is the part that was missing: an empty `not_checked` is used throughout
+    this API as a positive claim that every rule ran - it is populated on 133 of 417
+    estimates from the seed corpus - so a silently skipped rule was an active assertion
+    that a check had passed when it had not been made.
+
+    THE CORPUS FIGURES HERE UNDERSTATE THE EFFECT IN KIND, NOT IN DEGREE. They are measured
+    by replaying the seed corpus against itself, and every record in that replay is by
+    definition already in the corpus, so the one identity-keyed rule can be evaluated for
+    most of them. For the use this platform exists for - an ion it has not measured - that
+    rule is inert ALWAYS. 100 per cent, not 30.
     """
-    found = [
-        rule
-        for rule in (
-            outside_calibration_range(ccs, stratum),
-            thinly_populated(stratum),
-            flagged_as_an_outlier(matched_ion_key, stratum),
-            unverified_source_behind_it(stratum),
-            correction_driven_by_outliers(stratum),
-        )
-        if rule is not None
-    ]
+    # WHICH RULES COULD RUN AT ALL is decided before any of them is applied, because a rule
+    # that returns None because it found nothing and a rule that returns None because it
+    # could not look are different answers and were indistinguishable here until
+    # 20 September 2026.
     not_checked: list[str] = []
+
+    outlier_evaluable = the_outlier_rule_can_run_for(matched_ion_key, stratum)
+    if not outlier_evaluable:
+        not_checked.append(OUTLIER_RULE_UNEVALUABLE)
     if slope_leverage_percent(stratum) is None:
         not_checked.append(
             "leverage: this stratum has no outliers to exclude, or too few points left once they are, so"
@@ -355,10 +397,46 @@ def grade_correction(ccs: float, matched_ion_key: object, stratum: StratumStatis
     if not stratum.points:
         not_checked.append("calibration range: the stratum holds no points, so there is no range to be inside")
 
+    found = [
+        rule
+        for rule in (
+            outside_calibration_range(ccs, stratum),
+            thinly_populated(stratum),
+            flagged_as_an_outlier(matched_ion_key, stratum) if outlier_evaluable else None,
+            unverified_source_behind_it(stratum),
+            correction_driven_by_outliers(stratum),
+        )
+        if rule is not None
+    ]
+
     grade = ConfidenceGrade.SUPPORTED
     for demotion in found:
         if _SEVERITY[demotion.grade] > _SEVERITY[grade]:
             grade = demotion.grade
+
+    # AN UNEVALUABLE RULE DEMOTES ONE NOTCH. Not to unsupported - the ion may be perfectly
+    # fine - but a grade computed from fewer rules than the scheme advertises is not the
+    # same grade as one computed from all of them, and nothing else in the response
+    # distinguishes them. Clamped at unsupported, which has no notch below it.
+    if not_checked:
+        # One notch is a step in RANK, found by position in the ordered list. Indexing with
+        # the severity number itself would give the same answer today only because those
+        # numbers happen to run 0,1,2,3 with no gaps - a grade inserted at 5 would silently
+        # skip rungs. Nothing would have caught that.
+        order = sorted(_SEVERITY, key=lambda g: _SEVERITY[g])
+        demoted = order[min(order.index(grade) + 1, len(order) - 1)]
+        found.append(
+            Demotion(
+                rule="a rule of the scheme could not be evaluated for this ion",
+                grade=demoted,
+                detail=UNEVALUABLE_DEMOTION.format(
+                    count=len(not_checked),
+                    names="; ".join(note.split(":")[0] for note in not_checked),
+                ),
+            )
+        )
+        grade = demoted
+
     return Confidence(
         grade=grade,
         demotions=tuple(sorted(found, key=lambda d: -_SEVERITY[d.grade])),
@@ -380,6 +458,7 @@ def grade_rules() -> tuple[dict, ...]:
             "why": "a correction interpolates inside the range it was fitted over and extrapolates outside it",
             "threshold": f"within {EXTRAPOLATION_MARGIN:.0%} beyond the range is weak, further is unsupported",
             "basis": "policy",
+            "applies_to": "any ion: it compares the submitted value against the fitted range",
         },
         {
             "rule": "thinly populated calibration group",
@@ -395,6 +474,7 @@ def grade_rules() -> tuple[dict, ...]:
                 " a caveat"
             ),
             "basis": "derived, except the last which is policy",
+            "applies_to": "any ion: it is a property of the stratum, not of the ion",
         },
         {
             "rule": "flagged as an outlier in its own stratum",
@@ -402,6 +482,22 @@ def grade_rules() -> tuple[dict, ...]:
             "why": "the data already shows the correction does not fit this ion",
             "threshold": "more than the outlier margin from the stratum's median difference",
             "basis": "the published interplatform envelope",
+            # A SCOPE LIMIT ON THE PRODUCT, published rather than left in a per-response
+            # field. This is the only rule in the scheme that speaks about the SUBMITTED
+            # ION rather than about the stratum around it, and it is the one that cannot
+            # run for most callers.
+            "applies_to": (
+                "ONLY IONS ALREADY IN THIS CORPUS. This rule is a lookup: it asks whether the submitted"
+                " ion is one the corpus already recorded as failing to transfer. A new ion is not in the"
+                " corpus, so the rule cannot answer for it - and a new ion is the ordinary case for anyone"
+                " using this service. FOR THAT CASE THE RULE IS INERT ALWAYS, NOT SOMETIMES: the rate is"
+                " 100 per cent, not the 30 per cent that replaying this corpus against itself reports,"
+                " because every record in that replay is by definition already present. The corpus figure"
+                " is not a smaller version of the real one; it measures a different population. So a"
+                " caller bringing new chemistry should read this rule as one the scheme lists and cannot"
+                " apply to them at all. Where it cannot run it is named in the response's not_checked and"
+                " the grade is demoted one notch; it is never treated as passed."
+            ),
         },
         {
             "rule": "a source behind the correction may not be used",
@@ -409,6 +505,7 @@ def grade_rules() -> tuple[dict, ...]:
             "why": "an unverified or blocked licence is not a question of quality but one of permission",
             "threshold": "any measurement in the stratum whose reuse status is not cleared",
             "basis": "the licence gate, default deny",
+            "applies_to": "any ion: it is a property of the records behind the correction, not of the submitted one",
         },
         {
             "rule": "the correction is driven by ions that do not transfer",
@@ -419,5 +516,30 @@ def grade_rules() -> tuple[dict, ...]:
                 " of CCS at a typical ion"
             ),
             "basis": "policy, anchored to stepped-field DTIMS interlaboratory reproducibility",
+            "applies_to": "any ion, where leverage is measurable at all; where it is not, the response says so in not_checked",
+        },
+        {
+            # A RULE ABOUT THE SCHEME ITSELF, and it is published for the same reason as the
+            # other five: a demotion a caller can receive but cannot look up is a demotion
+            # they cannot argue with. Its absence here was caught by the scheme-completeness
+            # test the moment the demotion was added, which is what that test is for.
+            "rule": "a rule of the scheme could not be evaluated for this ion",
+            "falls_to": [
+                ConfidenceGrade.QUALIFIED.value,
+                ConfidenceGrade.WEAK.value,
+                ConfidenceGrade.UNSUPPORTED.value,
+            ],
+            "why": (
+                "a grade computed from fewer rules than the scheme advertises is not the same grade as one"
+                " that passed them all, and an empty not_checked is used throughout this API as a positive"
+                " claim that every rule was evaluated"
+            ),
+            "threshold": (
+                "any rule that could not run for this ion. The grade falls ONE NOTCH from wherever the"
+                " rules that did run left it - not to unsupported, because the ion may be perfectly fine."
+                " Which rule, and why it could not run, is named in the response's not_checked"
+            ),
+            "basis": "policy",
+            "applies_to": "any ion: it is about the scheme's own coverage, not about the data",
         },
     )

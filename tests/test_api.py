@@ -322,23 +322,93 @@ def test_provenance_for_an_unregistered_source_says_so_and_invents_no_licence(cl
     assert provenance["licence_reported_on"] is None
 
 
-def test_the_records_own_reuse_claim_is_echoed_whether_or_not_the_registry_agrees(client):
-    """The pair is the point: a reader can see the claim and the registry disagree.
+def test_the_records_own_reuse_claim_is_echoed_and_labelled_as_a_claim(client):
+    """The pair is the point, and the field names now say which is which.
 
-    The record below claims to be a synthetic fixture while the registry says the
-    DOI it cites is CC BY 3.0, read by a named person on a stated date. Both are
-    reported, and neither is allowed to overwrite the other.
+    The record below claims to be a synthetic fixture while the registry says the DOI it
+    cites is CC BY 3.0, read by a named person on a stated date. Both are reported,
+    neither overwrites the other, and `claim_backed_by_registry` states the disagreement
+    instead of leaving a reader to spot it.
     """
     claimed = ReuseStatus.SYNTHETIC_FIXTURE
     registered = awkward_record(doi=REGISTERED_DOI, reuse_status=claimed)
     unregistered = awkward_record(doi=UNREGISTERED_DOI, reuse_status=claimed)
     returned = client.post("/harmonize", json=body_for(registered, unregistered)).json()["measurements"]
-    assert returned[0]["provenance"]["reuse_status"] == claimed.value
-    assert returned[1]["provenance"]["reuse_status"] == claimed.value
+
+    for item in returned:
+        assert item["provenance"]["reuse_status_claimed"] == claimed.value
+
+    # Registered: the registry's own status is reported, and it does NOT agree.
     assert returned[0]["provenance"]["registered"] is True
+    assert returned[0]["provenance"]["reuse_status_in_registry"] == sources.STRUWE_2016.reuse_status.value
+    assert returned[0]["provenance"]["claim_backed_by_registry"] is False
+
+    # Unregistered: there is nothing to agree with, so the answer is None rather than False.
     assert returned[1]["provenance"]["registered"] is False
+    assert returned[1]["provenance"]["reuse_status_in_registry"] is None
+    assert returned[1]["provenance"]["claim_backed_by_registry"] is None
+
     assert returned[0]["provenance"]["licence"] != returned[1]["provenance"]["licence"]
     assert sources.STRUWE_2016.reuse_status is not claimed
+
+
+def test_a_claim_the_registry_agrees_with_is_reported_as_backed(client):
+    """The other direction, so the flag is reading the registry rather than always False."""
+    honest = awkward_record(doi=REGISTERED_DOI, reuse_status=sources.STRUWE_2016.reuse_status)
+    provenance = client.post("/harmonize", json=body_for(honest)).json()["measurements"][0]["provenance"]
+    assert provenance["claim_backed_by_registry"] is True
+    assert provenance["reuse_status_claimed"] == provenance["reuse_status_in_registry"]
+
+
+def test_a_request_claiming_synthetic_fixture_is_refused_and_gets_no_number(client):
+    """The same refusal the loader makes, at the other door.
+
+    Not a licence decision: that status declares the record was built in code and is not a
+    measurement, and a number derived from it would be indistinguishable once returned from
+    one derived from data. Refused whether or not a model is loaded, because the objection
+    is to the record rather than to the state of the service.
+    """
+    response = client.post(
+        "/harmonize", json=body_for(awkward_record(reuse_status=ReuseStatus.SYNTHETIC_FIXTURE))
+    )
+    assert response.status_code == 501
+    measurement = response.json()["measurements"][0]
+    assert measurement["harmonized"] is None
+    assert "may not carry synthetic_fixture" in measurement["not_harmonized_because"]
+    assert "integrity of the answer" in measurement["not_harmonized_because"]
+    # the original still comes back untouched
+    assert measurement["original"]["ccs"] == awkward_record().ccs
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        ReuseStatus.UNVERIFIED,
+        ReuseStatus.EXCLUDED,
+        ReuseStatus.NON_COMMERCIAL_NO_DERIVATIVES,
+        ReuseStatus.OPEN_SHARE_ALIKE,
+    ],
+    ids=lambda s: s.value,
+)
+def test_a_licence_status_on_a_submitted_record_does_not_gate_the_answer(client, status):
+    """DELIBERATE, decided 20 September 2026, and tested so it cannot drift into an accident.
+
+    These are not refused, and the reasons are in SourceProvenance's docstring: the model is
+    already fitted so a submitted record enters no fit; the status is self-asserted and a
+    caller refused for `excluded` would simply edit the field; and responsibility for the
+    input's terms stays with the caller, which the contract now says rather than implies.
+
+    What IS required is that the claim be visible as a claim - that half is asserted above.
+    """
+    measurement = client.post(
+        "/harmonize", json=body_for(awkward_record(reuse_status=status))
+    ).json()["measurements"][0]
+    assert measurement["provenance"]["reuse_status_claimed"] == status.value
+    # It is not refused FOR THE LICENCE. This corpus does not cover the awkward record's
+    # platform, so there is still no value - what matters is that the reason is not a licence.
+    reason = measurement["not_harmonized_because"] or ""
+    assert "synthetic_fixture" not in reason
+    assert "licence" not in reason.lower()
 
 
 def test_a_record_with_no_doi_at_all_is_reported_as_unregistered(client):
@@ -428,10 +498,37 @@ def test_the_confidence_rules_list_every_grade_and_every_rule(client):
     assert len(payload["rules"]) == len(grade_rules())
     assert [rule["rule"] for rule in payload["rules"]] == [rule["rule"] for rule in grade_rules()]
     for served, declared in zip(payload["rules"], grade_rules()):
-        assert served["falls_to"] == list(declared["falls_to"])
-        assert served["why"] == declared["why"]
-        assert served["threshold"] == declared["threshold"]
-        assert served["basis"] == declared["basis"]
+        # EVERY KEY, COMPARED STRUCTURALLY. Listing the fields by name here is what let
+        # `applies_to` be added to the scheme and served to nobody: the test passed because
+        # it only checked the fields it already knew about.
+        assert set(served) == set(declared), (
+            f"{declared['rule']}: the scheme declares {sorted(declared)} and the endpoint"
+            f" serves {sorted(served)}"
+        )
+        for field, value in declared.items():
+            expected = list(value) if isinstance(value, list) else value
+            assert served[field] == expected, f"{declared['rule']}: {field} differs"
+
+
+def test_the_endpoint_publishes_the_outlier_rules_scope_limit(client):
+    """The ruling of 20 September 2026: say it in /confidence/rules, not only per response.
+
+    Someone deciding whether to trust this service reads the scheme BEFORE sending anything.
+    A limit visible only in the not_checked of a response they have already received is a
+    limit disclosed too late to act on.
+    """
+    rules = {rule["rule"]: rule for rule in client.get("/confidence/rules").json()["rules"]}
+    applies = rules["flagged as an outlier in its own stratum"]["applies_to"]
+    assert "ONLY IONS ALREADY IN THIS CORPUS" in applies
+    assert "new ion" in applies
+    assert "a new ion is the ordinary case" in applies
+
+
+def test_the_scheme_publishes_the_demotion_for_a_rule_that_could_not_run(client):
+    rules = {rule["rule"]: rule for rule in client.get("/confidence/rules").json()["rules"]}
+    meta = rules["a rule of the scheme could not be evaluated for this ion"]
+    assert meta["falls_to"] == ["qualified", "weak", "unsupported"]
+    assert "ONE NOTCH" in meta["threshold"]
 
 
 def test_the_published_note_says_the_grade_only_ever_falls(client):
@@ -440,6 +537,43 @@ def test_the_published_note_says_the_grade_only_ever_falls(client):
     assert "only ever falls" in note
     assert "worst demotion" in note
     assert "never an average" in note
+
+
+def test_the_published_note_does_not_claim_every_rule_can_be_evaluated(client):
+    """It claimed exactly that until 20 September 2026, and it was false where it mattered.
+
+    "Every one can be evaluated today" was published on this endpoint while the one rule
+    that is ABOUT the submitted ion could not be evaluated for any ion the corpus had not
+    seen - which is what this service is for. A published note asserting the opposite of the
+    limitation is worse than no note, because it is the thing a careful caller reads first.
+    """
+    note = client.get("/confidence/rules").json()["note"]
+    assert "Every one can be evaluated" not in note
+    assert "NOT EVERY RULE CAN ANSWER FOR EVERY ION" in note
+
+
+def test_the_published_note_says_the_outlier_rule_never_applies_to_new_chemistry(client):
+    """The ruling of 20 September 2026 on which number travels.
+
+    Replaying the seed corpus reports the outlier rule unevaluable about 30 per cent of the
+    time, and that figure flatters itself: every record in the replay is by definition
+    already in the corpus being looked up. For the intended use the rate is 100 per cent.
+    30 per cent reads like a minor gap; the truth is different in kind, and the note has to
+    say the true one.
+    """
+    note = client.get("/confidence/rules").json()["note"]
+    assert "cannot run AT ALL" in note
+    assert "not rarely, not usually, but every time" in note
+    assert "graded by four rules, not five" in note
+
+
+def test_the_outlier_rules_scope_field_gives_the_rate_for_the_intended_use(client):
+    rules = {rule["rule"]: rule for rule in client.get("/confidence/rules").json()["rules"]}
+    applies = rules["flagged as an outlier in its own stratum"]["applies_to"]
+    assert "INERT ALWAYS, NOT SOMETIMES" in applies
+    assert "100 per cent" in applies
+    # and it says WHY the corpus figure is not the one to carry
+    assert "different population" in applies
 
 
 # --- 8. the 200 shape is specified and is not what any endpoint returns -------------------------------
@@ -467,7 +601,12 @@ def test_the_200_shape_is_what_it_was_specified_to_be_before_it_was_reachable():
     assert set(SourceProvenance.model_fields) == {
         "source",
         "doi",
-        "reuse_status",
+        # `reuse_status` was split in two on 20 September 2026: the bare name read as
+        # established fact, so a caller's claim of 'excluded' could sit beside the registry's
+        # open-access licence text and look as though both had been verified.
+        "reuse_status_claimed",
+        "reuse_status_in_registry",
+        "claim_backed_by_registry",
         "licence",
         "licence_reported_by",
         "licence_reported_on",

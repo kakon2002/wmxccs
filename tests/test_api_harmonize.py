@@ -137,6 +137,93 @@ def test_both_coverage_figures_travel_and_the_interval_names_its_method(served, 
     assert estimate["interval_is_informative"] is True
 
 
+def test_the_estimate_states_that_the_interval_ignores_the_submitted_uncertainty(served, records):
+    """Half of the ruling of 20 September 2026, and the half that is only a disclosure.
+
+    The response carries the caller's own `ccs_uncertainty` in `original` a few fields above
+    an interval that has nothing to do with it, which invites exactly the wrong reading. The
+    field says so rather than leaving it to be discovered.
+    """
+    estimate = served.post("/harmonize", json=body_for(a_covered_record(records))).json()[
+        "measurements"
+    ][0]["harmonized"]
+    assert estimate["interval_accounts_for_submitted_uncertainty"] is False
+
+
+def test_the_interval_really_is_independent_of_the_submitted_uncertainty(served, records):
+    """The field above ASSERTS something; this proves the assertion is true.
+
+    A disclosure nothing checks is the same class of defect as the unevaluable rule it was
+    ruled on beside: a statement in the response that no code is holding to. If propagation
+    is ever implemented, this test fails and the field must stop saying False - which is the
+    point of writing it this way round.
+    """
+    record = a_covered_record(records)
+    intervals = []
+    for uncertainty in (0.0001, 50.0):
+        body = json.loads(record.model_dump_json())
+        body["ccs_uncertainty"] = uncertainty
+        body["uncertainty_type"] = "sd"
+        estimate = served.post("/harmonize", json={"measurements": [body]}).json()[
+            "measurements"
+        ][0]["harmonized"]
+        assert estimate is not None, "this test needs a harmonized value to compare"
+        assert estimate["interval_accounts_for_submitted_uncertainty"] is False
+        intervals.append((estimate["interval_low"], estimate["ccs"], estimate["interval_high"]))
+    assert intervals[0] == intervals[1], (
+        "the interval moved with the submitted uncertainty, so the response's claim that it"
+        f" does not is false: {intervals[0]} against {intervals[1]}"
+    )
+
+
+def test_a_relabelled_outlier_is_served_but_the_response_stops_claiming_it_was_checked(
+    served, records
+):
+    """A KNOWN AND ACCEPTED RESIDUAL, pinned so it cannot change without somebody deciding to.
+
+    The outlier rule is the only rule keyed on the analyte's identity, and identity is
+    supplied by the caller. So a record the service refuses under its own name can still be
+    resubmitted under a new one and receive a value - the ruling of 20 September 2026 is
+    explicit that an unevaluable rule demotes one notch rather than refusing, because a
+    genuinely new ion may be fine and refusing every new ion refuses the platform's purpose.
+
+    What the fix changed is the CLAIM, not the number. This test asserts both halves: the
+    value still comes back, AND the response no longer reports the outlier check as having
+    passed. If the first half ever starts failing, the platform has begun refusing novel
+    ions. If the second half ever starts failing, the original defect is back.
+    """
+    refused = None
+    for record in records:
+        measurement = served.post("/harmonize", json=body_for(record)).json()["measurements"][0]
+        confidence = measurement.get("confidence")
+        if confidence and confidence["grade"] == ConfidenceGrade.UNSUPPORTED.value:
+            flagged = "flagged as an outlier in its own stratum" in {
+                reason["rule"] for reason in confidence["reasons"]
+            }
+            if flagged:
+                refused = record
+                break
+    assert refused is not None, "this test needs a record the corpus refuses as an outlier"
+    assert refused.analyte.dataset_compound_id is not None
+
+    body = body_for(refused)
+    body["measurements"][0]["analyte"]["dataset_compound_id"] = "customerlab:brand-new-compound"
+    body["measurements"][0]["analyte"]["display_name"] = "never seen before"
+    renamed = served.post("/harmonize", json=body).json()["measurements"][0]
+
+    # the residual: a value the service just refused, served under another name
+    assert renamed["harmonized"] is not None
+    # and the disclosure that is the whole of the fix
+    assert renamed["confidence"]["grade"] != ConfidenceGrade.UNSUPPORTED.value
+    assert [note for note in renamed["confidence"]["not_checked"] if note.startswith("outlier check:")]
+    assert "a rule of the scheme could not be evaluated for this ion" in {
+        reason["rule"] for reason in renamed["confidence"]["reasons"]
+    }
+    assert "flagged as an outlier in its own stratum" not in {
+        reason["rule"] for reason in renamed["confidence"]["reasons"]
+    }
+
+
 def test_every_harmonized_estimate_carries_its_scope_and_the_scope_says_within_study(served, records):
     estimate = served.post("/harmonize", json=body_for(a_covered_record(records))).json()[
         "measurements"
@@ -379,3 +466,35 @@ def test_the_version_on_an_estimate_matches_the_one_on_health(served, records):
         "measurements"
     ][0]["harmonized"]["model_version"]
     assert health == estimate
+
+
+# --- the synthetic refusal must not depend on whether a model is loaded -----------------------
+#
+# Caught by the mutation sweep, not by a test. The synthetic-fixture test in test_api.py runs
+# against an app with NO model, where `model is None` is already true - so a mutation making
+# the refusal conditional on that changed nothing there and survived. The objection is to the
+# RECORD, so it has to be asserted where a model IS loaded.
+
+
+def test_a_synthetic_fixture_is_refused_even_when_a_model_is_loaded(served, records):
+    """With a model present there is a correction available, and it is still refused.
+
+    This is the half test_api.py cannot reach: against a model-less app the record would be
+    refused anyway for want of a model, so that test cannot tell the two reasons apart.
+    """
+    record = a_covered_record(records)
+    body = body_for(record)
+    body["measurements"][0]["reuse_status"] = "synthetic_fixture"
+
+    response = served.post("/harmonize", json=body)
+    assert response.status_code == 501
+    measurement = response.json()["measurements"][0]
+    assert measurement["harmonized"] is None
+    assert "may not carry synthetic_fixture" in measurement["not_harmonized_because"]
+    assert "integrity of the answer" in measurement["not_harmonized_because"]
+
+    # And the identical record WITHOUT that status is harmonized by this same app, so the
+    # refusal is attributable to the status rather than to anything else about the record.
+    clean = served.post("/harmonize", json=body_for(record))
+    assert clean.status_code == 200
+    assert clean.json()["measurements"][0]["harmonized"] is not None

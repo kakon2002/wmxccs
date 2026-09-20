@@ -1168,6 +1168,63 @@ MUTATIONS: tuple[Mutation, ...] = (
         find="    if slope_leverage_percent(stratum) is None:\n        not_checked.append(",
         replace="    if False:\n        not_checked.append(",
     ),
+    # The five below were authored on 20 September 2026 against the ruling on unevaluable
+    # rules. The bug they guard shipped in every release before it and was invisible
+    # BECAUSE IT HAD THE SHAPE OF A PASSING CHECK: the only ion-specific rule in the scheme
+    # is a corpus lookup, so it could not answer for any ion not already in the corpus -
+    # which is every ion a real caller sends - and an empty not_checked reported that as
+    # having been checked.
+    Mutation(
+        label="[F] a rule that cannot answer for this ion is treated as one that answered",
+        file="grading.py",
+        find="    return any(point.ion.key == matched_ion_key for point in stratum.points)",
+        replace="    return True",
+    ),
+    Mutation(
+        label="[F] a rule that could not be evaluated is silently skipped instead of demoting",
+        file="grading.py",
+        # Re-anchored when the notch was made a step in rank and a comment landed between
+        # the two lines this used to name. The damage is unchanged: the demotion for a rule
+        # that could not be evaluated never happens, and the grade reports as though it had.
+        find="    if not_checked:",
+        replace="    if False:",
+    ),
+    Mutation(
+        label="[F] an unevaluable rule refuses the ion outright instead of demoting one notch",
+        file="grading.py",
+        find="        demoted = order[min(order.index(grade) + 1, len(order) - 1)]",
+        replace="        demoted = ConfidenceGrade.UNSUPPORTED",
+    ),
+    Mutation(
+        label="[F] the demotion does not say which rule could not be evaluated",
+        file="grading.py",
+        find='                    names="; ".join(note.split(":")[0] for note in not_checked),',
+        replace='                    names="",',
+    ),
+    Mutation(
+        label="[F] the published scheme hides that the outlier rule cannot answer for a new ion",
+        file="grading.py",
+        find='                "ONLY IONS ALREADY IN THIS CORPUS. This rule is a lookup: it asks whether the submitted"',
+        replace='                "any ion. This rule asks whether the submitted"',
+    ),
+    Mutation(
+        label="[A] the estimate claims its interval accounts for the caller's own uncertainty",
+        file="contracts.py",
+        find="    interval_accounts_for_submitted_uncertainty: bool = Field(\n        default=False,",
+        replace="    interval_accounts_for_submitted_uncertainty: bool = Field(\n        default=True,",
+    ),
+    Mutation(
+        label="[F] the scope field reports the flattering corpus rate instead of the real one",
+        file="grading.py",
+        find='                " using this service. FOR THAT CASE THE RULE IS INERT ALWAYS, NOT SOMETIMES: the rate is"',
+        replace='                " using this service. The rule is occasionally unavailable: the rate is"',
+    ),
+    Mutation(
+        label="[A] the published note goes back to claiming every rule can be evaluated",
+        file="api.py",
+        find='    " NOT EVERY RULE CAN ANSWER FOR EVERY ION. Of the five substantive rules, four are properties of the"',
+        replace='    " Every one can be evaluated today. Of the five substantive rules, four are properties of the"',
+    ),
     Mutation(
         label="[F] an unsupported grade is still reported as usable",
         file="grading.py",
@@ -1487,6 +1544,39 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="api.py",
         find="            model_version=None if loaded is None else ModelVersion.of(loaded.fingerprint),",
         replace="            model_version=None,",
+    ),
+    Mutation(
+        label="[A] a request declaring itself a synthetic fixture is harmonized anyway",
+        file="api.py",
+        find="    if provenance.reuse_status_claimed is ReuseStatus.SYNTHETIC_FIXTURE:",
+        replace="    if False:",
+    ),
+    Mutation(
+        label="[A] the synthetic refusal happens only when a model is loaded, so it depends on the service state",
+        file="api.py",
+        # The objection is to the RECORD. Moving the check after the model test makes it
+        # conditional on something irrelevant to it.
+        find="    if provenance.reuse_status_claimed is ReuseStatus.SYNTHETIC_FIXTURE:\n        return HarmonizedMeasurement(\n            original=record, provenance=provenance, not_harmonized_because=SYNTHETIC_IN_A_REQUEST\n        )",
+        replace="    if provenance.reuse_status_claimed is ReuseStatus.SYNTHETIC_FIXTURE and model is None:\n        return HarmonizedMeasurement(\n            original=record, provenance=provenance, not_harmonized_because=SYNTHETIC_IN_A_REQUEST\n        )",
+    ),
+    Mutation(
+        label="[A] a licence claim is reported as backed by the registry without checking it",
+        file="api.py",
+        find="        claim_backed_by_registry=None if entry is None else entry.reuse_status is claimed,",
+        replace="        claim_backed_by_registry=None if entry is None else True,",
+    ),
+    Mutation(
+        label="[A] an unregistered source reports its claim as UNbacked rather than as unknown",
+        file="api.py",
+        # None and False are different answers: nothing to agree with, against disagrees.
+        find="        claim_backed_by_registry=None if entry is None else entry.reuse_status is claimed,",
+        replace="        claim_backed_by_registry=False if entry is None else entry.reuse_status is claimed,",
+    ),
+    Mutation(
+        label="[A] the registry's own reuse status stops being reported, leaving only the claim",
+        file="api.py",
+        find="        reuse_status_in_registry=entry.reuse_status if entry else None,",
+        replace="        reuse_status_in_registry=None,",
     ),
     # --- [K] readiness: what refuses and what merely warns ---------------------
     Mutation(

@@ -45,6 +45,7 @@ from wmxccs.grading import (
     grade_rules,
     outside_calibration_range,
     slope_leverage_percent,
+    the_outlier_rule_can_run_for,
     thinly_populated,
     unverified_source_behind_it,
 )
@@ -360,8 +361,15 @@ def test_a_stratum_at_the_target_matched_ions_is_not_demoted_for_population():
     assert stratum.n >= TARGET_MATCHED_IONS
     assert thinly_populated(stratum) is None
     confidence = grade_correction(stratum.points[0].reference_ccs, stratum.points[0].ion.key, stratum)
-    assert confidence.grade is ConfidenceGrade.SUPPORTED
-    assert confidence.demotions == ()
+    # NOT DEMOTED FOR POPULATION, which is the whole of what this test is about. Asserting
+    # the grade itself would make it fail for a reason it does not test: since 20 September
+    # 2026 an unevaluable rule demotes one notch, and leverage is unmeasurable on a fixture
+    # this clean. So pin the RULES, which is the claim, rather than the grade, which is a
+    # consequence of every rule at once.
+    assert [demotion.rule for demotion in confidence.demotions] == [
+        "a rule of the scheme could not be evaluated for this ion"
+    ], "a stratum at the target population is demoted for something other than the unevaluable rule"
+    assert confidence.grade is ConfidenceGrade.QUALIFIED
 
 
 def test_the_three_population_rungs_are_ordered_worst_first():
@@ -625,6 +633,144 @@ def test_a_stratum_whose_leverage_could_be_measured_does_not_report_it_as_unchec
     }
 
 
+# --- 7b. a rule that could not be evaluated is named, and it demotes ---------------------------
+#
+# THE FAILURE THIS SECTION EXISTS FOR was live in every release up to 20 September 2026 and was
+# invisible because it had the shape of a passing check. `flagged_as_an_outlier` is a CORPUS
+# LOOKUP: it asks whether the submitted ion is among the ions this stratum already recorded as
+# not transferring. For an ion that is not in the corpus at all the answer is not "no" - there
+# is nothing to look in. It returned None either way, grade_correction read None as "checked
+# and fine", and `not_checked` came back empty, which this API uses everywhere as a positive
+# claim that every rule ran.
+#
+# The population that reaches this service is precisely the ions NOT already in its corpus. So
+# the only rule in the scheme that speaks about the submitted ion rather than about the stratum
+# around it was inert for every real caller, while the response asserted it had been applied.
+#
+# Every test below is written in both directions on purpose. A module that reported everything
+# as unevaluable, or that demoted everything, would satisfy half of them.
+
+
+def a_key_this_stratum_has_never_seen():
+    """A real matched-ion key belonging to a different corpus.
+
+    Taken from another stratum rather than hand-built, so it is a key of exactly the kind
+    the code meets in production: a well-formed ion that simply is not here.
+    """
+    return stratum_of_size(5, tag="foreignion").points[0].ion.key
+
+
+def test_the_outlier_rule_cannot_run_for_an_ion_the_stratum_has_never_seen(twims_stratum):
+    assert the_outlier_rule_can_run_for(a_key_this_stratum_has_never_seen(), twims_stratum) is False
+
+
+def test_the_outlier_rule_can_run_for_an_ion_the_stratum_holds(twims_stratum):
+    """The other direction. A predicate that returned False always would pass the test above."""
+    assert the_outlier_rule_can_run_for(twims_stratum.points[0].ion.key, twims_stratum) is True
+
+
+def test_a_novel_ion_has_the_outlier_check_reported_as_not_checked(twims_stratum):
+    confidence = grade_correction(
+        twims_stratum.points[0].reference_ccs, a_key_this_stratum_has_never_seen(), twims_stratum
+    )
+    notes = [note for note in confidence.not_checked if note.startswith("outlier check:")]
+    assert len(notes) == 1, f"expected the outlier lookup to be named, got {confidence.not_checked}"
+    assert "not in the stratum" in notes[0]
+    # and it is NOT reported as a rule that fired, which would be the opposite lie
+    assert "flagged as an outlier in its own stratum" not in {d.rule for d in confidence.demotions}
+
+
+def test_an_ion_the_stratum_holds_has_every_rule_evaluated(twims_stratum):
+    """The other direction, and the claim an empty not_checked is making.
+
+    This stratum measures its own leverage and holds this ion, so nothing is unevaluable. If
+    this ever reports a note, an empty `not_checked` has stopped meaning what the rest of this
+    file and the API both read it as meaning.
+    """
+    flagged = {id(point) for point in twims_stratum.outliers}
+    clean = [point for point in twims_stratum.points if id(point) not in flagged][0]
+    confidence = grade_correction(clean.reference_ccs, clean.ion.key, twims_stratum)
+    assert confidence.not_checked == ()
+    assert "a rule of the scheme could not be evaluated for this ion" not in {
+        d.rule for d in confidence.demotions
+    }
+
+
+def test_an_unevaluable_rule_demotes_by_exactly_one_notch(twims_stratum):
+    """Not to unsupported, and not nowhere. The ion may be perfectly fine."""
+    flagged = {id(point) for point in twims_stratum.outliers}
+    clean = [point for point in twims_stratum.points if id(point) not in flagged][0]
+    checked = grade_correction(clean.reference_ccs, clean.ion.key, twims_stratum)
+    unchecked = grade_correction(
+        clean.reference_ccs, a_key_this_stratum_has_never_seen(), twims_stratum
+    )
+    assert checked.not_checked == () and unchecked.not_checked != ()
+    assert checked.grade is ConfidenceGrade.WEAK
+    assert unchecked.grade is ConfidenceGrade.UNSUPPORTED
+    assert "a rule of the scheme could not be evaluated for this ion" in {
+        d.rule for d in unchecked.demotions
+    }
+
+
+def test_two_unevaluable_rules_still_demote_only_one_notch():
+    """The demotion is for grading on an incomplete scheme, not a tally of missing rules.
+
+    A per-rule penalty would reach unsupported on any stratum with two gaps, reporting a
+    confident refusal where the honest answer is only that less was checked.
+    """
+    stratum = stratum_of_size(TARGET_MATCHED_IONS, tag="onenotch")
+    one = grade_correction(stratum.points[0].reference_ccs, stratum.points[0].ion.key, stratum)
+    two = grade_correction(
+        stratum.points[0].reference_ccs, a_key_this_stratum_has_never_seen(), stratum
+    )
+    assert len(one.not_checked) == 1 and len(two.not_checked) == 2
+    assert one.grade is ConfidenceGrade.QUALIFIED
+    assert two.grade is ConfidenceGrade.QUALIFIED
+
+
+def test_the_demotion_for_an_unevaluable_rule_says_which_rule_could_not_run(twims_stratum):
+    # A demotion whose reason a caller cannot read is a demotion they cannot argue with.
+    confidence = grade_correction(
+        twims_stratum.points[0].reference_ccs, a_key_this_stratum_has_never_seen(), twims_stratum
+    )
+    detail = [
+        d.detail
+        for d in confidence.demotions
+        if d.rule == "a rule of the scheme could not be evaluated for this ion"
+    ]
+    assert len(detail) == 1
+    assert "outlier check" in detail[0]
+    assert "fewer checks than the scheme advertises" in detail[0]
+
+
+def test_an_unevaluable_rule_cannot_demote_below_unsupported():
+    """Unsupported has no notch beneath it, and the clamp is arithmetic, so assert it."""
+    stratum = stratum_of_size(MIN_POINTS_FOR_DEMING - 1, tag="clamped")
+    already = grade_correction(stratum.points[0].reference_ccs, stratum.points[0].ion.key, stratum)
+    assert already.grade is ConfidenceGrade.UNSUPPORTED
+    confidence = grade_correction(
+        stratum.points[0].reference_ccs, a_key_this_stratum_has_never_seen(), stratum
+    )
+    assert confidence.grade is ConfidenceGrade.UNSUPPORTED
+
+
+def test_the_scope_limit_on_the_outlier_rule_is_published_not_only_per_response():
+    """A caller deciding whether to trust the service reads the scheme before sending anything.
+
+    So the limit has to be legible there, not only in the not_checked of a response they have
+    already received. This is the only rule in the scheme that is not "any ion".
+    """
+    published = {rule["rule"]: rule for rule in grade_rules()}
+    applies = published["flagged as an outlier in its own stratum"]["applies_to"]
+    assert "ONLY IONS ALREADY IN THIS CORPUS" in applies
+    assert "new ion" in applies
+    for name, rule in published.items():
+        if name != "flagged as an outlier in its own stratum":
+            assert "ONLY IONS ALREADY IN THIS CORPUS" not in rule["applies_to"], (
+                f"{name}: if every rule carries the caveat, the caveat marks nothing"
+            )
+
+
 # --- 8. usable ----------------------------------------------------------------------------------
 
 
@@ -662,6 +808,9 @@ PUBLISHED_BY_DEMOTION = {
     "the correction is driven by ions that do not transfer": (
         "the correction is driven by ions that do not transfer"
     ),
+    "a rule of the scheme could not be evaluated for this ion": (
+        "a rule of the scheme could not be evaluated for this ion"
+    ),
 }
 
 
@@ -682,6 +831,12 @@ def every_demotion_grade_correction_can_produce(twims_stratum):
     ):
         stratum = stratum_of_size(count, tag=tag)
         scenarios.append((stratum.points[0].reference_ccs, stratum.points[0].ion.key, stratum))
+    # A WELL-POPULATED STRATUM WHOSE ONLY FAULT IS AN UNEVALUABLE RULE. Without this the
+    # scenarios never leave the grade at supported with a non-empty not_checked, so the
+    # meta-rule's first rung - supported down to qualified - is never driven and the
+    # falls_to test reads a genuine publication as an over-publication.
+    at_target = stratum_of_size(TARGET_MATCHED_IONS, tag="scenfour")
+    scenarios.append((at_target.points[0].reference_ccs, at_target.points[0].ion.key, at_target))
     spoiled = with_first_point_recorded_as(
         twims_stratum,
         fixtures.measurement(
@@ -702,8 +857,8 @@ def test_every_published_rule_carries_a_why_a_threshold_and_a_basis():
     assert rules, "the published scheme is empty"
     seen = set()
     for rule in rules:
-        assert set(rule) == {"rule", "falls_to", "why", "threshold", "basis"}
-        for field in ("rule", "why", "threshold", "basis"):
+        assert set(rule) == {"rule", "falls_to", "why", "threshold", "basis", "applies_to"}
+        for field in ("rule", "why", "threshold", "basis", "applies_to"):
             assert isinstance(rule[field], str) and rule[field].strip(), f"{rule['rule']}: empty {field}"
         assert rule["rule"] not in seen, f"{rule['rule']} is published twice"
         seen.add(rule["rule"])

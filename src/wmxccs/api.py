@@ -61,7 +61,7 @@ from .contracts import (
 from .grading import ConfidenceGrade, grade_rules
 from .harmonization import HarmonizationModel, harmonize as harmonize_one
 from .readiness import DataMaturity, MaturityStamp
-from .reuse import as_reuse_status
+from .reuse import ReuseStatus, as_reuse_status
 from .sources import licence_for
 
 NO_MODEL_LOADED = (
@@ -83,27 +83,50 @@ NOTHING_IN_THIS_REQUEST_COULD_BE_HARMONIZED = (
 # response body.
 HARMONIZATION_UNAVAILABLE = NO_MODEL_LOADED
 
+# "Every one can be evaluated today" stood here until 20 September 2026 and was false in the
+# way that mattered most: the one rule that cannot be evaluated for a new ion is the only rule
+# in the scheme that is ABOUT the submitted ion, and a new ion is what this service is for. A
+# published note asserting the opposite is worse than no note.
 CONFIDENCE_NOTE = (
-    "These are rules, not a fitted model. Every one can be evaluated today, none needs training data, and"
-    " a grade only ever falls: the final grade is the worst demotion found, never a score and never an"
-    " average. Two mild concerns do not add up to a severe one, and a severe one is not offset by"
-    " everything else being fine."
+    "These are rules, not a fitted model: none needs training data, and a grade only ever falls - the"
+    " final grade is the worst demotion found, never a score and never an average. Two mild concerns do"
+    " not add up to a severe one, and a severe one is not offset by everything else being fine."
+    " NOT EVERY RULE CAN ANSWER FOR EVERY ION. Of the five substantive rules, four are properties of the"
+    " calibration group - how many ions it holds, how far your value sits outside its range, whether a"
+    " source behind it may be used, how much its slope is levered - and those answer for any ion. The"
+    " fifth, the outlier check, is the only one that is about YOUR ion: it is a lookup against ions"
+    " already in this corpus, so for an ion this platform has not measured it cannot run AT ALL - not"
+    " rarely, not usually, but every time. If you are bringing chemistry we have not measured, you are"
+    " graded by four rules, not five, on every request. (The sixth rule published here is about that"
+    " situation itself: it is the demotion applied when any rule could not be evaluated.) Each rule's"
+    " applies_to says which ions it can answer for; a rule that could not run is named in the response's"
+    " not_checked and demotes the grade one notch, and is never counted as passed."
 )
 
 
 def provenance_of(record) -> SourceProvenance:
     """Where one measurement came from and on what terms.
 
-    The licence is read from the REGISTRY by DOI, never from the record. A record
-    may claim any reuse status it likes; what the registry holds is what somebody
-    read, and the two are reported together precisely so a caller can see when
-    they disagree.
+    The licence is read from the REGISTRY by DOI, never from the record. A record may
+    claim any reuse status it likes; what the registry holds is what somebody read.
+
+    BOTH ARE REPORTED, AND SO IS WHETHER THEY AGREE. That last part was the gap: this
+    docstring already promised the two were "reported together precisely so a caller can
+    see when they disagree", and only the registry's LICENCE TEXT was returned, never its
+    status - so a response could show a claimed `excluded` beside an open-access licence
+    string and a reader had to notice the contradiction unaided. `claim_backed_by_registry`
+    now states it.
     """
     entry = licence_for(getattr(record, "doi", None))
+    claimed = as_reuse_status(record.reuse_status)
     return SourceProvenance(
         source=str(getattr(record, "source", "")),
         doi=getattr(record, "doi", None),
-        reuse_status=as_reuse_status(record.reuse_status),
+        reuse_status_claimed=claimed,
+        reuse_status_in_registry=entry.reuse_status if entry else None,
+        # None where there is no registry entry to agree with. False is the case worth
+        # seeing: the record asserts terms nobody recorded.
+        claim_backed_by_registry=None if entry is None else entry.reuse_status is claimed,
         licence=entry.licence if entry else None,
         licence_reported_by=entry.reported_by if entry else None,
         licence_reported_on=entry.reported_on if entry else None,
@@ -184,6 +207,18 @@ def _confidence_of(result) -> ConfidenceReport | None:
     )
 
 
+# Worded from the loader's own refusal of the same status, because it is the same objection:
+# that status is a declaration the record is not a measurement, and this service will not
+# derive a number from something declared not to be data. The loader says "a row in a file is
+# a real record"; the equivalent here is that a request is a real request.
+SYNTHETIC_IN_A_REQUEST = (
+    "a request may not carry synthetic_fixture: that status is a test's declaration of a record built in"
+    " code, and a measurement submitted to this endpoint is a real measurement. This is refused for the"
+    " integrity of the answer rather than for a licence - a harmonized value derived from a record that"
+    " declares itself invented would be indistinguishable, once returned, from one derived from data."
+    " The loader refuses the identical claim in a file, and this is the same refusal at the other door."
+)
+
 WITHHELD_UNSUPPORTED = (
     "the correction for this measurement grades 'unsupported', which means do not use the number - so it is"
     " not returned. {why}"
@@ -199,6 +234,13 @@ def _harmonized_measurement(model: HarmonizationModel | None, record) -> Harmoni
     of contradiction a caller resolves in favour of the number.
     """
     provenance = provenance_of(record)
+    # BEFORE the model is consulted: a record declaring itself invented gets no number
+    # whether or not a model is loaded, because the objection is to the record rather than
+    # to the state of the service.
+    if provenance.reuse_status_claimed is ReuseStatus.SYNTHETIC_FIXTURE:
+        return HarmonizedMeasurement(
+            original=record, provenance=provenance, not_harmonized_because=SYNTHETIC_IN_A_REQUEST
+        )
     if model is None:
         return HarmonizedMeasurement(
             original=record, provenance=provenance, not_harmonized_because=NO_MODEL_LOADED
@@ -272,16 +314,11 @@ def create_app(model: HarmonizationModel | None = None) -> FastAPI:
         """The grading scheme, published as data so it can be challenged."""
         return ConfidenceRulesResponse(
             grades=tuple(grade.value for grade in ConfidenceGrade),
-            rules=tuple(
-                ConfidenceRule(
-                    rule=rule["rule"],
-                    falls_to=tuple(rule["falls_to"]),
-                    why=rule["why"],
-                    threshold=rule["threshold"],
-                    basis=rule["basis"],
-                )
-                for rule in grade_rules()
-            ),
+            # BUILT FROM THE DICT, NOT FIELD BY FIELD. Naming the fields here meant a key
+            # added to the scheme was silently not served, which is how `applies_to` - the
+            # field carrying the outlier rule's scope limit - reached no caller at all.
+            # ConfidenceRule forbids extras, so the next such key raises instead.
+            rules=tuple(ConfidenceRule(**rule) for rule in grade_rules()),
             note=CONFIDENCE_NOTE,
         )
 

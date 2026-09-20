@@ -113,14 +113,55 @@ class SourceProvenance(BaseModel):
     Not a convenience. A harmonized CCS inherits the licence of every measurement
     behind it, and a caller who cannot see those terms cannot know what they are
     allowed to do with the number they have been given.
+
+    WHAT A SUBMITTED RECORD'S LICENCE STATUS DOES NOT DO, decided deliberately on
+    20 September 2026 and stated here rather than left to be inferred:
+
+    It does NOT gate the response. A measurement claiming `unverified`, `excluded` or
+    `non_commercial_no_derivatives` is still corrected, and the reasons are these:
+
+    - The licence gate governs what may enter a FIT. The model is already fitted, on
+      records that passed the gate. A submitted measurement enters no fit and changes
+      no parameter.
+    - The status is SELF-ASSERTED AND UNVERIFIABLE. A caller refused for `excluded`
+      edits the field to `open_attribution` and resubmits. A gate on a field the caller
+      supplies protects nothing and obstructs only honest callers.
+    - The caller's relationship to their own data is not knowable here. They may be its
+      author.
+
+    RESPONSIBILITY FOR THE INPUT'S TERMS THEREFORE REMAINS THE CALLER'S, and that is
+    the disclosure rather than an assumption. It matters most for
+    `non_commercial_no_derivatives`: a harmonized value IS a derivative of the input, so
+    a caller holding data under a no-derivatives licence is the party making a
+    derivative of it. This service does not and cannot check that.
+
+    `synthetic_fixture` is the exception and is REFUSED, because it is not a licence
+    claim at all - it is a declaration that the record was built in code and is not a
+    measurement. Refusing it protects the integrity of the output, which is this
+    service's responsibility, rather than a licence, which is not.
     """
 
     model_config = ConfigDict(frozen=True)
 
     source: str = Field(description="The source as the record states it. Free text, and not a citation.")
     doi: str | None = Field(default=None, description="Bare DOI, where the record has one.")
-    reuse_status: ReuseStatus = Field(
-        description="What the source's terms allow. 'unverified' is the default and means nobody has read them."
+    reuse_status_claimed: ReuseStatus = Field(
+        description="What the SUBMITTED RECORD says its source's terms allow. A claim by whoever sent it,"
+        " self-asserted and unverifiable by this service. Named 'claimed' because it used to be named"
+        " 'reuse_status', which read as established fact - so a response could show a caller's claim of"
+        " 'excluded' beside the registry's open-access licence text and look like it had verified both."
+    )
+    reuse_status_in_registry: ReuseStatus | None = Field(
+        default=None,
+        description="What the LICENCE REGISTRY holds for this DOI, where the DOI is registered. None means"
+        " nobody has recorded reading the terms. This is the half that is actually backed by somebody.",
+    )
+    claim_backed_by_registry: bool | None = Field(
+        default=None,
+        description="Whether the claim and the registry agree. None where the source is not registered, so"
+        " there is nothing to agree with. FALSE IS THE INTERESTING CASE: the record asserts terms nobody"
+        " recorded, and this field is what makes that visible instead of leaving two fields to be compared"
+        " by a reader who may not notice.",
     )
     licence: str | None = Field(
         default=None, description="The licence as the registry records it, where this source is registered."
@@ -266,6 +307,15 @@ class HarmonizedEstimate(BaseModel):
         description="What the interval method PROVES, as against the nominal level its quantile is taken at."
         " Jackknife+ guarantees 1-2*alpha, so a nominally 90% interval is guaranteed at 80%.",
     )
+    interval_accounts_for_submitted_uncertainty: bool = Field(
+        default=False,
+        description="FALSE, always, and stated because the response invites the opposite reading: the"
+        " submitted measurement's own ccs_uncertainty is echoed in `original` a few fields above this"
+        " interval, and the two are unrelated. The interval is MODEL-DERIVED - it comes from the spread of"
+        " leave-one-out refits of the stratum - and is identical whether the submitted uncertainty is"
+        " 0.0001, 50, or absent entirely. Propagating the caller's uncertainty into it is not implemented;"
+        " this field exists so that is a stated fact rather than something a reader has to discover.",
+    )
 
 
 class ConfidenceReason(BaseModel):
@@ -400,15 +450,31 @@ class HarmonizationUnavailable(BaseModel):
 
 
 class ConfidenceRule(BaseModel):
-    """One grading rule, published so the scheme can be argued with."""
+    """One grading rule, published so the scheme can be argued with.
 
-    model_config = ConfigDict(frozen=True)
+    `extra="forbid"` IS LOAD-BEARING. The endpoint builds this straight from the dict
+    grade_rules() returns, so a key added to the scheme and not added here fails loudly at
+    the first request instead of being dropped on the floor. It was dropped on the floor:
+    `applies_to` existed in the scheme for the length of one afternoon on 20 September 2026
+    while the endpoint hand-copied five fields by name, so the scope limit it carries was
+    published to nobody. That is the same failure as the one it was written to describe - a
+    thing that looks complete because nothing checks the join.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     rule: str
     falls_to: tuple[str, ...]
     why: str
     threshold: str
     basis: str = Field(description="Whether the threshold is derived from something or is policy.")
+    applies_to: str = Field(
+        description="WHICH IONS THIS RULE CAN ANSWER FOR. Most rules are properties of the"
+        " calibration group and answer for any ion. One is not: the outlier rule is a lookup"
+        " against ions already in this corpus, so it cannot answer for a new one. Where a rule"
+        " cannot run it is named in the response's not_checked and the grade is demoted a notch;"
+        " it is never counted as passed."
+    )
 
 
 class ConfidenceRulesResponse(BaseModel):
