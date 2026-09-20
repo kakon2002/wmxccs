@@ -242,6 +242,30 @@ MUTATIONS: tuple[Mutation, ...] = (
         find="    if not identifier.strip():",
         replace="    if False:",
     ),
+    Mutation(
+        label="[I] a free-text field has no ceiling, so a five-million character source is stored",
+        file="identity.py",
+        find="    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_TEXT),",
+        replace="    StringConstraints(strip_whitespace=True, min_length=1),",
+    ),
+    Mutation(
+        label="[I] control characters are accepted in text, keying records apart invisibly",
+        file="identity.py",
+        find="    found = sorted({ord(ch) for ch in value if ch in _CONTROL_CHARACTERS})",
+        replace="    found = []",
+    ),
+    Mutation(
+        label="[I] the control-character set misses NUL, the one that matters most",
+        file="identity.py",
+        find="_CONTROL_CHARACTERS = frozenset(chr(code) for code in range(0x20)) | {chr(0x7F)}",
+        replace="_CONTROL_CHARACTERS = frozenset(chr(code) for code in range(0x01, 0x20)) | {chr(0x7F)}",
+    ),
+    Mutation(
+        label="[I] a peptide sequence has no ceiling again",
+        file="identity.py",
+        find="    StringConstraints(strip_whitespace=True, max_length=MAX_SEQUENCE),\n    AfterValidator(_check_peptide_sequence),",
+        replace="    StringConstraints(strip_whitespace=True),\n    AfterValidator(_check_peptide_sequence),",
+    ),
     # --- [M] models: the measurement and its key ------------------------------
     Mutation(
         label="[M] the matched-ion key carries the platform, so no pair can ever be found",
@@ -1233,6 +1257,12 @@ MUTATIONS: tuple[Mutation, ...] = (
     ),
     # --- [A] api.py and contracts.py: the response contract --------------------
     Mutation(
+        label="[A] the startup banner is never flushed, so a redirected stdout stays empty",
+        file="__main__.py",
+        find="    sys.stdout.flush()",
+        replace="    pass",
+    ),
+    Mutation(
         label="[A] harmonize answers 200 when it harmonized nothing at all",
         file="api.py",
         # Was anchored on the route's status_code=501 until M5 wired the endpoint to a
@@ -1281,10 +1311,30 @@ MUTATIONS: tuple[Mutation, ...] = (
         replace="        return MaturityStamp(data_maturity=DataMaturity.VALIDATED, matched_ion_count=93)",
     ),
     Mutation(
+        # A PURE REORDER: the same fields, declared in a different sequence. Pydantic
+        # serialises in declaration order, so this is exactly the regression the ordering
+        # is meant to prevent - a reader who stops early loses the number itself.
+        label="[A] the estimate no longer opens with the number a reader came for",
+        file="contracts.py",
+        find='    ccs: float = Field(gt=0, description="The harmonized cross section, square angstrom.")\n    interval_low: float = Field(gt=0)\n    interval_high: float = Field(gt=0)\n',
+        replace='    interval_low: float = Field(gt=0)\n    interval_high: float = Field(gt=0)\n    ccs: float = Field(gt=0, description="The harmonized cross section, square angstrom.")\n',
+    ),
+    Mutation(
+        # Also a pure reorder. The nominal 0.90 leads and the guaranteed 0.80 reads as a
+        # footnote to it, which is the wrong way round: the weaker figure is the true one.
+        label="[A] the nominal coverage leads and the guaranteed figure becomes its footnote",
+        file="contracts.py",
+        find='    guaranteed_coverage: float = Field(\n        gt=0,\n        lt=1,\n        description="WHAT THE INTERVAL PROVES, and the figure to rely on. Jackknife+ guarantees"\n        " 1-2*alpha, so a nominally 90% interval is guaranteed at 80%: about one value in five may fall"\n        " outside its stated range rather than one in ten. First of the two coverage figures, and"\n        " directly beside the interval it describes, because it is the weaker of the two.",\n    )\n    interval_coverage: float = Field(\n        gt=0,\n        lt=1,\n        description="Nominal coverage, e.g. 0.90 - the level the quantile is taken at, not a proved"\n        " guarantee. Never 1, which no finite interval attains. Adjacent to `guaranteed_coverage` so"\n        " that the two can never be read apart; quoting this one alone overstates the interval.",\n    )\n',
+        replace='    interval_coverage: float = Field(\n        gt=0,\n        lt=1,\n        description="Nominal coverage, e.g. 0.90 - the level the quantile is taken at, not a proved"\n        " guarantee. Never 1, which no finite interval attains. Adjacent to `guaranteed_coverage` so"\n        " that the two can never be read apart; quoting this one alone overstates the interval.",\n    )\n    guaranteed_coverage: float = Field(\n        gt=0,\n        lt=1,\n        description="WHAT THE INTERVAL PROVES, and the figure to rely on. Jackknife+ guarantees"\n        " 1-2*alpha, so a nominally 90% interval is guaranteed at 80%: about one value in five may fall"\n        " outside its stated range rather than one in ten. First of the two coverage figures, and"\n        " directly beside the interval it describes, because it is the weaker of the two.",\n    )\n',
+    ),
+    Mutation(
         label="[A] a harmonized estimate may carry an interval coverage of one",
         file="contracts.py",
-        find='    interval_coverage: float = Field(\n        gt=0, lt=1,',
-        replace='    interval_coverage: float = Field(\n        gt=0, le=1,',
+        # Re-anchored when HarmonizedEstimate was reordered to put the coverage pair beside
+        # the interval; the two bounds moved onto their own lines with the description.
+        # Same damage: a coverage of 1, which no finite interval attains.
+        find="    interval_coverage: float = Field(\n        gt=0,\n        lt=1,",
+        replace="    interval_coverage: float = Field(\n        gt=0,\n        le=1,",
     ),
     Mutation(
         label="[A] a harmonized cross section of zero or less is accepted",
@@ -1295,8 +1345,16 @@ MUTATIONS: tuple[Mutation, ...] = (
     Mutation(
         label="[A] a harmonize request with no measurements at all is accepted",
         file="contracts.py",
-        find="        min_length=1, description=\"The measurements to harmonize.",
-        replace="        description=\"The measurements to harmonize.",
+        # Re-anchored when the field gained a ceiling to go with its floor and the
+        # description moved onto its own line. Same damage: the floor stops applying.
+        find="        min_length=1,\n        max_length=MAX_MEASUREMENTS_PER_REQUEST,",
+        replace="        max_length=MAX_MEASUREMENTS_PER_REQUEST,",
+    ),
+    Mutation(
+        label="[A] a harmonize request may carry an unbounded number of measurements",
+        file="contracts.py",
+        find="        min_length=1,\n        max_length=MAX_MEASUREMENTS_PER_REQUEST,\n",
+        replace="        min_length=1,\n",
     ),
     Mutation(
         label="[A] the response drops the count of matched ions behind a harmonized value",
@@ -1411,6 +1469,48 @@ MUTATIONS: tuple[Mutation, ...] = (
         file="scope.py",
         find='        return any(not study.startswith("doi:") for study in self.studies)',
         replace="        return False",
+    ),
+    Mutation(
+        label="[Q] a combined stamp goes back to summing overlapping record counts",
+        file="scope.py",
+        find="        records_behind_it=records_behind_it,\n        pairings=sum(stamp.pairings for stamp in stamps),",
+        replace="        records_behind_it=sum(stamp.records_behind_it for stamp in stamps),\n        pairings=sum(stamp.pairings for stamp in stamps),",
+    ),
+    Mutation(
+        label="[Q] the caveat leads with the pairing count instead of the distinct one",
+        file="scope.py",
+        find='        measurements = f"{self.records_behind_it} distinct measurement(s)"',
+        replace='        measurements = f"{self.pairings} distinct measurement(s)"',
+    ),
+    Mutation(
+        label="[H] the model scope counts paired sides instead of distinct measurements",
+        file="harmonization.py",
+        find="            [c.scope for c in corrections], records_behind_it=len(records)",
+        replace="            [c.scope for c in corrections], records_behind_it=2 * len(records)",
+    ),
+    Mutation(
+        label="[H] the served value goes back to full float precision it has no evidence for",
+        file="api.py",
+        find="        ccs=to_places(result.harmonized_ccs, places),",
+        replace="        ccs=result.harmonized_ccs,",
+    ),
+    Mutation(
+        label="[H] the interval rounds inward, so the served range is narrower than the computed one",
+        file="harmonization.py",
+        find="    return (math.floor(low * scale) / scale, math.ceil(high * scale) / scale)",
+        replace="    return (round(low, decimals), round(high, decimals))",
+    ),
+    Mutation(
+        label="[H] the precision is read off the full width rather than the half width",
+        file="harmonization.py",
+        find="        half = self.width / 2.0",
+        replace="        half = self.width",
+    ),
+    Mutation(
+        label="[H] the precision clamp lets an interval claim more decimals than the corpus holds",
+        file="harmonization.py",
+        find="        return min(3, max(1, 1 - math.floor(math.log10(half))))",
+        replace="        return max(1, 1 - math.floor(math.log10(half)))",
     ),
     # --- [H] harmonization: the model -----------------------------------------
     Mutation(

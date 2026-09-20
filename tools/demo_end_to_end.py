@@ -1,6 +1,6 @@
 """One ion, end to end, with real numbers from the steroid corpus.
 
-Run: python tools/demo_end_to_end.py
+Run: .venv/Scripts/python tools/demo_end_to_end.py   (.venv/bin/python on macOS and Linux)
 
 WHAT THIS IS FOR
 ----------------
@@ -20,22 +20,70 @@ from __future__ import annotations
 
 import pathlib
 import sys
+import textwrap
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from wmxccs.harmonization import fit_harmonization, harmonize, measure_coverage  # noqa: E402
+from wmxccs.harmonization import (  # noqa: E402
+    fit_harmonization,
+    harmonize,
+    measure_coverage,
+    outward,
+    to_places,
+)
 from wmxccs.loader import load_measurements_file  # noqa: E402
 from wmxccs.matching import build_matched_ions  # noqa: E402
+from wmxccs.readiness import TARGET_MATCHED_IONS  # noqa: E402
 from wmxccs.scope import Claim, ScopeExceededError, assert_may_be_quoted_as  # noqa: E402
 from wmxccs.statistics import compare_platforms  # noqa: E402
 
 SEED = REPO / "data" / "seed" / "steroid_jasms2022.csv"
-RULE = "=" * 92
+RULE_WIDTH = 92
+RULE = "=" * RULE_WIDTH
 
 
 def head(number: int, title: str) -> None:
     print(f"\n{RULE}\n{number}. {title}\n{RULE}")
+
+
+def wrap(text: str, indent: int = 3) -> None:
+    """Print `text` inside the rule, wrapped on word boundaries.
+
+    The grade reasons used to be cut at 96 characters with no ellipsis, which ended the
+    first one at "though within 10% of i" and the second at "without a cave". A demonstration
+    that truncates its own explanation mid-word is worse than one that omits it: the reader
+    cannot tell whether the sentence was unimportant or whether the tool is broken.
+    """
+    lead = " " * indent
+    for line in textwrap.wrap(text, width=RULE_WIDTH - indent, subsequent_indent="  "):
+        print(f"{lead}{line}")
+
+
+def explain_the_grade(model, result) -> None:
+    """Why `weak` is the ordinary answer on this corpus and not a sign of breakage.
+
+    216 of the 417 corrected records grade weak. A reader who meets one and assumes
+    something failed will be wrong, and preventing that reading is this screen's job.
+
+    Every figure here is DERIVED from the model in front of it rather than typed. Nothing
+    tests this file, so a typed number would be a literal with nothing behind it - which is
+    the failure class LIMITATIONS 4.5 exists to record.
+    """
+    applied = [correction.n for correction in model.corrections if correction.is_applied]
+    print("   why weak, and why it is the ordinary answer here rather than a failure:")
+    wrap(f"Every stratum this model applies holds between {min(applied)} and {max(applied)}"
+         f" matched ions, short of the {TARGET_MATCHED_IONS} the scheme asks for before a"
+         " platform-pair figure is quoted without a caveat. That rule therefore fires on EVERY"
+         " corrected record in this corpus, so nothing here grades better than `qualified` and"
+         " `supported` is out of reach by construction rather than by any fault of this ion.",
+         indent=6)
+    wrap("From there a grade falls one further notch for a second reason. For most records"
+         " that reason is the outlier check, which cannot be evaluated for an ion this corpus"
+         " has not measured. For this one it is that the submitted value sits just outside the"
+         " range the correction was fitted over.", indent=6)
+    wrap("So `weak` here means a small corpus and one unanswerable check - not a bad"
+         " measurement, and not a broken pipeline.", indent=6)
 
 
 def main() -> int:
@@ -110,8 +158,9 @@ def main() -> int:
     print(f"   stratum             n={correction.n}, fitted over this adduct only")
     print(f"   Deming slope        {correction.stratum.agreement.deming_slope:.5f}"
           f"   intercept {correction.stratum.agreement.deming_intercept:+.3f}")
+    lo, hi = correction.robust.slope_interval
     print(f"   robust slope        {correction.robust.slope:.5f}"
-          f"   interval {correction.robust.slope_interval}")
+          f"   interval ({lo:.4f}, {hi:.4f})")
     print(f"   median offset       {correction.median_offset_percent:+.3f}%")
     print(f"   slope differs from 1?  "
           f"{'yes' if correction.robust.slope_distinguishable_from_unity else 'NO'}"
@@ -123,27 +172,55 @@ def main() -> int:
     # --- 6. THE ANSWER ---------------------------------------------------------------------
     head(6, "THE ANSWER: the original untouched, the correction beside it, and its interval")
     band = result.interval
+    places = band.decimals_supported
+    low, high = outward(band.low, band.high, places)
+    shift = 100 * (result.harmonized_ccs - result.original_ccs) / result.original_ccs
+    width_percent = 100 * band.width / band.at_value
+
     print(f"   ORIGINAL            {result.original_ccs:8.3f} A^2   <- returned unchanged, always")
-    print(f"   harmonized          {result.harmonized_ccs:8.3f} A^2   ({result.basis.value})")
-    print(f"      slope-derived    {result.slope_derived_ccs:8.3f}")
-    print(f"      median-derived   {result.median_derived_ccs:8.3f}")
-    print(f"      robust-derived   {result.robust_derived_ccs:8.3f}")
-    print(f"   shift               {100 * (result.harmonized_ccs - result.original_ccs) / result.original_ccs:+.3f}%")
-    print(f"   interval            {band.low:.3f} to {band.high:.3f} A^2"
-          f"   (width {band.width:.3f}, {100 * band.width / band.at_value:.2f}% of CCS)")
+    print(f"   harmonized          {to_places(result.harmonized_ccs, places):8.{places}f} A^2"
+          f"   ({result.basis.value})")
+    print(f"      slope-derived    {to_places(result.slope_derived_ccs, places):8.{places}f}")
+    print(f"      median-derived   {to_places(result.median_derived_ccs, places):8.{places}f}")
+    print(f"      robust-derived   {to_places(result.robust_derived_ccs, places):8.{places}f}")
+    print(f"   shift               {shift:+.3f}%")
+    print(f"   interval            {low:.{places}f} to {high:.{places}f} A^2"
+          f"   (width {band.width:.3f}, {width_percent:.2f}% of CCS)")
     print(f"   coverage            nominal {band.nominal_coverage:.0%},"
           f" GUARANTEED {band.guaranteed_coverage:.0%}   [jackknife+ proves 1-2*alpha]")
     print(f"   informative?        {band.interval_is_informative}"
           f"   tail ratio {band.tail_ratio:.2f}")
+    wrap("tail ratio: the largest leave-one-out residual over the one that sets the interval"
+         " width, so at 1.00 a single ion would be setting it, and"
+         f" {'one is' if band.driven_by_one_ion else 'none is'}.", indent=6)
+    print(f"   The model holds more digits than these. {places} decimal(s) is what an interval"
+          f" {band.width:.2f} wide")
+    print("   supports, and it is what the API serves; the rest would be arithmetic rather than")
+    print("   evidence. The ORIGINAL above is never rounded.")
+    print()
+
+    # WHY A CORRECTION SMALLER THAN ITS OWN INTERVAL IS WORTH APPLYING. The obvious
+    # objection to this whole platform, answered on the screen that provokes it rather
+    # than in a document nobody opens.
+    wrap(f"The shift is {abs(shift):.3f}% and the interval is {width_percent:.2f}% wide, so the"
+         " correction is smaller than the uncertainty around it. It is still worth applying,"
+         " because the two measure different things. The shift is a SYSTEMATIC offset between"
+         " two platforms - the same direction for every ion in this stratum - and leaving it in"
+         " biases every comparison anybody makes with these numbers. The interval is the SPREAD"
+         " of individual ions around that offset, and correcting the offset does not reduce it."
+         " A bias you know about does not average out over many measurements. Scatter does.")
+    print()
     print(f"   grade               {result.confidence.grade.value}")
     for demotion in result.confidence.demotions:
-        print(f"      {demotion.rule}: {demotion.detail[:96]}")
+        wrap(f"{demotion.rule}: {demotion.detail}", indent=6)
     for note in result.confidence.not_checked:
-        print(f"      NOT CHECKED - {note[:96]}")
+        wrap(f"NOT CHECKED - {note}", indent=6)
+    print()
+    explain_the_grade(model, result)
 
     # --- 7. WHAT IT MAY BE CALLED -----------------------------------------------------------
     head(7, "SCOPE: what this number is, and what it is not")
-    print(f"   {result.scope.caveat()}")
+    wrap(result.scope.caveat())
     print()
     for claim in Claim:
         try:

@@ -371,8 +371,10 @@ def grade_correction(ccs: float, matched_ion_key: object, stratum: StratumStatis
     `not_checked` with why it could not run, AND it demotes the grade by one notch. The
     second half is the part that was missing: an empty `not_checked` is used throughout
     this API as a positive claim that every rule ran - it is populated on 133 of 417
-    estimates from the seed corpus - so a silently skipped rule was an active assertion
-    that a check had passed when it had not been made.
+    GRADED RESPONSES from the seed corpus - so a silently skipped rule was an active
+    assertion that a check had passed when it had not been made. (Graded responses, not
+    estimates: 417 measurements get a correction computed and graded, and 402 of those are
+    served a value. The other 15 grade `unsupported` and the number is withheld.)
 
     THE CORPUS FIGURES HERE UNDERSTATE THE EFFECT IN KIND, NOT IN DEGREE. They are measured
     by replaying the seed corpus against itself, and every record in that replay is by

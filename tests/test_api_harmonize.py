@@ -9,13 +9,16 @@ of the data rather than of the routing.
 from __future__ import annotations
 
 import json
+import math
 
 import pytest
 from fastapi.testclient import TestClient
 
 from wmxccs.api import build_default_model, create_app
-from wmxccs.contracts import CorrectionBasis, IntervalKind
+from wmxccs.contracts import MAX_MEASUREMENTS_PER_REQUEST, CorrectionBasis, IntervalKind
+from wmxccs.identity import MAX_TEXT
 from wmxccs.grading import ConfidenceGrade
+from wmxccs.harmonization import harmonize as harmonize_one
 from wmxccs.loader import load_measurements_file
 from wmxccs.readiness import DataMaturity
 from wmxccs.scope import ComparisonScope
@@ -159,7 +162,8 @@ def test_the_interval_really_is_independent_of_the_submitted_uncertainty(served,
     point of writing it this way round.
     """
     record = a_covered_record(records)
-    intervals = []
+    served_values, raw_values = [], []
+    model = build_default_model(SEED_DIRECTORY)
     for uncertainty in (0.0001, 50.0):
         body = json.loads(record.model_dump_json())
         body["ccs_uncertainty"] = uncertainty
@@ -169,10 +173,24 @@ def test_the_interval_really_is_independent_of_the_submitted_uncertainty(served,
         ][0]["harmonized"]
         assert estimate is not None, "this test needs a harmonized value to compare"
         assert estimate["interval_accounts_for_submitted_uncertainty"] is False
-        intervals.append((estimate["interval_low"], estimate["ccs"], estimate["interval_high"]))
-    assert intervals[0] == intervals[1], (
-        "the interval moved with the submitted uncertainty, so the response's claim that it"
-        f" does not is false: {intervals[0]} against {intervals[1]}"
+        served_values.append(
+            (estimate["interval_low"], estimate["ccs"], estimate["interval_high"])
+        )
+        # AND AT FULL PRECISION, because the served numbers are rounded to what the
+        # interval supports and a difference smaller than the last served decimal would
+        # vanish before this test could see it. Comparing only the wire would make this
+        # test quietly weaker than it reads - the exact failure class Group 1a was about.
+        raw = harmonize_one(model, record.model_copy(update={"ccs_uncertainty": uncertainty}))
+        raw_values.append(
+            (raw.interval.low, raw.harmonized_ccs, raw.interval.high, raw.interval.width)
+        )
+    assert served_values[0] == served_values[1], (
+        "the served interval moved with the submitted uncertainty, so the response's claim"
+        f" that it does not is false: {served_values[0]} against {served_values[1]}"
+    )
+    assert raw_values[0] == raw_values[1], (
+        "the interval moved with the submitted uncertainty BELOW the served precision, so"
+        f" the claim is false even though the wire hid it: {raw_values[0]} against {raw_values[1]}"
     )
 
 
@@ -222,6 +240,209 @@ def test_a_relabelled_outlier_is_served_but_the_response_stops_claiming_it_was_c
     assert "flagged as an outlier in its own stratum" not in {
         reason["rule"] for reason in renamed["confidence"]["reasons"]
     }
+
+
+def test_the_model_scope_counts_distinct_measurements_not_paired_sides():
+    """It reported 1402 behind a corpus of 517, in the caveat that travels with every figure.
+
+    The model combines eighteen per-stratum stamps, and a measurement paired into three of
+    them was counted three times. Per stratum the count was always right - two distinct
+    records per matched ion - so every per-stratum test passed while the one number a reader
+    actually sees was nearly three times too large.
+    """
+    model = build_default_model(SEED_DIRECTORY)
+    records = {
+        id(record)
+        for correction in model.corrections
+        for point in correction.stratum.points
+        for record in (point.reference, point.other)
+    }
+    sides = sum(correction.scope.records_behind_it for correction in model.corrections)
+    assert model.scope.records_behind_it == len(records)
+    assert sides > len(records), (
+        "this test is vacuous unless some record is paired into more than one stratum"
+    )
+    assert model.scope.records_behind_it != sides
+    # and the caveat leads with the conservative one, naming both
+    caveat = model.scope.caveat()
+    assert f"{len(records)} distinct measurement(s)" in caveat
+    assert f"{model.scope.pairings} cross-platform pairing(s)" in caveat
+    assert str(sides) not in caveat
+
+
+def test_the_served_value_carries_only_the_precision_its_interval_supports(served, records):
+    """166.56725251726084 beside an interval 6.7 wide asserted fourteen decimals of two.
+
+    The digits were real arithmetic and not evidence, and nothing in the response let a
+    reader tell those apart. The precision is derived from the interval, so this asserts
+    the relationship rather than a fixed number of places.
+    """
+    estimate = served.post("/harmonize", json=body_for(a_covered_record(records))).json()[
+        "measurements"
+    ][0]["harmonized"]
+    half = (estimate["interval_high"] - estimate["interval_low"]) / 2.0
+    expected = min(3, max(1, 1 - math.floor(math.log10(half))))
+    for field in ("ccs", "slope_derived_ccs", "median_derived_ccs"):
+        served_decimals = len(str(estimate[field]).split(".")[-1])
+        # BOTH DIRECTIONS. `<=` alone passes for a rule that serves fewer decimals than the
+        # interval supports, which is a different wrong answer and one a mutation reaching
+        # for the full width instead of the half width produces.
+        assert served_decimals == expected, (
+            f"{field} is served to {served_decimals} places on an interval supporting {expected}"
+        )
+
+
+def test_the_submitted_measurement_is_echoed_at_its_own_precision_not_the_served_one(
+    served, records
+):
+    """The other direction, and the constraint that outranks the rounding.
+
+    An ORIGINAL is never rounded, normalised or re-expressed - a caller who disagrees with
+    the correction must be able to reach past it to the measurement it was computed from.
+    This uses a record whose own value carries MORE decimals than the estimate is served
+    at, so a rule that rounded everything on the way out would fail here.
+    """
+    record = next(
+        r
+        for r in records
+        if r.ims_type.value == "TWIMS" and len(str(r.ccs).split(".")[-1]) >= 3
+    )
+    measurement = served.post("/harmonize", json=body_for(record)).json()["measurements"][0]
+    assert measurement["harmonized"] is not None
+    assert measurement["original"]["ccs"] == record.ccs
+    assert len(str(measurement["original"]["ccs"]).split(".")[-1]) > len(
+        str(measurement["harmonized"]["ccs"]).split(".")[-1]
+    ), "this test is vacuous unless the original is more precise than the served estimate"
+
+
+def test_the_served_interval_is_never_narrower_than_the_one_that_was_computed(served, records):
+    """Rounding a bound to NEAREST can move it inward and narrow the interval.
+
+    That would overstate precision by exactly the mechanism this rounding exists to stop,
+    so the bounds round outward: down for the low, up for the high.
+    """
+    model = build_default_model(SEED_DIRECTORY)
+    record = a_covered_record(records)
+    raw = harmonize_one(model, record)
+    estimate = served.post("/harmonize", json=body_for(record)).json()["measurements"][0][
+        "harmonized"
+    ]
+    assert estimate["interval_low"] <= raw.interval.low
+    assert estimate["interval_high"] >= raw.interval.high
+    assert estimate["interval_high"] - estimate["interval_low"] >= raw.interval.width
+
+
+def test_every_served_estimate_in_the_corpus_keeps_its_value_strictly_inside_its_interval(
+    served, records
+):
+    """Rounding three numbers independently could collide them. Asserted over all of them.
+
+    The claim is arithmetic - `decimals_supported` floors on one significant figure of the
+    half-width, so a bound is at least ten units in the last place away from the value it
+    brackets - but arithmetic that holds by argument and not by test is how this repository
+    has been wrong before.
+    """
+    checked = 0
+    for record in records:
+        estimate = served.post("/harmonize", json=body_for(record)).json()["measurements"][0][
+            "harmonized"
+        ]
+        if estimate is None:
+            continue
+        checked += 1
+        assert estimate["interval_low"] < estimate["ccs"] < estimate["interval_high"], (
+            f"rounding collapsed the ordering: {estimate['interval_low']}"
+            f" < {estimate['ccs']} < {estimate['interval_high']}"
+        )
+    assert checked > 100, f"only {checked} estimates were checked; this test is meant to be broad"
+
+
+# --- what a caller may put in a text field ------------------------------------------------------
+#
+# Every free-text field was unbounded and accepted control characters. A five-million
+# character `source` validated, was stored, and came back in the response; so did a NUL byte
+# in a compound name, which reached the matched-ion key and the digests while being invisible
+# to anybody reading the name.
+#
+# THIS IS NOT A SECURITY CONTROL and is not offered as one. There is no authentication on
+# this service, which LIMITATIONS 7G records as a deliberate omission with what closing it
+# would take. A bound on a field is the narrower thing: it stops a request asking for
+# unbounded work by accident, and costs an honest caller nothing.
+
+
+def a_body(record, **overrides) -> dict:
+    body = json.loads(record.model_dump_json())
+    body.update(overrides)
+    return {"measurements": [body]}
+
+
+def test_a_text_field_longer_than_the_cap_is_refused_rather_than_stored(served, records):
+    record = a_covered_record(records)
+    body = a_body(record)
+    body["measurements"][0]["source"] = "x" * (MAX_TEXT + 1)
+    response = served.post("/harmonize", json=body)
+    assert response.status_code == 422
+    assert "source" in response.text
+
+
+def test_a_text_field_at_the_cap_is_accepted(served, records):
+    """The other direction. A cap of zero would satisfy the test above."""
+    record = a_covered_record(records)
+    body = a_body(record)
+    body["measurements"][0]["source"] = "x" * MAX_TEXT
+    assert served.post("/harmonize", json=body).status_code == 200
+
+
+def test_a_control_character_in_a_text_field_is_refused(served, records):
+    """A NUL in a compound name keyed records apart while reading as identical.
+
+    Every one of these reached the matched-ion key, both digests and the response body
+    untouched. Two analytes differing only by an invisible character are two analytes to
+    this software and one to every human reading it, which is the opposite of what an
+    identity key is for.
+    """
+    record = a_covered_record(records)
+    for character in ("\x00", "\t", "\n", "\x1b", "\x7f"):
+        body = a_body(record)
+        body["measurements"][0]["analyte"]["display_name"] = f"tren{character}bolone"
+        response = served.post("/harmonize", json=body)
+        assert response.status_code == 422, f"{character!r} was accepted in a compound name"
+        assert "control character" in response.text
+
+
+def test_ordinary_text_with_accents_and_punctuation_is_still_accepted(served, records):
+    """The other direction, and the one that matters for real compound names.
+
+    Refusing control characters must not turn into refusing anything unfamiliar. The seed
+    corpus itself holds names with Greek letters and hyphens - 4,9,11-estratiene-17beta-ol-
+    3-one is in it as a beta sign - and a rule that rejected those would be worse than the
+    hole it closed.
+    """
+    record = a_covered_record(records)
+    for name in ("4,9,11-estratiene-17\u03b2-ol-3-one", "17\u03b1-hydroxyprogesterone", "a name (with parens)"):
+        body = a_body(record)
+        body["measurements"][0]["analyte"]["display_name"] = name
+        assert served.post("/harmonize", json=body).status_code == 200, f"{name!r} was refused"
+
+
+def test_a_request_carrying_more_measurements_than_the_ceiling_is_refused(served, records):
+    """The floor was here from the start; the ceiling was not.
+
+    An unbounded list of bounded records is the same problem one level up, and capping only
+    the text fields would have bought nothing.
+    """
+    record = a_covered_record(records)
+    one = json.loads(record.model_dump_json())
+    response = served.post(
+        "/harmonize", json={"measurements": [one] * (MAX_MEASUREMENTS_PER_REQUEST + 1)}
+    )
+    assert response.status_code == 422
+    assert "measurements" in response.text
+
+
+def test_a_request_with_no_measurements_at_all_is_still_refused(served):
+    """The floor, asserted beside the ceiling so neither can be removed as the other is added."""
+    assert served.post("/harmonize", json={"measurements": []}).status_code == 422
 
 
 def test_every_harmonized_estimate_carries_its_scope_and_the_scope_says_within_study(served, records):

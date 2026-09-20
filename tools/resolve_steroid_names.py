@@ -57,6 +57,8 @@ from collections import Counter, defaultdict
 REPO = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
+from wmxccs import __version__  # noqa: E402
+
 SEED = REPO / "data" / "seed" / "steroid_jasms2022.csv"
 # Written OUTSIDE data/, so nothing here is covered by corpus_sha256 and nothing can be
 # mistaken for an assignment the corpus holds.
@@ -73,7 +75,11 @@ def _get(url: str) -> str | None:
     context = ssl.create_default_context()
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
-    request = urllib.request.Request(url, headers={"User-Agent": "wmxccs-name-resolution/0.5.0"})
+    # Derived, not typed: a hardcoded version in a courtesy header goes stale silently and
+    # then misidentifies the caller to somebody else's service.
+    request = urllib.request.Request(
+        url, headers={"User-Agent": f"wmxccs-name-resolution/{__version__}"}
+    )
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT, context=context) as response:
             return response.read().decode("utf-8", errors="replace")

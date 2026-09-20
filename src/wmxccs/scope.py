@@ -133,6 +133,23 @@ class ScopeStamp:
     instruments: tuple[str, ...]
     platforms: tuple[str, ...]
     records_behind_it: int
+    """DISTINCT MEASUREMENTS, counted once each however many comparisons used them.
+
+    This is the number the caveat sentence quotes, and it is the conservative one on
+    purpose. Until 20 September 2026 the model-level stamp reported 1402 here, arrived at
+    by summing eighteen per-stratum counts - so a measurement paired into three strata was
+    counted three times and a corpus of 517 measurements was published, to every caller,
+    as 1402. Per-stratum the count was always right; only the combination was wrong.
+    """
+    pairings: int = 0
+    """CROSS-PLATFORM PAIRINGS behind the figure, where the builder knows it. 0 = not stated.
+
+    The second number, kept because it answers a different question and the two were being
+    conflated. `records_behind_it` is how many measurements exist; this is how many times
+    one was compared against another. One matched ion compared in three strata is one
+    pairing in each - three pairings over two measurements - and neither number is a
+    substitute for the other.
+    """
 
     @property
     def scope(self) -> ComparisonScope:
@@ -162,21 +179,39 @@ class ScopeStamp:
         if self.scope is ComparisonScope.WITHIN_STUDY:
             return (
                 f"WITHIN ONE STUDY ({named}), between {len(self.platforms)} platform(s) over"
-                f" {self.records_behind_it} measurements. This is a difference between the instruments that"
+                f" {self._counted()}. This is a difference between the instruments that"
                 f" study used. It is NOT interlaboratory reproducibility."
             )
         return (
             f"ACROSS {len(self.studies)} STUDIES ({named}), between {len(self.platforms)} platform(s) over"
-            f" {self.records_behind_it} measurements. Still NOT interlaboratory reproducibility, which needs"
+            f" {self._counted()}. Still NOT interlaboratory reproducibility, which needs"
             f" a distribution over laboratories rather than a comparison between platforms."
         )
 
+    def _counted(self) -> str:
+        """The size of the evidence, with each number labelled as what it counts.
 
-def stamp_over(records: Iterable[object]) -> ScopeStamp:
+        The headline is always the DISTINCT measurement count, because the caveat is the
+        conservative sentence and the conservative sentence must not overstate. The pairing
+        count follows it, named, where the builder knew it - two numbers that were being
+        conflated are less misleading stated together than either is alone.
+        """
+        measurements = f"{self.records_behind_it} distinct measurement(s)"
+        if not self.pairings:
+            return measurements
+        return f"{measurements} entering {self.pairings} cross-platform pairing(s)"
+
+
+def stamp_over(records: Iterable[object], *, pairings: int = 0) -> ScopeStamp:
     """Derive a stamp from records. The only way one should be built.
 
     Refuses an empty set: a stamp over nothing would report the narrowest scope and pass
     the narrowest check, which is the wrong direction to fail in.
+
+    `records` MUST already be distinct. This counts what it is handed and cannot tell a
+    repeated record from two records, so de-duplication belongs to the caller who knows
+    what a duplicate is. `pairings` is passed through because it cannot be derived from
+    records at all - it is a property of how they were compared.
     """
     studies: set[str] = set()
     instruments: set[str] = set()
@@ -203,18 +238,32 @@ def stamp_over(records: Iterable[object]) -> ScopeStamp:
         instruments=tuple(sorted(instruments)),
         platforms=tuple(sorted(platforms)),
         records_behind_it=count,
+        pairings=pairings,
     )
 
 
-def stamp_over_stamps(stamps: Sequence[ScopeStamp]) -> ScopeStamp:
-    """Combine stamps without re-reading records. Unions the provenance; never narrows it."""
+def stamp_over_stamps(stamps: Sequence[ScopeStamp], *, records_behind_it: int) -> ScopeStamp:
+    """Combine stamps without re-reading records. Unions the provenance; never narrows it.
+
+    `records_behind_it` IS REQUIRED AND IS NOT DERIVED, which is the whole point of the
+    keyword. This function cannot see records, so it cannot tell whether two stamps describe
+    overlapping sets - and it used to answer anyway, by summing. A measurement paired into
+    three strata was therefore counted three times, and the model published 1402 records
+    behind a corpus of 517. Summing is right only when the stamps are disjoint, a fact
+    nothing here can check and nothing then checked.
+
+    So the count now has to come from whoever holds the records and knows what a duplicate
+    is. A caller with no better answer can pass the sum explicitly - but they have to write
+    it down, and a number written down is a number somebody chose.
+    """
     if not stamps:
         raise ScopeExceededError(NO_PROVENANCE)
     return ScopeStamp(
         studies=tuple(sorted({s for stamp in stamps for s in stamp.studies})),
         instruments=tuple(sorted({i for stamp in stamps for i in stamp.instruments})),
         platforms=tuple(sorted({p for stamp in stamps for p in stamp.platforms})),
-        records_behind_it=sum(stamp.records_behind_it for stamp in stamps),
+        records_behind_it=records_behind_it,
+        pairings=sum(stamp.pairings for stamp in stamps),
     )
 
 

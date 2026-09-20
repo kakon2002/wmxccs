@@ -37,6 +37,8 @@ from conftest import (
     small_molecule,
 )
 from wmxccs.identity import (
+    MAX_SEQUENCE,
+    MAX_TEXT,
     Analyte,
     AntibodyIdentity,
     Composition,
@@ -1015,3 +1017,52 @@ def test_a_display_name_is_never_part_of_the_identity_surface():
     )
     assert analyte.identity_key() != other.identity_key()
     assert not (analyte.identity_atoms() & other.identity_atoms())
+
+
+# --- ceilings on the fields a caller fills in ---------------------------------------------------
+#
+# Every one of these was unbounded. A sequence is not free text - it has its own character
+# class, which already refused control characters - so it does not build on `_Text` and did
+# not inherit the ceiling when `_Text` gained one. That is the failure LIMITATIONS 4.5 records
+# as "when a rule is written for one case, ask which other fields have the same case", and it
+# is why these are asserted per type rather than once on the base.
+
+
+def test_a_peptide_sequence_longer_than_the_ceiling_is_refused():
+    """MAX_SEQUENCE is far above any real protein and far below a denial of service.
+
+    Titin, the longest human protein, is about 34,000 residues. The ceiling is 100,000, so
+    nothing anybody can actually measure meets it - and a two-million residue "peptide"
+    no longer validates, get stored, and come back in a response.
+    """
+    with pytest.raises(ValidationError):
+        peptide(sequence="A" * (MAX_SEQUENCE + 1))
+
+
+def test_a_peptide_sequence_at_the_ceiling_is_accepted():
+    """The other direction. A ceiling of four would satisfy the test above."""
+    assert len(peptide(sequence="A" * MAX_SEQUENCE).sequence) == MAX_SEQUENCE
+
+
+def test_an_ordinary_peptide_is_unaffected_by_the_ceiling():
+    assert peptide(sequence="NLTK").sequence == "NLTK"
+
+
+def test_a_free_text_field_longer_than_its_ceiling_is_refused():
+    with pytest.raises(ValidationError):
+        small_molecule(source="x" * (MAX_TEXT + 1))
+
+
+def test_a_control_character_in_a_free_text_field_is_refused_and_named_by_code_point():
+    """The error must not echo the character back onto somebody's terminal."""
+    with pytest.raises(ValidationError) as raised:
+        small_molecule(source="a\x00source")
+    message = str(raised.value)
+    assert "U+0000" in message
+    assert "\x00" not in message
+
+
+def test_a_glycan_structure_string_is_bounded_and_control_checked_too():
+    """`wurcs` bypasses `_Text`, so it bypassed both guards when they were added there."""
+    with pytest.raises(ValidationError):
+        glycan(wurcs="W" * (MAX_SEQUENCE + 1))

@@ -14,7 +14,7 @@ Separate from the glycan platform. See `CLAUDE.md` for the constraints,
 
 **Deadline: deployable by 25 September 2026, 27 at the latest.**
 
-## Status: M0 to M4 complete. A harmonization model fitted on real cross-platform data
+## Status: M0 to M5 complete. The model is fitted and served over HTTP
 
 **142 cross-platform matched ions**, from the steroid interplatform study
 (DOI 10.1021/jasms.2c00196). 521 records, 517 of them clear to train, 2 ions paired
@@ -25,9 +25,11 @@ check. Converted by
 
 **M4 is built on those ions.** Eighteen strata - six platform pairs by three adducts,
 never pooled - each fitted three ways, of which only the nine anchored on stepped-field
-DTIMS are ever applied. 417 of 517 cleared records are corrected; the other 100 are
-already on the primary platform. The original measurement is returned untouched beside
-every corrected one.
+DTIMS are ever applied. Of 517 cleared records, **417 are corrected and 402 of those are
+served a value**; the other 100 are already on the primary platform, and the 15 between 417
+and 402 grade `unsupported`, which means the correction would be an assertion rather than an
+interpolation, so the number is withheld and the reason is returned instead. The original
+measurement is returned untouched beside every corrected one.
 
 Three things about it are worth knowing before reading any number it produces:
 
@@ -69,17 +71,34 @@ Both are in `LIMITATIONS.md` section 7E, with what each one still needs.
 
 ## Running it
 
-Verified on Python 3.14 on Windows; nothing in it is platform-specific.
+Python 3.11 or newer; developed and verified on 3.14. The LIBRARY is platform-neutral;
+the commands are not, because a virtual environment puts its interpreter in
+`.venv/Scripts` on Windows and `.venv/bin` everywhere else. Every command below is given
+for both, and every one names the environment's own interpreter rather than a bare
+`python` - a bare `python` after this install runs whichever interpreter is on PATH, which
+is usually not the one the package was just installed into.
+
+Windows:
 
 ```
 python -m venv .venv
-.venv/Scripts/pip install -e ".[dev,serve]"     # Windows
-# .venv/bin/pip install -e ".[dev,serve]"       # macOS, Linux
-
-python -m wmxccs                                # serves on http://127.0.0.1:8000
+.venv/Scripts/python -m pip install -e ".[dev,serve]"
+.venv/Scripts/python -m wmxccs                  # serves on http://127.0.0.1:8000
 ```
 
-`python -m wmxccs` prints what it is serving before it starts - how many corrections the
+macOS and Linux:
+
+```
+python3 -m venv .venv
+.venv/bin/python -m pip install -e ".[dev,serve]"
+.venv/bin/python -m wmxccs                      # serves on http://127.0.0.1:8000
+```
+
+Activating the environment first (`.venv\Scripts\Activate.ps1`, or
+`source .venv/bin/activate`) lets you write `python` for the rest of the session
+instead.
+
+`-m wmxccs` prints what it is serving before it starts - how many corrections the
 model holds, how many matched ions are behind it, and the scope caveat - so an operator can
 see whether a model was found. Interactive documentation is at `/docs`.
 
@@ -108,7 +127,8 @@ the commands above do - resolves `data/seed` in the source tree and serves a rea
 ### Seeing it work end to end
 
 ```
-python tools/demo_end_to_end.py
+.venv/Scripts/python tools/demo_end_to_end.py   # Windows
+.venv/bin/python tools/demo_end_to_end.py       # macOS, Linux
 ```
 
 One real ion from the steroid corpus through every stage in order - ingestion, identity,
@@ -118,14 +138,27 @@ what the result may and may not be called. It asserts nothing; the assertions ar
 
 ### Checking it
 
+Run these from the repository root. Substitute `.venv/bin/python` on macOS and Linux.
+
 ```
-.venv/Scripts/python -m pytest                  # 2094 tests
-PYTHONPATH=. .venv/Scripts/python -c "import sys; sys.argv=['r']; from tools.mutation.runner import main; raise SystemExit(main())"
+.venv/Scripts/python -m pytest -q                    # the suite: 2258 tests
+.venv/Scripts/python -m tools.mutation --check       # anchors only, about a second
+.venv/Scripts/python -m tools.mutation               # the full sweep: 276 mutations
 ```
 
-The second is the mutation sweep: it breaks each guard in the package one at a time and
-requires a test to notice. A mutation that survives is a behaviour with no test behind it,
-and is treated as a failure rather than as a note.
+The sweep breaks each guard in the package one at a time and requires a test to notice. A
+green suite says the tests ran; the sweep says they would have caught something. A mutation
+that survives is a behaviour with no test behind it, and is treated as a failure rather
+than as a note.
+
+It never writes the repository: the package is copied to a temporary directory, the
+mutation is applied to the copy, and the copy is put first on `PYTHONPATH`.
+
+To rebuild the seed files from the transcriptions:
+
+```
+.venv/Scripts/python tools/seed_struwe.py
+```
 
 ## Layout
 
@@ -197,10 +230,12 @@ the same measurement republished in two papers; two conformers of one ion; two
 ions whose charge carrier was never stated; two values from one platform; and a
 set one of whose members nobody may use, which is refused with the member named.
 
-`matching.py` is built and exercised entirely against `fixtures.py`, a synthetic
-corpus, because there is no real cross-platform data yet. Everything in it
-declares `SYNTHETIC_FIXTURE` and `assert_quotable` refuses to let a report
-covering one be presented as a result.
+`matching.py`'s own tests run against `fixtures.py`, a synthetic corpus, so that each
+pairing rule can be exercised on a case built to isolate it - real data does not come with
+one clean example of each. It is also exercised against the real steroid corpus through
+the ingest, grading and harmonization tests. Everything in `fixtures.py` declares
+`SYNTHETIC_FIXTURE` and `assert_quotable` refuses to let a report covering one be
+presented as a result.
 
 ## Association is not agreement
 
@@ -228,31 +263,40 @@ where a harmonization model will be confidently wrong.
 
 ## The API, and what it refuses
 
-Three endpoints. Two answer today; one will answer 501 until a harmonization model
-has been fitted. Real cross-platform matched ions now exist - 142 of them - so what
-stands between `/harmonize` and a number is the fitting itself, no longer the data.
+Three endpoints, all three answering. `/harmonize` returned 501 unconditionally until
+M4 fitted a model; it now returns values for the measurements the model covers, and
+refuses the rest individually rather than as a whole.
 
 | | |
 |---|---|
 | `GET /health` | version, whether a model is loaded, how many matched ions it rests on, and the model's two sha256 digests |
 | `GET /confidence/rules` | the grading scheme as data, so it can be argued with |
-| `POST /harmonize` | **501**, with your measurements returned untouched |
+| `POST /harmonize` | 200 with harmonized values, or 501 where the model covers nothing in the request |
 
-The 501 is the contract, not an error path. A caller gets back every measurement
-exactly as sent, the provenance and licence terms of each, the maturity stamp, and
-a statement of why there is no harmonized value. What they do not get is a number:
-no zero, no null standing in for one, no interval of infinite width, no grade
-computed against nothing. An API returning a plausible value with a caveat in a
-field would be used and the caveat would not be read. One returning 501 cannot be
-used by accident.
+**The refusals are still the contract, not an error path**, and there are three outcomes
+rather than two:
 
-A malformed body still gets 422. The request is validated before the refusal, so a
-501 never tells a caller their measurement was fine when it was not.
+- A HARMONIZED VALUE, where the measurement's platform and calibration group match a
+  stratum the model applies. It carries the interval, both coverage figures, the grade,
+  the scope caveat and the provenance.
+- NO VALUE, WITH THE REASON, per measurement: a platform never compared against the
+  primary method, a calibration group with no stratum, a value already on the primary
+  platform, or a grade of `unsupported` - meaning the correction would be an assertion
+  rather than an interpolation. The original comes back untouched and
+  `not_harmonized_because` says which.
+- 501 FOR THE WHOLE REQUEST, where nothing in it could be harmonized. A response full of
+  absent values is a refusal and should carry the status code of one.
 
-The eventual 200 shape is fully specified in `contracts.HarmonizeResponse` so
-callers can build against it now. No endpoint returns it, and `/harmonize` declares
-`HarmonizationUnavailable` instead, so nobody can write code against a harmonized
-value that is never there.
+What a caller never gets is a placeholder: no zero, no null standing in for a value, no
+interval of infinite width, no grade computed against nothing. An API returning a
+plausible value with a caveat in a field would be used and the caveat would not be read.
+
+A malformed body still gets 422, validated before any of this, so a refusal never tells a
+caller their measurement was fine when it was not.
+
+A 200 does NOT mean validated. The maturity stamp is `provisional` on every response and
+cannot be otherwise while the corpus is one study, and every estimate carries a scope
+saying so.
 
 ## Confidence is graded by rules, not by a model
 
@@ -276,28 +320,6 @@ Nothing is removed from the statistics, the correction or any count. Measuring t
 influence of outliers is the opposite of dropping them, and a test holds the two
 apart.
 
-## Running it
-
-```bash
-python -m venv .venv
-.venv/Scripts/python.exe -m pip install -e ".[dev]"
-
-.venv/Scripts/python.exe -m pytest -q            # the suite
-.venv/Scripts/python.exe -m tools.mutation --check   # anchors only, about a second
-.venv/Scripts/python.exe -m tools.mutation           # the full sweep
-```
-
-The mutation sweep breaks each guard on purpose and requires a test to notice. A
-green suite says the tests ran; the sweep says they would have caught something. It
-never writes the repository: the package is copied to a temporary directory, the
-mutation is applied to the copy, and the copy is put first on `PYTHONPATH`.
-
-To rebuild the seed files from the transcriptions:
-
-```bash
-.venv/Scripts/python.exe tools/seed_struwe.py
-```
-
 ## What licences allow
 
 Every record carries a reuse status defaulting to `unverified`, and unverified
@@ -306,5 +328,8 @@ loader that filters on a boolean loses rows silently and the problem only surfac
 when somebody audits counts.
 
 A licence claim in a data cell is not a licence. Claims are checked against
-`sources.py`, which records who read the terms, on what date, and at what URL. Four
-of the eleven registered sources are unverified and each says what would settle it.
+`sources.py`, which records who read the terms, on what date, and at what URL. Two
+of the eleven registered sources are unverified and each says what would settle it: the
+METLIN CCS database and the Bayesian harmonization paper. The other nine are read and
+recorded - two `open_attribution`, three `academic_only`, two
+`non_commercial_no_derivatives` and two `excluded`.

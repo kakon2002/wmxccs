@@ -59,7 +59,7 @@ from .contracts import (
     SourceProvenance,
 )
 from .grading import ConfidenceGrade, grade_rules
-from .harmonization import HarmonizationModel, harmonize as harmonize_one
+from .harmonization import HarmonizationModel, harmonize as harmonize_one, outward, to_places
 from .readiness import DataMaturity, MaturityStamp
 from .reuse import ReuseStatus, as_reuse_status
 from .sources import licence_for
@@ -101,6 +101,16 @@ CONFIDENCE_NOTE = (
     " situation itself: it is the demotion applied when any rule could not be evaluated.) Each rule's"
     " applies_to says which ions it can answer for; a rule that could not run is named in the response's"
     " not_checked and demotes the grade one notch, and is never counted as passed."
+    " NO RESPONSE FROM THIS DEPLOYMENT CAN GRADE `supported` TODAY, and that is a fact about the size"
+    " of this corpus rather than about your measurement. The scheme demotes any calibration group"
+    " holding fewer than 100 matched ions, and every group this model applies holds between 23 and 46"
+    " - so the population rule fires on every record, `qualified` is the ceiling, and a `weak` grade is"
+    " usually that ceiling minus one notch for a rule that could not be evaluated. It is not a"
+    " judgement that your ion is marginal. Reaching `supported` needs an applied calibration group of"
+    " 100 matched ions or more; the threshold has deliberately NOT been lowered to make the top grade"
+    " reachable, because adjusting a check until it passes is fitting the check to the data. And for an"
+    " ion this corpus has never measured, `qualified` remains the ceiling at ANY corpus size, because"
+    " the outlier rule cannot answer for it and an unevaluable rule always costs one notch."
 )
 
 
@@ -176,13 +186,24 @@ def _estimate_of(result, fingerprint) -> HarmonizedEstimate:
     """
     correction = result.correction
     band = result.interval
+    # ROUNDED TO WHAT THE INTERVAL SUPPORTS, here and nowhere earlier. The model keeps and
+    # digests full precision - the fingerprint would move if it did not - and this is the
+    # presentation boundary, the one place a number is handed to somebody. Serving
+    # 166.56725251726084 beside an interval 6.7 wide asserted fourteen decimals of
+    # knowledge where there were two, and no reader could tell the arithmetic from the
+    # evidence by looking.
+    #
+    # The SUBMITTED measurement is not touched by any of this: it is echoed on `original`,
+    # a field of the parent object, exactly as it was sent.
+    places = band.decimals_supported
+    low, high = outward(band.low, band.high, places)
     return HarmonizedEstimate(
-        ccs=result.harmonized_ccs,
+        ccs=to_places(result.harmonized_ccs, places),
         basis=result.basis,
-        slope_derived_ccs=result.slope_derived_ccs,
-        median_derived_ccs=result.median_derived_ccs,
-        interval_low=band.low,
-        interval_high=band.high,
+        slope_derived_ccs=to_places(result.slope_derived_ccs, places),
+        median_derived_ccs=to_places(result.median_derived_ccs, places),
+        interval_low=low,
+        interval_high=high,
         interval_coverage=band.nominal_coverage,
         interval_kind=IntervalKind.JACKKNIFE_PLUS,
         reference_platform=correction.reference_platform,

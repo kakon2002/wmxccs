@@ -771,6 +771,122 @@ def test_the_scope_limit_on_the_outlier_rule_is_published_not_only_per_response(
             )
 
 
+# --- 7c. the ceiling: what the top grade needs, and who can never reach it ----------------------
+#
+# No record in the seed corpus grades `supported` - 186 qualified, 216 weak, 15 unsupported,
+# of 417. That is a fact about corpus size and not about the measurements: every applied
+# stratum holds 23 to 46 matched ions against a TARGET_MATCHED_IONS of 100, so the population
+# rule fires on all 417.
+#
+# Which makes it worth asserting, in both directions, that the top grade is LIVE CODE and that
+# what stands between a caller and it is data. A grade nothing can ever return is a grade that
+# should not be published on /confidence/rules, and a grade that turns out to be reachable for
+# the wrong reason would be worse.
+
+
+def a_stratum_of(count: int, *, tag: str, with_an_outlier: bool):
+    """`count` matched ions, optionally with one that does not transfer.
+
+    Leverage is only measurable where at least one ion is flagged, so a perfectly clean
+    stratum reports the leverage check as unevaluable and can never reach `supported`
+    however large it is. That is a real property of the scheme and this makes it visible.
+    """
+    records = []
+    for index in range(count):
+        analyte = fixtures.small_molecule(fixtures.synthetic_inchikey(f"{tag}{index:03d}"))
+        reference = 150.0 + 10.0 * index
+        bias = 1.07 if (with_an_outlier and index == 0) else 1.02
+        records.append(
+            fixtures.measurement(
+                analyte=analyte, platform="dtims", ccs=reference, source="fixture DTIMS",
+                doi=fixtures.DOI_A,
+            )
+        )
+        records.append(
+            fixtures.measurement(
+                analyte=analyte, platform="twims", ccs=reference * bias,
+                source="fixture TWIMS", doi=fixtures.DOI_A,
+            )
+        )
+    return stratum_of(records)
+
+
+def test_the_top_grade_is_reachable_so_publishing_it_is_not_a_fiction():
+    """At the target population, with leverage measurable, an ion in the stratum grades supported.
+
+    /confidence/rules publishes a four-grade scale. If the top one were unreachable by
+    construction rather than by corpus size, publishing it would be advertising something
+    the service cannot do - and the honest fix would be to remove it, not to explain it.
+    """
+    stratum = a_stratum_of(TARGET_MATCHED_IONS, tag="ceilA", with_an_outlier=True)
+    assert stratum.n == TARGET_MATCHED_IONS
+    assert thinly_populated(stratum) is None
+    assert slope_leverage_percent(stratum) is not None, "this test needs leverage to be measurable"
+    clean = [
+        point for point in stratum.points
+        if id(point) not in {id(outlier) for outlier in stratum.outliers}
+    ][0]
+    confidence = grade_correction(clean.reference_ccs, clean.ion.key, stratum)
+    assert confidence.not_checked == ()
+    assert confidence.demotions == ()
+    assert confidence.grade is ConfidenceGrade.SUPPORTED
+
+
+def test_below_the_target_population_the_ceiling_is_qualified_however_good_the_ion():
+    """The other direction, and the reason no seed record grades supported.
+
+    Same stratum, same clean ion, one fewer matched ion than the target. Nothing about the
+    measurement changed; the grade falls because the corpus is small.
+    """
+    stratum = a_stratum_of(TARGET_MATCHED_IONS - 1, tag="ceilB", with_an_outlier=True)
+    clean = [
+        point for point in stratum.points
+        if id(point) not in {id(outlier) for outlier in stratum.outliers}
+    ][0]
+    confidence = grade_correction(clean.reference_ccs, clean.ion.key, stratum)
+    assert confidence.grade is ConfidenceGrade.QUALIFIED
+    assert [d.rule for d in confidence.demotions] == ["thinly populated calibration group"]
+
+
+def test_an_ion_the_corpus_has_never_seen_tops_out_at_qualified_at_any_corpus_size():
+    """THE CEILING FOR THE POPULATION THIS PLATFORM EXISTS TO SERVE, and it does not move.
+
+    Growing the corpus lifts the population demotion, so an ion already in it can reach
+    `supported`. A genuinely new ion cannot: the outlier rule is a corpus lookup, it can
+    never answer for them, and an unevaluable rule always costs one notch. So `qualified`
+    is their ceiling however large this corpus becomes - a consequence of the scheme rather
+    than of the data, and asserted here so it cannot quietly stop being true or quietly
+    start being worse.
+    """
+    novel = a_stratum_of(5, tag="ceilnew", with_an_outlier=False).points[0].ion.key
+    for count in (TARGET_MATCHED_IONS, TARGET_MATCHED_IONS * 3):
+        stratum = a_stratum_of(count, tag=f"ceilC{count}", with_an_outlier=True)
+        assert thinly_populated(stratum) is None
+        confidence = grade_correction(stratum.points[0].reference_ccs, novel, stratum)
+        assert confidence.grade is ConfidenceGrade.QUALIFIED, (
+            f"a new ion graded {confidence.grade.value} on a stratum of {count}"
+        )
+        assert [d.rule for d in confidence.demotions] == [
+            "a rule of the scheme could not be evaluated for this ion"
+        ]
+
+
+def test_the_population_threshold_is_not_quietly_lowered_to_make_the_top_grade_appear():
+    """Adjusting a check until it passes is fitting the check to the data.
+
+    The seed corpus's largest applied stratum holds 46. A threshold edged down to 46, or to
+    anything a stratum already reaches, would make `supported` appear without a single new
+    measurement - and would be the platform grading its own corpus as sufficient because it
+    is the corpus it has.
+    """
+    assert TARGET_MATCHED_IONS == 100
+    stratum = a_stratum_of(46, tag="ceilD", with_an_outlier=True)
+    assert thinly_populated(stratum) is not None, (
+        "the largest applied stratum in the seed corpus no longer triggers the population rule,"
+        " which means the threshold moved"
+    )
+
+
 # --- 8. usable ----------------------------------------------------------------------------------
 
 

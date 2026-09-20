@@ -15,7 +15,7 @@ one kind of instrument; 93 of them on all four.
 values differ by roughly 0.1 to 1.1 per cent depending on the instrument pair and the ion.
 The corrections move a value by about that much.
 
-### Six things it would be easy to read into these numbers that are not there
+### Seven things it would be easy to read into these numbers that are not there
 
 **1. "Drift tube versus trapped ion" is one laboratory comparing its own two instruments.**
 Those measurements were made by the study's authors on their own equipment. If a different
@@ -61,6 +61,22 @@ unavailable every single time, not now and then.** Counting it across our own st
 makes it look like an occasional gap, roughly one time in three; that count is misleading
 because our own stored data is, by definition, data we already have. For anything new, the
 check simply does not apply.
+
+**7. The confidence grades are capped by how much data we have, not by how good your
+measurement is.** Every corrected value today comes back `qualified` or `weak`, and none
+comes back `supported`. That reads like a verdict on the measurement and it is not one. The
+grading scheme lowers its confidence for any comparison group built from fewer than 100
+matched ions, and **every group this platform applies holds between 23 and 46** - so that
+rule fires on every single record, whatever the measurement is like. `qualified` is
+therefore the best grade available at present, and `weak` is usually just that one step
+lower because a second check could not be run at all.
+
+**What would lift it** is more overlapping data, not a change to the rules: one comparison
+group reaching 100 matched ions makes `supported` reachable for ions already in our corpus.
+The threshold has deliberately not been lowered to make the top grade appear, because
+adjusting a check until it passes is fitting the check to the data. For a molecule we have
+never measured, `qualified` stays the ceiling however large the corpus becomes, because the
+check described in point 6 can never run for it.
 
 ### What to do with a number from this platform
 
@@ -229,7 +245,7 @@ meeting.
 
 With no mutations, `python -m tools.mutation` prints "no mutation label contains
 any of []" and exits 1, which describes a filter that matched nothing rather than
-an empty catalogue. Latent only: the catalogue holds 110, so nothing reaches it.
+an empty catalogue. Latent only: the catalogue holds 276, so nothing reaches it.
 Left alone because it is cosmetic and unreachable, not because the harness is
 untouchable: see the entry in section 4A for a case where the opposite call was
 made.
@@ -460,7 +476,9 @@ value it returns for an ion that IS in the corpus and is fine. `grade_correction
 `None` as "checked and clean". `not_checked` came back empty, and an empty `not_checked` is
 used throughout this API as a positive assertion that every rule was evaluated. It is not
 vestigial: it populates on 133 of 417 graded responses from the seed corpus, which is what
-makes the empty case a claim rather than an absence.
+makes the empty case a claim rather than an absence. (417 is the number of measurements that
+get a correction computed and graded; 402 of those are served a value, the other 15 grading
+`unsupported`. The two are different counts and neither stands in for the other.)
 
 So the only rule in the scheme that speaks about the SUBMITTED ION rather than about the
 stratum around it was inert for every ion not already in the corpus - which is the entire
@@ -1025,6 +1043,56 @@ The scope limit is served on `/confidence/rules` in each rule's `applies_to` fie
 the only rule there whose `applies_to` is not "any ion", and a test asserts that it stays
 the only one - a caveat carried by every rule marks nothing.
 
+### No record grades `supported`, and the reason is corpus size rather than data quality
+
+OPEN, and deliberately not closed by moving a threshold. Measured 20 September 2026 over
+the whole seed corpus: **186 qualified, 216 weak, 15 unsupported, 0 supported**, of 417
+corrected records.
+
+`thinly_populated` demotes any stratum holding fewer than `TARGET_MATCHED_IONS` = 100
+matched ions. The nine strata this model applies hold **23, 23, 23, 29, 31, 31, 41, 46 and
+46**. So the population rule fires on 417 of 417 records - every one - and the top grade is
+unreachable for reasons that have nothing to do with the ion being graded.
+
+That matters for how a grade READS. `qualified` is not a middling result here; it is the
+CEILING. And `weak`, which 216 records carry, is usually that ceiling minus one notch: 209
+of the 216 are `qualified` demoted once because a rule could not be evaluated, not because
+anything about the measurement is wrong. Only 7 of the 216 are weak for a reason about the
+submitted value itself - it sat outside the range the correction was fitted over.
+
+**The top grade is live, not dead code.** Built on a synthetic stratum of 100 matched ions
+with one ion that does not transfer, so that leverage is measurable, `grade_correction`
+returns `supported` for an ion in that stratum. What stands between a real caller and it is
+the corpus, not the code:
+
+| applied stratum | ion already in the corpus | ion the corpus has never seen |
+|---|---|---|
+| 23 to 46 ions, as today | `qualified` | `weak` |
+| 100 ions or more | **`supported`** | `qualified` |
+
+**What would lift the ceiling**, in order:
+
+1. **An applied stratum reaching 100 matched ions.** That is the only change needed for
+   `supported` to become reachable, and it is data rather than code. Today's largest applied
+   stratum holds 46, so it needs 54 more ions measured on BOTH platforms of one pair, within
+   one calibration group and one adduct - not 54 more measurements, which would spread
+   across strata and lift none of them.
+2. **Leverage measurable in that stratum**, which needs at least one flagged outlier and
+   three points remaining once they are excluded. Where it is not, the response says so in
+   `not_checked` and the grade falls a notch for that instead.
+3. **For the intended user, nothing lifts it past `qualified`.** An ion this corpus has
+   never measured cannot have the outlier rule evaluated for it, and an unevaluable rule
+   costs one notch - so a genuinely new ion tops out at `qualified` at ANY corpus size under
+   this scheme. That is a consequence of a rule keyed on corpus membership, recorded here
+   rather than left for a caller to discover when their grade never improves.
+
+**The threshold has NOT been lowered** and will not be, to make the top grade appear.
+Adjusting a check until it passes is fitting the check to the data - the same objection this
+file already records against touching the leverage limit. 100 is a policy figure, stated as
+policy in `/confidence/rules`, and it is arguable; but it must be argued on what a
+platform-pair figure needs before being quoted, not on what would make today's corpus look
+better.
+
 ### Relabelling an ion still extracts a value the service refuses under its real name
 
 OPEN, and it cannot be closed by grading. Measured on 20 September 2026, after the fix above.
@@ -1497,7 +1565,9 @@ nothing, since both sides already rest on somebody else's reference values, so t
 are published as diagnostics and never applied to a measurement. There is no transitive
 composition: this package will not refer TWIMS to TIMS and then TIMS to the drift tube.
 
-Of 517 cleared records, **417 are corrected** and 100 are already on the primary platform,
+Of 517 cleared records, **417 are corrected and 402 of those are served a value**; the 15
+between the two grade `unsupported` and are withheld with their reason. 100 records are
+already on the primary platform,
 which is not a failure but the correct answer for a value with nothing to be referred to.
 
 ### The headline correction is chosen by a rule, not by preference
@@ -1731,51 +1801,77 @@ models whenever unrelated data moved.
 The model is still refitted at every startup. That stays, and it is now safe: the same data
 gives the same digest, so two deployments that agree can be shown to agree.
 
-### Three deliberate omissions, each with what closing it would take
+### Six deliberate omissions, each with what closing it would take
 
-Recorded as decisions rather than as a to-do list. Each needs somebody to decide, not
-somebody to code.
+Recorded as decisions rather than as a to-do list. Each needs somebody to DECIDE, not
+somebody to code, and that is why none of them is half-built. Four of the six wait on the
+same unanswered question - who is allowed to call this service - and building any of them
+before that answer means building it wrongly.
 
-**1. No authentication and no authorisation.** The server binds `127.0.0.1` rather than
-`0.0.0.0`, which is the correct default and the only concession made. *To close it:* a
-decision from the CEO about who may call this - internal only, named collaborators, or
-public - because that decision determines the mechanism. An internal service needs a network
-boundary and nothing else; named collaborators need API keys and a way to revoke them;
-public access needs accounts. Building any of the three before the decision means building
-two of them wrongly. Note also that the licence terms bear on this: the data is
-`academic_only`, so an interface serving derived values to unknown callers is a licence
-question before it is an engineering one.
+**1. No authentication and no authorisation.** Anybody who can reach the port can call every
+endpoint. *To close it:* a decision from the CEO about who may call this - internal only,
+named collaborators, or public - because that decision determines the mechanism. An internal
+service needs a network boundary and nothing else; named collaborators need API keys and a
+way to revoke them; public access needs accounts, and accounts mean a user store, a password
+or token flow, and somebody who resets them. Building any of the three before the decision
+means building two of them wrongly. The licence terms bear on this before the engineering
+does: the seed data is `academic_only`, so an interface serving derived values to unknown
+callers is a licence question first.
 
-**2. No CORS policy.** Nothing sets `Access-Control-Allow-Origin`, so no browser page on
+**2. Loopback binding is the only access control there is.** `python -m wmxccs` defaults to
+`--host 127.0.0.1`, so out of the box the service is reachable only from the machine it runs
+on. This is a real decision and it is load-bearing precisely BECAUSE of omission 1: it is not
+defence in depth, it is the whole of the defence. `--host 0.0.0.0` exists and works, and
+using it publishes an unauthenticated service to whatever network the host is on. A test
+asserts the default so it cannot drift. *To close it:* omission 1. Until then, anyone
+deploying this behind a reverse proxy or on a shared host is responsible for the boundary,
+and should know that nothing inside the application will stop a request.
+
+**3. No CORS policy.** Nothing sets `Access-Control-Allow-Origin`, so no browser page on
 another origin can call this. That is the safe default and it is deliberate. *To close it:*
-the same decision as above, plus a list of origins. A permissive `*` would be the wrong
-answer for academic-only data regardless of who is asking.
+the same decision as omission 1, plus an explicit list of origins. A permissive `*` would be
+the wrong answer for academic-only data regardless of who is asking.
 
-**3. No rate limiting.** *To close it:* it follows the first decision and needs one more
-piece of information - what a legitimate caller's peak volume looks like - which nobody has
-because there are no callers yet. Guessing a limit now would either throttle a real user or
-protect nothing.
+**4. No rate limiting.** One caller can issue requests as fast as the process will serve
+them. Request size is bounded - 1000 measurements per request, and every text field capped -
+but that is not a rate limit and is not offered as one. *To close it:* it follows omission 1,
+and needs one more fact that nobody has: what a legitimate caller's peak volume looks like,
+which is unknowable while there are no callers. Guessing a limit now would either throttle a
+real user or protect nothing.
 
-**And a fourth, which is a design choice rather than an omission: a request never grows the
-corpus.** A caller submitting two platforms' values for one ion gets each corrected against
-the stored model; the pair they sent is not added to anything. This is deliberate and should
-stay deliberate. Accepting submitted measurements into the corpus would mean taking
-unverified data through the licence gate on a stranger's assertion, refitting the model
-between requests so two callers get different answers from the same version, and losing the
-provenance chain that makes any of these numbers quotable. *To close it:* a curation queue
-where submissions are held, licence-checked by a named person, and merged deliberately -
-which is a product, not a feature.
+**5. No seed data in a built wheel.** The seed CSVs are deliberately not declared as package
+data, so `pip install wmxccs` from a wheel gives a working API whose `/harmonize` answers 501
+for everything. Deployment is from a checkout. This is a licensing decision rather than an
+oversight: the steroid data is `academic_only` with an attribution obligation, and bundling
+it into a redistributable artefact is a decision nobody has made. *To close it:* somebody
+with the authority to redistribute that data says so in writing, and the attribution
+obligation is satisfied inside the artefact - or the wheel ships with a loader that fetches
+the data from a location the licence does cover.
+
+**6. A request never grows the corpus** - a design choice rather than an omission, and it
+should stay one. A caller submitting two platforms' values for one ion gets each corrected
+against the stored model; the pair they sent is added to nothing. Accepting submissions into
+the corpus would mean taking unverified data through the licence gate on a stranger's
+assertion, refitting the model between requests so that two callers get different answers
+from one version, and losing the provenance chain that makes any of these numbers quotable.
+*To close it:* a curation queue where submissions are held, licence-checked by a named
+person, and merged deliberately - which is a product, not a feature.
 
 ## 8. Scope of the test suite
 
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 248 mutations against fifteen modules. It is smaller than the
-  glycan platform's 154 because 46 of those anchored into modules that do not come
-  across and 26 into modules not in this milestone. The floor in the catalogue test
-  is the real current count and goes up, never quietly down;
+- the catalogue holds 276 mutations against the package's modules. It began smaller than
+  the glycan platform's 154 because 46 of those anchored into modules that do not come
+  across and 26 into modules not in this milestone; it has since passed it. The floor in
+  the catalogue test goes up, never quietly down;
 - a mutation that survives is a behaviour with no test behind it. There are no
   documented expected survivors in this catalogue, so any survivor is a finding;
-- nothing here tests numerical accuracy of anything, because nothing numerical is
-  computed yet.
+- numerical behaviour IS tested as of M4 - the robust slope, the leave-one-out
+  intervals, the conformal floor, the digests and the served precision all have tests
+  that fail when the arithmetic changes. What is still NOT tested is accuracy against an
+  independent reference, because no such reference exists for these ions: every figure
+  here is checked against the corpus it was fitted on, or against a synthetic fixture
+  whose answer is known by construction. A test that the arithmetic is self-consistent
+  is not a test that the answer is right, and nothing in this repository claims it is.

@@ -14,6 +14,9 @@ import pytest
 
 from wmxccs.contracts import CorrectionBasis
 from wmxccs.harmonization import (
+    JackknifePlusInterval,
+    outward,
+    to_places,
     PRIMARY_REFERENCE,
     corpus_digest,
     fit_harmonization,
@@ -480,3 +483,84 @@ def test_the_parameters_digest_does_not_depend_on_stratum_order(model):
     assert parameters_digest(corrections, model.alpha) == parameters_digest(
         list(reversed(corrections)), model.alpha
     )
+
+
+# --- the precision a served number is allowed to claim ------------------------------------------
+#
+# THESE ARE FUNCTION-LEVEL ON PURPOSE. An end-to-end test that submits a measurement and
+# reads the wire exercises this rule but cannot isolate WHICH input it read: on most of the
+# seed corpus, reading the full width instead of the half width lands on the same answer, so
+# an end-to-end assertion passes either way. Three mutations survived a sweep on exactly that
+# before these were written - the same lesson the versioning digest taught in M5.
+
+
+def an_interval(low: float, high: float) -> JackknifePlusInterval:
+    """A minimal interval. Only `low` and `high` matter to the rule under test."""
+    return JackknifePlusInterval(
+        low=low,
+        high=high,
+        at_value=(low + high) / 2.0,
+        nominal_coverage=0.9,
+        guaranteed_coverage=0.8,
+        groups_left_out=1,
+        refits=20,
+        quantile_index_low=1,
+        quantile_index_high=20,
+        largest_residual=1.0,
+        quantile_residual=1.0,
+        interval_is_informative=True,
+    )
+
+
+def test_the_precision_is_read_off_the_half_width_not_the_whole_width():
+    """A width of 1.09 is a half-width of 0.54, and those support different precisions.
+
+    The interval brackets the value on BOTH sides, so what the number can claim is set by
+    how far it may be from the truth in one direction - the half-width. Reading the full
+    width understates the precision by a factor of two and lands on the same answer for
+    most of the seed corpus, which is why only a function-level test can tell them apart.
+    """
+    assert an_interval(100.0, 101.09).decimals_supported == 2
+    # and the same figure read as a half-width gives the other answer, which is the point
+    assert an_interval(100.0, 102.18).decimals_supported == 1
+
+
+def test_a_wider_interval_supports_fewer_decimals_than_a_tighter_one():
+    """The direction of the rule, asserted as a direction rather than at one point."""
+    tight = an_interval(100.0, 100.02).decimals_supported      # half 0.01
+    middling = an_interval(100.0, 101.2).decimals_supported     # half 0.6
+    wide = an_interval(100.0, 111.0).decimals_supported         # half 5.5
+    assert tight > middling > wide
+    assert (tight, middling, wide) == (3, 2, 1)
+
+
+def test_the_precision_never_exceeds_the_three_decimals_the_corpus_itself_carries():
+    """The upper clamp. No seed interval reaches it, so nothing else would notice it going.
+
+    The seed measurements carry at most three decimal places. An interval tight enough to
+    justify six would be claiming to know the answer better than any measurement behind it
+    was ever recorded, which is arithmetic outrunning its evidence.
+    """
+    assert an_interval(100.0, 100.000002).decimals_supported == 3
+    assert an_interval(100.0, 100.0).decimals_supported == 3
+
+
+def test_the_precision_never_falls_below_one_decimal():
+    """The lower clamp, and the other direction: a huge interval still says something."""
+    assert an_interval(100.0, 400.0).decimals_supported == 1
+    assert an_interval(100.0, 100000.0).decimals_supported == 1
+
+
+def test_an_interval_rounds_outward_so_it_is_never_narrower_than_it_was():
+    # Chosen so that NEAREST would move BOTH bounds inward: it gives (1.24, 6.78), an
+    # interval 0.02 narrower than the one that was computed. Outward gives (1.23, 6.79).
+    low, high = outward(1.2371, 6.7849, 2)
+    assert (low, high) == (1.23, 6.79)
+    assert low <= 1.2371 and high >= 6.7849
+    assert low < round(1.2371, 2) and high > round(6.7849, 2)
+    assert high - low > round(6.7849, 2) - round(1.2371, 2)
+
+
+def test_a_value_rounds_to_nearest_because_it_sits_inside_its_interval():
+    assert to_places(166.56725251726084, 1) == 166.6
+    assert to_places(166.56725251726084, 2) == 166.57

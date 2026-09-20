@@ -261,11 +261,66 @@ class ScopeReport(BaseModel):
 
 
 class HarmonizedEstimate(BaseModel):
-    """The corrected value. ABSENT, never empty, while no model exists."""
+    """The corrected value. ABSENT, never empty, while no model exists.
+
+    THE FIELD ORDER IS PART OF THE CONTRACT, and it is ordered by what a reader must not
+    be allowed to miss rather than by what the code computes first.
+
+    A response is read from the top, and truncated from the bottom - by a log line, a
+    console, a table of the "main" columns, a person skimming. So the first four fields are
+    the number, the two bounds it sits between, and the scope caveat saying what it may be
+    quoted as; then the two coverage figures, adjacent, with the GUARANTEED one first
+    because it is the weaker and therefore the honest one. A reader who takes only the
+    opening of this object still has a number, its uncertainty, and the sentence that stops
+    them calling it interlaboratory reproducibility.
+
+    It used to open with the number, the basis and two alternative corrections, and put the
+    scope caveat ten fields down and the guaranteed coverage thirteen. Anyone who stopped
+    reading early got three cross sections and no idea what any of them meant.
+    """
 
     model_config = ConfigDict(frozen=True)
 
+    # --- what the number is, and what it is worth ----------------------------------------
     ccs: float = Field(gt=0, description="The harmonized cross section, square angstrom.")
+    interval_low: float = Field(gt=0)
+    interval_high: float = Field(gt=0)
+    scope: ScopeReport = Field(
+        description="REQUIRED, no default. What this correction may be quoted as. A harmonized cross"
+        " section cannot be serialised without it, and it is placed HERE, immediately under the number"
+        " and its interval, because a caveat that arrives ten fields later has already been skipped."
+    )
+    guaranteed_coverage: float = Field(
+        gt=0,
+        lt=1,
+        description="WHAT THE INTERVAL PROVES, and the figure to rely on. Jackknife+ guarantees"
+        " 1-2*alpha, so a nominally 90% interval is guaranteed at 80%: about one value in five may fall"
+        " outside its stated range rather than one in ten. First of the two coverage figures, and"
+        " directly beside the interval it describes, because it is the weaker of the two.",
+    )
+    interval_coverage: float = Field(
+        gt=0,
+        lt=1,
+        description="Nominal coverage, e.g. 0.90 - the level the quantile is taken at, not a proved"
+        " guarantee. Never 1, which no finite interval attains. Adjacent to `guaranteed_coverage` so"
+        " that the two can never be read apart; quoting this one alone overstates the interval.",
+    )
+    interval_kind: IntervalKind
+    interval_is_informative: bool = Field(
+        description="False where the interval is the full observed range - honest, and excluding nothing."
+        " See readiness.smallest_informative_calibration_set."
+    )
+    interval_accounts_for_submitted_uncertainty: bool = Field(
+        default=False,
+        description="FALSE, always, and stated because the response invites the opposite reading: the"
+        " submitted measurement's own ccs_uncertainty is echoed on `original`, and the two are unrelated."
+        " The interval is MODEL-DERIVED - it comes from the spread of leave-one-out refits of the stratum"
+        " - and is identical whether the submitted uncertainty is 0.0001, 50, or absent entirely."
+        " Propagating the caller's uncertainty into it is not implemented; this field exists so that is a"
+        " stated fact rather than something a reader has to discover.",
+    )
+
+    # --- how it was arrived at -------------------------------------------------------------
     basis: CorrectionBasis = Field(description="Which correction the value above came from.")
     slope_derived_ccs: float | None = Field(
         default=None,
@@ -279,42 +334,13 @@ class HarmonizedEstimate(BaseModel):
         description="What the stratum's median signed difference gives. Unmoved by outliers, and unable to"
         " express a correction that varies with size.",
     )
-    interval_low: float = Field(gt=0)
-    interval_high: float = Field(gt=0)
-    interval_coverage: float = Field(
-        gt=0, lt=1, description="Nominal coverage, e.g. 0.90. Never 1, which no finite interval attains."
-    )
-    interval_kind: IntervalKind
     reference_platform: str = Field(description="The platform the correction refers the value to.")
     matched_ions_behind_it: int = Field(
         ge=0, description="How many matched ions the correction was fitted on. Travels with the number."
     )
-    scope: ScopeReport = Field(
-        description="REQUIRED, no default. What this correction may be quoted as. A harmonized cross"
-        " section cannot be serialised without it."
-    )
     model_version: ModelVersion = Field(
         description="REQUIRED, no default. Which model produced this number. Without it the same input"
         " could give two different answers on two days with nothing saying which was which."
-    )
-    interval_is_informative: bool = Field(
-        description="False where the interval is the full observed range - honest, and excluding nothing."
-        " See readiness.smallest_informative_calibration_set."
-    )
-    guaranteed_coverage: float = Field(
-        gt=0,
-        lt=1,
-        description="What the interval method PROVES, as against the nominal level its quantile is taken at."
-        " Jackknife+ guarantees 1-2*alpha, so a nominally 90% interval is guaranteed at 80%.",
-    )
-    interval_accounts_for_submitted_uncertainty: bool = Field(
-        default=False,
-        description="FALSE, always, and stated because the response invites the opposite reading: the"
-        " submitted measurement's own ccs_uncertainty is echoed in `original` a few fields above this"
-        " interval, and the two are unrelated. The interval is MODEL-DERIVED - it comes from the spread of"
-        " leave-one-out refits of the stratum - and is identical whether the submitted uncertainty is"
-        " 0.0001, 50, or absent entirely. Propagating the caller's uncertainty into it is not implemented;"
-        " this field exists so that is a stated fact rather than something a reader has to discover.",
     )
 
 
@@ -340,6 +366,16 @@ class ConfidenceReport(BaseModel):
     )
 
 
+MAX_MEASUREMENTS_PER_REQUEST = 1_000
+"""A ceiling on one request, to go with the floor that was always there.
+
+Not a rate limit and not a security control - there is no authentication on this service,
+and LIMITATIONS 7G records both as deliberate omissions with what each would take. This is
+the narrower thing: a single request cannot ask for unbounded work by accident. 1000 is
+roughly twice the whole seed corpus, so no honest use of this endpoint meets it.
+"""
+
+
 class HarmonizeRequest(BaseModel):
     """One measurement or a set of them.
 
@@ -351,7 +387,13 @@ class HarmonizeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     measurements: tuple[CCSMeasurement, ...] = Field(
-        min_length=1, description="The measurements to harmonize. Returned untouched in the response."
+        min_length=1,
+        max_length=MAX_MEASUREMENTS_PER_REQUEST,
+        description="The measurements to harmonize. Returned untouched in the response. Bounded at"
+        f" {MAX_MEASUREMENTS_PER_REQUEST}: the floor was here from the start and the ceiling was not, so"
+        " a request could carry an unbounded number of bounded records - the same problem one level up"
+        " from the text fields. Split a larger set across requests; nothing here is stateful and the"
+        " model is identical between them, as the model_version on each estimate shows.",
     )
 
 

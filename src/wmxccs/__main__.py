@@ -8,6 +8,11 @@ It prints what it is serving BEFORE it starts, because an operator needs to know
 a model was found. An installation whose data directory is empty serves a working API
 whose /harmonize answers 501, and that is correct rather than broken - but it should not
 be a surprise.
+
+AND IT FLUSHES THAT BANNER, which is not decoration. `uvicorn.run` never returns, and
+Python only line-buffers stdout when stdout is a terminal - so to a pipe, a log file or a
+systemd journal the banner stayed in the buffer for the lifetime of the process. The one
+reader who most needs it is the one who redirected it somewhere.
 """
 
 from __future__ import annotations
@@ -60,6 +65,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  model version: {model.fingerprint.short}  (corpus/parameters, sha256)")
         print(f"  SCOPE: {model.scope.caveat()}")
     print(f"  serving on http://{args.host}:{args.port}  (docs at /docs)")
+
+    # FLUSHED BEFORE THE SERVER BLOCKS, and this line is the whole reason the banner is
+    # readable anywhere but a terminal. Python line-buffers stdout only when it is a tty;
+    # to a pipe or a file it block-buffers, and uvicorn.run() below never returns - so the
+    # banner sat in an 8 KB buffer until the process was killed. Measured on 20 September
+    # 2026 by starting the server with stdout redirected to a file: uvicorn's own logging
+    # goes to stderr and appeared, the banner did not appear at all, and an operator
+    # checking whether a model had loaded saw an empty file. Which is exactly the surprise
+    # this module's docstring says it exists to prevent.
+    sys.stdout.flush()
 
     uvicorn.run("wmxccs.api:app", host=args.host, port=args.port, reload=args.reload)
     return 0

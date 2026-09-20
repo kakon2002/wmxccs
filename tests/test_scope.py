@@ -118,7 +118,7 @@ def test_a_stamp_over_no_records_is_refused_rather_than_defaulted():
     with pytest.raises(ScopeExceededError, match="no records at all"):
         stamp_over([])
     with pytest.raises(ScopeExceededError):
-        stamp_over_stamps([])
+        stamp_over_stamps([], records_behind_it=0)
 
 
 def test_a_source_string_rather_than_a_doi_is_flagged_as_possibly_overstating_the_scope():
@@ -149,13 +149,58 @@ def test_combining_stamps_unions_the_provenance_and_never_narrows_it():
     b = stamp_over([FakeRecord(doi="10.1/b")])
     assert a.scope is ComparisonScope.WITHIN_STUDY
     assert b.scope is ComparisonScope.WITHIN_STUDY
-    combined = stamp_over_stamps([a, b])
+    combined = stamp_over_stamps([a, b], records_behind_it=2)
     assert combined.scope is ComparisonScope.CROSS_STUDY
     assert combined.records_behind_it == 2
     assert set(combined.studies) == {"doi:10.1/a", "doi:10.1/b"}
 
 
+def test_a_combined_stamp_cannot_invent_its_own_record_count():
+    """The count is REQUIRED, because this function cannot see records and used to guess.
+
+    It guessed by summing, which is right only when the stamps are disjoint - and the one
+    caller in this package hands it eighteen overlapping strata. A measurement paired into
+    three of them was counted three times, and the model published 1402 measurements behind
+    a corpus of 517, in the caveat sentence that travels with every figure.
+    """
+    a = stamp_over([FakeRecord(doi="10.1/a")])
+    with pytest.raises(TypeError):
+        stamp_over_stamps([a])  # type: ignore[call-arg]
+
+
+def test_the_caveat_quotes_the_distinct_count_and_names_what_each_number_counts():
+    """The caveat is the conservative sentence, so its headline is the smaller number.
+
+    Both numbers are stated because they answer different questions and were being
+    conflated: how many measurements exist, against how many times one was compared with
+    another. Neither is a substitute for the other, and an unlabelled number is the thing
+    that let 1402 read as a corpus size.
+    """
+    # ONE RECORD, DESCRIBED BY TWO STAMPS - the overlapping case, where summing is wrong.
+    # Two stamps of one record each sum to two, and the truth is one; a test built from
+    # disjoint stamps cannot tell the two rules apart, which is how the summing survived.
+    a = stamp_over([FakeRecord(doi="10.1/a")], pairings=3)
+    b = stamp_over([FakeRecord(doi="10.1/a")], pairings=4)
+    combined = stamp_over_stamps([a, b], records_behind_it=1)
+    assert combined.records_behind_it == 1, "the combiner summed instead of using what it was told"
+    assert combined.pairings == 7
+    caveat = combined.caveat()
+    assert "1 distinct measurement(s)" in caveat
+    assert "7 cross-platform pairing(s)" in caveat
+    # the sum of the parts must NOT be what the sentence leads with
+    assert "over 2 " not in caveat and "over 7 " not in caveat
+
+
+def test_a_stamp_that_was_never_told_its_pairings_says_nothing_about_them():
+    """The other direction. A caveat that always claimed pairings would invent them."""
+    stamp = stamp_over([FakeRecord(doi="10.1/a")])
+    assert stamp.pairings == 0
+    caveat = stamp.caveat()
+    assert "1 distinct measurement(s)" in caveat
+    assert "pairing" not in caveat
+
+
 def test_combining_stamps_from_one_study_stays_within_study():
     a = stamp_over([FakeRecord(doi="10.1/a")])
     b = stamp_over([FakeRecord(doi="10.1/a")])
-    assert stamp_over_stamps([a, b]).scope is ComparisonScope.WITHIN_STUDY
+    assert stamp_over_stamps([a, b], records_behind_it=1).scope is ComparisonScope.WITHIN_STUDY

@@ -216,6 +216,29 @@ class JackknifePlusInterval:
         return self.high - self.low
 
     @property
+    def decimals_supported(self) -> int:
+        """How many decimal places THIS interval can carry without inventing precision.
+
+        A value of 166.56725251726084 beside an interval 6.7 wide asserts fourteen decimal
+        places of knowledge and has about two. The digits are real arithmetic - they are
+        just not evidence, and a reader has no way to tell those apart by looking.
+
+        The rule is one significant figure of the HALF-width, floored, clamped to 1..3. A
+        half-width of 0.54 gives two decimals; 3.5 gives one. Derived from the interval
+        rather than fixed, so a tighter interval is allowed to say more - and derived
+        per query, because the width depends on the submitted value and not only on the
+        stratum: the same stratum can legitimately print at two precisions.
+
+        The clamps are stated rather than open-ended. Below 1 the number would lose
+        information the interval does support; above 3 it would out-run the seed corpus,
+        whose own measurements carry at most three decimals.
+        """
+        half = self.width / 2.0
+        if half <= 0:
+            return 3
+        return min(3, max(1, 1 - math.floor(math.log10(half))))
+
+    @property
     def tail_ratio(self) -> float:
         """Largest residual over the quantile residual. 1.0 means one ion sets the width."""
         if self.quantile_residual == 0:
@@ -530,11 +553,37 @@ def measure_coverage(
     )
 
 
+def to_places(value: float, decimals: int) -> float:
+    """Nearest. For the value itself, which sits inside its interval."""
+    return round(value, decimals)
+
+
+def outward(low: float, high: float, decimals: int) -> tuple[float, float]:
+    """Round an interval AWAY from its centre, never inward.
+
+    Rounding a bound to nearest can move it toward the value and make the interval
+    narrower than the one that was computed - which is overstating precision by exactly
+    the mechanism this rounding exists to stop. Down for the low bound and up for the
+    high one costs at most one unit in the last place and can only ever be conservative.
+
+    It also keeps the strict ordering low < ccs < high that the response promises. The
+    unit is at most a tenth of the half-width by construction - `decimals_supported`
+    floors on one significant figure - so the bounds cannot meet the value they bracket
+    except where the clamp at three decimals binds, which no interval in the seed corpus
+    reaches.
+    """
+    scale = 10**decimals
+    return (math.floor(low * scale) / scale, math.ceil(high * scale) / scale)
+
+
 def fit_stratum(stratum: StratumStatistics, alpha: float = CONFORMAL_ALPHA) -> StratumCorrection:
     """Fit one stratum three ways. Never pooled with another stratum, by construction:
     this function cannot see another one."""
     records = [p.reference for p in stratum.points] + [p.other for p in stratum.points]
-    scope = stamp_over(records)
+    # Two distinct records per matched ion, and one pairing. Both are passed rather than
+    # one being inferred from the other: they are equal to 2n and n only because a stratum
+    # pairs each ion exactly once, which is true here and is not a law.
+    scope = stamp_over(records, pairings=len(stratum.points))
     offset = stratum.agreement.median_difference_percent
     if offset is None:
         offset = median([p.difference_percent for p in stratum.points]) if stratum.points else 0.0
@@ -824,10 +873,6 @@ def fit_harmonization(comparison: ComparisonReport, alpha: float = CONFORMAL_ALP
     corrections = tuple(
         fit_stratum(stratum, alpha) for pair in comparison.pairs for stratum in pair.strata
     )
-    if corrections:
-        scope = stamp_over_stamps([c.scope for c in corrections])
-    else:
-        scope = ScopeStamp(studies=(), instruments=(), platforms=(), records_behind_it=0)
     # Over the DISTINCT records behind the fit. A record paired into several strata is one
     # measurement and is counted once, or the digest would depend on how many comparisons
     # happened to use it.
@@ -837,6 +882,16 @@ def fit_harmonization(comparison: ComparisonReport, alpha: float = CONFORMAL_ALP
         for point in correction.stratum.points
         for record in (point.reference, point.other)
     }
+    # THE SAME DE-DUPLICATED SET NOW FEEDS THE SCOPE, not just the digest. It was computed
+    # here for the digest and the scope was built two lines above it by summing per-stratum
+    # counts, so the two disagreed by a factor of nearly three - 1402 against 517 - and the
+    # larger number was the one published in the caveat that travels with every figure.
+    if corrections:
+        scope = stamp_over_stamps(
+            [c.scope for c in corrections], records_behind_it=len(records)
+        )
+    else:
+        scope = ScopeStamp(studies=(), instruments=(), platforms=(), records_behind_it=0)
     fingerprint = ModelFingerprint(
         corpus=corpus_digest(records.values()),
         parameters=parameters_digest(corrections, alpha),

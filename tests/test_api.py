@@ -485,6 +485,61 @@ def test_no_model_fitted_on_this_corpus_can_report_validated():
 # --- 7. the grading scheme is published and needs no model -------------------------------------------
 
 
+# --- the order of the estimate is part of the contract ------------------------------------------
+
+
+def test_the_estimate_opens_with_the_number_its_interval_and_its_scope():
+    """A response is read from the top and truncated from the bottom.
+
+    By a log line, a console, a table of the "main" columns, a person skimming. So whatever
+    a reader would lose by stopping early has to be the least important thing, and the
+    caveat saying what the number may be quoted as cannot be it. This used to open with the
+    number, the basis and two ALTERNATIVE corrections: someone who stopped reading there
+    came away with three cross sections and nothing saying what any of them meant.
+    """
+    order = list(HarmonizedEstimate.model_fields)
+    assert order[:4] == ["ccs", "interval_low", "interval_high", "scope"]
+
+
+def test_the_two_coverage_figures_are_adjacent_and_the_guaranteed_one_comes_first():
+    """Quoting the nominal 0.90 alone overstates the interval, and 0.80 is the true one.
+
+    Adjacency is the guard: two numbers that mean different things and differ by ten
+    percentage points must not be separable by a reader scanning down the object. The
+    guaranteed figure leads because it is the weaker, and the weaker is the honest one.
+    They sat three fields and ten fields from the interval respectively.
+    """
+    order = list(HarmonizedEstimate.model_fields)
+    guaranteed = order.index("guaranteed_coverage")
+    nominal = order.index("interval_coverage")
+    assert nominal == guaranteed + 1, f"the coverage figures are not adjacent: {order}"
+    assert guaranteed < nominal, "the nominal figure leads, so the weaker one reads as a footnote"
+    # and both sit beside the interval they describe, not at the far end of the object
+    assert guaranteed <= order.index("interval_high") + 2
+
+
+def test_the_fields_a_reader_can_lose_by_stopping_early_are_the_derivation_not_the_meaning():
+    """The other direction. An order that put everything first would pass the two above."""
+    order = list(HarmonizedEstimate.model_fields)
+    for later in ("basis", "slope_derived_ccs", "median_derived_ccs", "model_version"):
+        assert order.index(later) > order.index("scope"), (
+            f"{later} is served before the scope caveat, which is the wrong thing to read first"
+        )
+
+
+def test_the_served_json_carries_the_declared_order_and_not_some_other_one():
+    """The declaration is only worth pinning if it is what reaches the wire.
+
+    Pydantic serialises in declaration order, which is the whole mechanism this relies on -
+    so it is asserted rather than assumed, against a real response body.
+    """
+    payload = good_estimate()
+    served = list(HarmonizedEstimate(**payload).model_dump().keys())
+    assert served == list(HarmonizedEstimate.model_fields)
+    assert served[:4] == ["ccs", "interval_low", "interval_high", "scope"]
+
+
+
 def test_the_confidence_rules_answer_on_a_fresh_app_with_no_model(app):
     """The endpoint exists precisely because these rules need no training data."""
     assert app.state.model is None
@@ -508,6 +563,31 @@ def test_the_confidence_rules_list_every_grade_and_every_rule(client):
         for field, value in declared.items():
             expected = list(value) if isinstance(value, list) else value
             assert served[field] == expected, f"{declared['rule']}: {field} differs"
+
+
+def test_the_published_note_says_why_no_grade_reaches_supported_today(client):
+    """A caller reading four grades and never seeing the top one will draw their own conclusion.
+
+    The likeliest one is that their measurement is being judged marginal, which is wrong: the
+    population rule fires on every record in this corpus because every applied stratum is
+    below the target, so `qualified` is the ceiling whatever the ion is like.
+    """
+    note = client.get("/confidence/rules").json()["note"]
+    assert "NO RESPONSE FROM THIS DEPLOYMENT CAN GRADE `supported` TODAY" in note
+    assert "rather than about your measurement" in note
+    assert "not a judgement that your ion is marginal" in note
+
+
+def test_the_published_note_says_what_would_lift_the_ceiling_and_that_it_is_not_the_threshold(
+    client,
+):
+    note = client.get("/confidence/rules").json()["note"]
+    assert "100 matched ions or more" in note
+    assert "deliberately NOT been lowered" in note
+    assert "fitting the check to the data" in note
+    # and the harder half: for a new ion the ceiling does not move at all
+    assert "remains the ceiling at ANY corpus size" in note
+
 
 
 def test_the_endpoint_publishes_the_outlier_rules_scope_limit(client):

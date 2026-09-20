@@ -125,7 +125,52 @@ def _not_placeholder(value: str) -> str:
     return value
 
 
-_Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1), AfterValidator(_not_placeholder)]
+# WHY THERE IS A CEILING AT ALL. Every free-text field a caller can send was unbounded: a
+# five-million-character `source` validated, was stored, and was echoed back in the response,
+# and a request could carry any number of those. Nothing here is a security control - there is
+# no authentication on this service either, and both are recorded as such in LIMITATIONS 7G -
+# but an unbounded field is a way to make the process do arbitrary work by accident as much as
+# on purpose, and a bound costs nothing to a legitimate caller.
+#
+# 1000 is chosen against what these fields are FOR. `source` is a citation, `display_name` a
+# compound name, `instrument` a model number. The longest such value in the seed corpus is
+# well under 200 characters. Sequences and structure strings are bounded separately and much
+# higher, because a protein sequence legitimately runs to thousands of residues.
+MAX_TEXT = 1_000
+MAX_SEQUENCE = 100_000
+
+_CONTROL_CHARACTERS = frozenset(chr(code) for code in range(0x20)) | {chr(0x7F)}
+
+
+def _no_control_characters(value: str) -> str:
+    """Refuse text carrying C0 control characters or DEL.
+
+    A NUL byte in a compound name is not a compound name. These reached the matched-ion
+    key, the digests and the response body untouched, so two analytes differing only by an
+    invisible character keyed apart while reading as identical to anybody looking at them -
+    which is the opposite of what an identity key is for. Tabs and newlines are refused with
+    the rest: none of these fields is a paragraph, and a name containing a newline breaks
+    every report that prints one per line.
+
+    The offending character is named by code point rather than echoed, because echoing a
+    control character into an error message puts it back on somebody's terminal.
+    """
+    found = sorted({ord(ch) for ch in value if ch in _CONTROL_CHARACTERS})
+    if found:
+        listed = ", ".join(f"U+{code:04X}" for code in found)
+        raise ValueError(
+            f"text contains control character(s) {listed}; these are invisible, they key records"
+            " apart while reading as identical, and no field here is meant to hold one"
+        )
+    return value
+
+
+_Text = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_TEXT),
+    AfterValidator(_no_control_characters),
+    AfterValidator(_not_placeholder),
+]
 
 
 # --- the frozen record base ------------------------------------------------------------
@@ -681,7 +726,15 @@ def _check_peptide_sequence(value: str) -> str:
     return sequence
 
 
-_Sequence = Annotated[str, StringConstraints(strip_whitespace=True), AfterValidator(_check_peptide_sequence)]
+# NOT built on _Text: a sequence is not free text and has its own character class, which
+# already refuses control characters. What it did NOT have was any ceiling - a two-million
+# residue "peptide" validated. MAX_SEQUENCE is far above any real protein and far below a
+# denial of service by accident.
+_Sequence = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, max_length=MAX_SEQUENCE),
+    AfterValidator(_check_peptide_sequence),
+]
 
 
 def _sorted_unique(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -901,7 +954,14 @@ class GlycanAnalyte(_Analyte):
         " A source that gives a structure and no composition therefore records null, and is identified by its"
         " structure, which is finer anyway. A glycan must still state SOMETHING - see states_an_identifier.",
     )
-    wurcs: Annotated[str, StringConstraints(strip_whitespace=True), AfterValidator(_check_wurcs)] | None = None
+    # Bounded and control-checked explicitly: this field bypasses _Text - a WURCS string is
+    # not free text - and so bypassed both guards when they were added there.
+    wurcs: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, max_length=MAX_SEQUENCE),
+        AfterValidator(_no_control_characters),
+        AfterValidator(_check_wurcs),
+    ] | None = None
     glytoucan_ac: Annotated[_Text, AfterValidator(_warn_on_glytoucan_format)] | None = None
     iupac_condensed: Annotated[_Text, StringConstraints(pattern=r"^\S+$")] | None = Field(
         default=None,
@@ -1082,7 +1142,16 @@ class GlycopeptideAnalyte(_Analyte):
         " glycopeptide of unknown site is not known to be the same molecule as one of a stated site.",
     )
     glycan_composition: CompositionField | None = None
-    glycan_wurcs: Annotated[str, StringConstraints(strip_whitespace=True), AfterValidator(_check_wurcs)] | None = None
+    # The same bypass as GlycanAnalyte.wurcs, in a second place. A guard added to one
+    # spelling of a field and not the other is the failure this repository keeps finding:
+    # LIMITATIONS 4.5 records it as "when a rule is written for one case, ask which other
+    # fields have the same case".
+    glycan_wurcs: Annotated[
+        str,
+        StringConstraints(strip_whitespace=True, max_length=MAX_SEQUENCE),
+        AfterValidator(_no_control_characters),
+        AfterValidator(_check_wurcs),
+    ] | None = None
     glycan_glytoucan_ac: Annotated[_Text, AfterValidator(_warn_on_glytoucan_format)] | None = None
     glycan_iupac_condensed: Annotated[_Text, StringConstraints(pattern=r"^\S+$")] | None = None
     derivatisation: Derivatisation = Field(
