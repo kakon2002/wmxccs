@@ -1328,6 +1328,18 @@ MUTATIONS: tuple[Mutation, ...] = (
         replace='    interval_coverage: float = Field(\n        gt=0,\n        lt=1,\n        description="Nominal coverage, e.g. 0.90 - the level the quantile is taken at, not a proved"\n        " guarantee. Never 1, which no finite interval attains. Adjacent to `guaranteed_coverage` so"\n        " that the two can never be read apart; quoting this one alone overstates the interval.",\n    )\n    guaranteed_coverage: float = Field(\n        gt=0,\n        lt=1,\n        description="WHAT THE INTERVAL PROVES, and the figure to rely on. Jackknife+ guarantees"\n        " 1-2*alpha, so a nominally 90% interval is guaranteed at 80%: about one value in five may fall"\n        " outside its stated range rather than one in ten. First of the two coverage figures, and"\n        " directly beside the interval it describes, because it is the weaker of the two.",\n    )\n',
     ),
     Mutation(
+        label="[A] the scope report drops a field the stamp carries, as it dropped pairings",
+        file="contracts.py",
+        find='    OMITTED_FROM_THE_STAMP: ClassVar[frozenset[str]] = frozenset({"instruments"})',
+        replace='    OMITTED_FROM_THE_STAMP: ClassVar[frozenset[str]] = frozenset({"instruments", "pairings"})',
+    ),
+    Mutation(
+        label="[A] the scope report goes back to copying the stamp field by field",
+        file="contracts.py",
+        find="            if field.name not in cls.OMITTED_FROM_THE_STAMP",
+        replace='            if field.name in {"studies", "platforms", "records_behind_it"}',
+    ),
+    Mutation(
         label="[A] a harmonized estimate may carry an interval coverage of one",
         file="contracts.py",
         # Re-anchored when HarmonizedEstimate was reordered to put the coverage pair beside

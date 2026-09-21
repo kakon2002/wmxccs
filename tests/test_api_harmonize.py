@@ -445,6 +445,26 @@ def test_a_request_with_no_measurements_at_all_is_still_refused(served):
     assert served.post("/harmonize", json={"measurements": []}).status_code == 422
 
 
+def test_the_pairing_count_reaches_the_response_and_not_only_the_prose(served, records):
+    """The bug itself, asserted on the wire rather than on the class.
+
+    `ScopeReport.of` copied five fields by name, so `pairings` was added to ScopeStamp and
+    silently not served - while the `caveat` STRING in the same object went on naming the
+    number. A caller parsing JSON got strictly less than the prose sitting beside it, and had
+    to scrape a sentence for a count the object could simply carry.
+    """
+    scope = served.post("/harmonize", json=body_for(a_covered_record(records))).json()[
+        "measurements"
+    ][0]["harmonized"]["scope"]
+    assert "pairings" in scope, "the structured field is missing and only the prose has it"
+    assert scope["pairings"] > 0
+    assert f"{scope['pairings']} cross-platform pairing(s)" in scope["caveat"]
+    assert f"{scope['records_behind_it']} distinct measurement(s)" in scope["caveat"]
+    # two DIFFERENT counts, which is the reason both are carried: one matched ion compared
+    # in a stratum is one pairing over two measurements
+    assert scope["records_behind_it"] == 2 * scope["pairings"]
+
+
 def test_every_harmonized_estimate_carries_its_scope_and_the_scope_says_within_study(served, records):
     estimate = served.post("/harmonize", json=body_for(a_covered_record(records))).json()[
         "measurements"

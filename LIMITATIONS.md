@@ -284,7 +284,7 @@ by hand should copy.
 
 ### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
 
-Ten separate instances in this repository so far, in ten different shapes. They
+Eleven separate instances in this repository so far, in eleven different shapes. They
 are collected here rather than filed apart, because the shape is the point: in every
 one, the suite was green, the coverage looked complete, and a behaviour nobody was
 actually protecting could have been deleted without a single test going red.
@@ -528,6 +528,49 @@ applies to the intended user at all.
 - when a rule is keyed on identity, ask which population it can answer for, and whether that
   population is the one the software is for. A check that works perfectly on the data you
   have and not at all on the data you expect is worse than no check, because it reports.
+
+**Eleven: a hand-copying constructor that silently omits, and the `extra="forbid"` that
+did not stop it.** CLOSED 21 September 2026, found in an adversarial pass over the fixes for
+the other ten, and it is the THIRD occurrence of one shape.
+
+`ScopeReport.of` built the served scope by copying five fields off `ScopeStamp` by name. When
+`pairings` was added to the stamp on 20 September - as part of correcting the measurement
+count from 1402 to 517 - the constructor did not copy it, `ScopeReport` had no such field,
+and no structured field carried the number. The `caveat` STRING inside the same object went
+on saying "31 cross-platform pairing(s)". So a caller parsing JSON got strictly less than the
+prose sitting beside it, and had to scrape a sentence for a count the object could simply
+have carried.
+
+**The three occurrences are one shape.** Instance Ten was `applies_to`: added to the grading
+scheme and dropped by an endpoint that hand-copied five fields, past a test that hand-listed
+four. Then the same endpoint's fix - build from the source dict, set `extra="forbid"` - was
+applied, and this happened anyway, one module away.
+
+**WHY THE FIX FOR TEN DID NOT PREVENT ELEVEN, and this is the part worth remembering:
+`extra="forbid"` REJECTS UNKNOWN KEYS, NOT MISSING ONES.** It guards the direction where
+something offers the model a key the model does not know. It cannot guard the direction where
+the SOURCE grows a field and nothing ever offers it, because there is no input to reject -
+the key simply never appears. Forbid looked like protection for both directions and is
+protection for one. That asymmetry is invisible when you write it, because the failure it
+does catch is loud and the failure it does not catch is silent.
+
+The fix is in two parts, and the second is the one that generalises:
+
+- `of` builds from `dataclasses.fields(stamp)` rather than naming fields, so a field added to
+  the stamp IS offered - which turns a silent omission into the one thing forbid is good at,
+  an unknown key, loudly refused;
+- two tests compare the field sets IN BOTH DIRECTIONS. Every stamp field must be a report
+  field or be named in `OMITTED_FROM_THE_STAMP`; every report field must be a stamp field or
+  be named in `DERIVED_HERE`. The first is the direction nothing was ever guarding.
+
+- **when a field set is copied from one type to another, assert the two SETS, in both
+  directions, and name the deliberate omissions in code.** A constructor that lists fields is
+  a constructor that will be out of date, and the test that checks it will be out of date in
+  the same way and at the same moment, because both were written by someone looking at the
+  same list.
+- **ask what a guard is asymmetric about.** `extra="forbid"`, a minimum without a maximum, a
+  validator on one spelling of a field and not the other: each of these has caught something
+  here, and each has a blind direction that reads as covered.
 
 ### 4.6 An unstated drift gas keyed records together; an unstated carrier did not
 
@@ -1092,6 +1135,42 @@ file already records against touching the leverage limit. 100 is a policy figure
 policy in `/confidence/rules`, and it is arguable; but it must be argued on what a
 platform-pair figure needs before being quoted, not on what would make today's corpus look
 better.
+
+### Three mismatches between what we show and what we serve
+
+OPEN, all three, found in the adversarial pass of 21 September 2026 and left as they are
+because each is a disclosure question rather than a defect in a number.
+
+**1. A demotion a caller can receive is not in the published scheme.** A response can carry
+`rule: "far outside the calibration range"` - it does, on 2 of the 417 corrected seed records
+- and `/confidence/rules` publishes six rules, none of them by that name. The nearest is
+`outside the calibration range`, which is what it collapses to: one published rule that fires
+at two severities under two different names. A caller who receives the severe one and goes to
+look it up finds nothing.
+
+This is the principle stated for the meta-rule in Group 1a - *a demotion a caller can receive
+but cannot look up is one they cannot argue with* - left unapplied to this instance. The test
+suite does not catch it because `PUBLISHED_BY_DEMOTION` in `tests/test_grading.py` maps the
+two names deliberately, so the suite is satisfied by a mapping the caller cannot see.
+`no correction can be fitted` has the same shape and collapses to `thinly populated
+calibration group`, though no seed record produces it. *To close it:* publish both names, or
+give the rule one name and carry the severity separately. Either is a contract change.
+
+**2. A correction is computed and shown but never served.** `robust_derived_ccs` is on the
+`Harmonized` object and `tools/demo_end_to_end.py` prints it beside the slope- and
+median-derived values, so the demonstration shows THREE corrections where the API returns
+two. `HarmonizedEstimate` deliberately carries only the slope- and median-derived values -
+the contract docstring says why - so the demo is showing a number a caller cannot obtain.
+The demo now labels it `<- computed, and NOT served by the API`, which is a disclosure rather
+than a fix. *To close it:* serve it, or stop printing it. Serving it is the better answer if
+anybody wants it, since it is already computed and already digested into `parameters_sha256`.
+
+**3. The rounding mode is unstated.** Served values use Python's `round`, which is
+round-half-to-even, so 0.125 rounds to 0.12 while 166.65 rounds to 166.7. The displacement is
+at most half a unit in the last served place and the interval is at least ten units wide by
+construction, so this cannot move a value outside its own interval or change any comparison
+that matters - but nothing anywhere says which rounding is in use, and a reader who notices
+the asymmetry has no way to find out that it is deliberate.
 
 ### Relabelling an ion still extracts a value the service refuses under its real name
 

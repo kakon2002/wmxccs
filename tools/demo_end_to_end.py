@@ -39,6 +39,11 @@ from wmxccs.scope import Claim, ScopeExceededError, assert_may_be_quoted_as  # n
 from wmxccs.statistics import compare_platforms  # noqa: E402
 
 SEED = REPO / "data" / "seed" / "steroid_jasms2022.csv"
+# The submitted value is never rounded by this platform; this is only how many places it is
+# PRINTED at. Every seed measurement carries three or fewer, so nothing is lost here - and
+# the shift is computed from this rendering rather than from the stored float, so that a
+# reader subtracting the two numbers on screen gets the number printed beside them.
+ORIGINAL_DECIMALS = 3
 RULE_WIDTH = 92
 RULE = "=" * RULE_WIDTH
 
@@ -172,20 +177,38 @@ def main() -> int:
     # --- 6. THE ANSWER ---------------------------------------------------------------------
     head(6, "THE ANSWER: the original untouched, the correction beside it, and its interval")
     band = result.interval
+
+    # EVERY FIGURE BELOW IS DERIVED FROM THE FIGURES ABOVE IT, not from the full-precision
+    # values behind them. Anything a reader can recompute from this screen has to agree with
+    # this screen, and on 20 September 2026 it did not: the bounds were rounded for display
+    # and the width printed beside them was not, so the line read
+    #
+    #     interval  162.3 to 169.1 A^2   (width 6.696, 4.05% of CCS)
+    #
+    # where 169.1 - 162.3 is 6.8. Three widths across two adjacent lines, catchable by
+    # subtraction in seconds, on the screen this whole demonstration exists to deliver. The
+    # shift had the same defect, computed from 165.905 while 165.9 was displayed.
+    #
+    # So the rounding happens ONCE, here, and everything downstream reads the rounded values.
     places = band.decimals_supported
     low, high = outward(band.low, band.high, places)
-    shift = 100 * (result.harmonized_ccs - result.original_ccs) / result.original_ccs
-    width_percent = 100 * band.width / band.at_value
+    shown_ccs = to_places(result.harmonized_ccs, places)
+    shown_original = round(result.original_ccs, ORIGINAL_DECIMALS)
+    shown_width = high - low
+    shift = 100 * (shown_ccs - shown_original) / shown_original
+    width_percent = 100 * shown_width / shown_ccs
 
-    print(f"   ORIGINAL            {result.original_ccs:8.3f} A^2   <- returned unchanged, always")
-    print(f"   harmonized          {to_places(result.harmonized_ccs, places):8.{places}f} A^2"
-          f"   ({result.basis.value})")
+    print(f"   ORIGINAL            {shown_original:8.{ORIGINAL_DECIMALS}f} A^2"
+          f"   <- returned unchanged, always")
+    print(f"   harmonized          {shown_ccs:8.{places}f} A^2   ({result.basis.value})")
     print(f"      slope-derived    {to_places(result.slope_derived_ccs, places):8.{places}f}")
     print(f"      median-derived   {to_places(result.median_derived_ccs, places):8.{places}f}")
-    print(f"      robust-derived   {to_places(result.robust_derived_ccs, places):8.{places}f}")
-    print(f"   shift               {shift:+.3f}%")
+    print(f"      robust-derived   {to_places(result.robust_derived_ccs, places):8.{places}f}"
+          f"   <- computed, and NOT served by the API")
+    print(f"   shift               {shift:+.3f}%   ({shown_ccs:g} against {shown_original:g})")
     print(f"   interval            {low:.{places}f} to {high:.{places}f} A^2"
-          f"   (width {band.width:.3f}, {width_percent:.2f}% of CCS)")
+          f"   (width {shown_width:.{places}f},"
+          f" {width_percent:.2f}% of the harmonized value)")
     print(f"   coverage            nominal {band.nominal_coverage:.0%},"
           f" GUARANTEED {band.guaranteed_coverage:.0%}   [jackknife+ proves 1-2*alpha]")
     print(f"   informative?        {band.interval_is_informative}"
@@ -194,15 +217,17 @@ def main() -> int:
          " width, so at 1.00 a single ion would be setting it, and"
          f" {'one is' if band.driven_by_one_ion else 'none is'}.", indent=6)
     print(f"   The model holds more digits than these. {places} decimal(s) is what an interval"
-          f" {band.width:.2f} wide")
+          f" {shown_width:.{places}f} wide")
     print("   supports, and it is what the API serves; the rest would be arithmetic rather than")
-    print("   evidence. The ORIGINAL above is never rounded.")
+    print("   evidence. The ORIGINAL above is never rounded - it is printed at the precision")
+    print("   it was submitted with.")
     print()
 
     # WHY A CORRECTION SMALLER THAN ITS OWN INTERVAL IS WORTH APPLYING. The obvious
     # objection to this whole platform, answered on the screen that provokes it rather
     # than in a document nobody opens.
-    wrap(f"The shift is {abs(shift):.3f}% and the interval is {width_percent:.2f}% wide, so the"
+    wrap(f"The shift is {abs(shift):.3f}% of the value you submitted and the interval is"
+         f" {width_percent:.2f}% of the harmonized one, so the"
          " correction is smaller than the uncertainty around it. It is still worth applying,"
          " because the two measure different things. The shift is a SYSTEMATIC offset between"
          " two platforms - the same direction for every ion in this stratum - and leaving it in"

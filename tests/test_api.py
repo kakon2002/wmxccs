@@ -26,6 +26,7 @@ terms and when.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from copy import deepcopy
@@ -540,6 +541,74 @@ def test_the_served_json_carries_the_declared_order_and_not_some_other_one():
 
 
 
+# --- the join between ScopeStamp and ScopeReport, in BOTH directions ----------------------------
+#
+# THE THIRD INSTANCE OF ONE FAILURE CLASS, and the second where `extra="forbid"` looked like
+# protection. `ScopeReport.of` copied five fields by name, so when `pairings` was added to
+# ScopeStamp on 20 September 2026 it was silently not served - while the `caveat` string in
+# the same object went on saying "31 cross-platform pairing(s)". A caller parsing the JSON
+# got strictly less than the prose beside it.
+#
+# FORBID REJECTS UNKNOWN, NOT MISSING, and that asymmetry is why the fix for instance Ten did
+# not prevent this one. `extra="forbid"` guards the direction where somebody offers this model
+# a key it does not know. It cannot guard the direction where the SOURCE grows a field and
+# nothing ever offers it - there is no input to reject. Only comparing the two field sets
+# catches that, which is what the first test below does.
+
+
+def test_every_field_of_the_stamp_reaches_the_report_or_is_named_as_omitted():
+    """The direction nothing was guarding, and the one the bug was in."""
+    stamp_fields = {field.name for field in dataclasses.fields(ScopeStamp)}
+    report_fields = set(ScopeReport.model_fields)
+    unaccounted = stamp_fields - report_fields - ScopeReport.OMITTED_FROM_THE_STAMP
+    assert not unaccounted, (
+        f"ScopeStamp carries {sorted(unaccounted)} and ScopeReport neither serves it nor names"
+        " it in OMITTED_FROM_THE_STAMP. Add the field, or declare that it is deliberately not"
+        " served - but do not let it be dropped silently, which is how `pairings` was lost."
+    )
+
+
+def test_every_field_of_the_report_comes_from_the_stamp_or_is_named_as_derived():
+    """The other direction. A report field with no source is a number from nowhere."""
+    stamp_fields = {field.name for field in dataclasses.fields(ScopeStamp)}
+    report_fields = set(ScopeReport.model_fields)
+    orphans = report_fields - stamp_fields - ScopeReport.DERIVED_HERE
+    assert not orphans, (
+        f"ScopeReport serves {sorted(orphans)}, which is neither a field of ScopeStamp nor"
+        " named in DERIVED_HERE"
+    )
+
+
+def test_a_field_added_to_the_stamp_is_refused_loudly_rather_than_dropped():
+    """The structural half: `of` now passes the stamp's OWN fields, so forbid can see them.
+
+    Copying by name meant a new stamp field was never offered to this model and so could
+    never be rejected. Building from the stamp's fields turns a silent omission into the one
+    thing `extra="forbid"` is good at - an unknown key, loudly refused.
+    """
+
+    @dataclasses.dataclass(frozen=True)
+    class StampThatGrewAField:
+        studies: tuple = ("doi:10.1021/jasms.2c00196",)
+        instruments: tuple = ()
+        platforms: tuple = ("TWIMS",)
+        records_behind_it: int = 4
+        pairings: int = 2
+        something_nobody_served: int = 99
+
+        @property
+        def scope(self):
+            return ComparisonScope.WITHIN_STUDY
+
+        def caveat(self):
+            return "WITHIN ONE STUDY. Not interlaboratory reproducibility."
+
+    with pytest.raises(ValidationError) as raised:
+        ScopeReport.of(StampThatGrewAField())
+    assert "something_nobody_served" in str(raised.value)
+
+
+
 def test_the_confidence_rules_answer_on_a_fresh_app_with_no_model(app):
     """The endpoint exists precisely because these rules need no training data."""
     assert app.state.model is None
@@ -723,6 +792,7 @@ def good_scope(**overrides) -> dict:
         studies=("doi:10.1021/jasms.2c00196",),
         platforms=("DTIMS/stepped_field", "TWIMS"),
         records_behind_it=62,
+        pairings=31,
         caveat="WITHIN ONE STUDY. Not interlaboratory reproducibility.",
     )
     fields.update(overrides)

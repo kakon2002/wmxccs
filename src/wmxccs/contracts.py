@@ -35,9 +35,10 @@ something a single number would have hidden.
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date
 from enum import StrEnum
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -229,7 +230,16 @@ class ScopeReport(BaseModel):
         min_length=1, description="The studies behind the fit, as DOIs where known. At least one."
     )
     platforms: tuple[str, ...] = Field(min_length=1)
-    records_behind_it: int = Field(ge=1)
+    records_behind_it: int = Field(
+        ge=1, description="DISTINCT measurements behind the figure, counted once each."
+    )
+    pairings: int = Field(
+        ge=0,
+        description="Cross-platform pairings behind the figure - how many times one measurement"
+        " was compared against another. Not a second name for `records_behind_it`: one matched"
+        " ion compared in three strata is three pairings over two measurements. 0 where the"
+        " builder did not know it.",
+    )
     caveat: str = Field(
         min_length=1,
         description="The scope in words, to be printed WITH the number and never instead of it.",
@@ -248,16 +258,36 @@ class ScopeReport(BaseModel):
             )
         return self
 
+    # WHAT THIS REPORT DELIBERATELY DOES NOT CARRY from the stamp it is built from. Listing
+    # it is what makes `of` below structural: a field added to ScopeStamp and named in
+    # neither set fails loudly here instead of being dropped.
+    OMITTED_FROM_THE_STAMP: ClassVar[frozenset[str]] = frozenset({"instruments"})
+    # Fields of this report that are NOT fields of the stamp, because they are computed.
+    DERIVED_HERE: ClassVar[frozenset[str]] = frozenset({"scope", "caveat"})
+
     @classmethod
     def of(cls, stamp) -> "ScopeReport":
-        """Build from a scope.ScopeStamp. The only intended construction path."""
-        return cls(
-            scope=ComparisonScope(stamp.scope.value),
-            studies=tuple(stamp.studies),
-            platforms=tuple(stamp.platforms),
-            records_behind_it=stamp.records_behind_it,
-            caveat=stamp.caveat(),
-        )
+        """Build from a scope.ScopeStamp. The only intended construction path.
+
+        BUILT FROM THE STAMP'S OWN FIELDS, not copied field by field. It WAS copied field by
+        field, and on 20 September 2026 that silently dropped `pairings` the day it was added
+        to ScopeStamp: the caveat STRING in this very object went on saying "31 cross-platform
+        pairing(s)" while no structured field carried the 31. A caller parsing JSON got less
+        than the prose sitting beside it.
+
+        That is the third instance of one failure class - see LIMITATIONS 4.5, instance
+        Eleven - and the second where `extra="forbid"` looked like protection and was not.
+        Forbid rejects keys this model does not know about. It cannot notice a key the SOURCE
+        has and this model lacks, because nothing ever offers it. The asymmetry is the whole
+        lesson: forbid guards against additions here, and nothing was guarding against
+        omissions from there.
+        """
+        carried = {
+            field.name: getattr(stamp, field.name)
+            for field in dataclasses.fields(stamp)
+            if field.name not in cls.OMITTED_FROM_THE_STAMP
+        }
+        return cls(scope=ComparisonScope(stamp.scope.value), caveat=stamp.caveat(), **carried)
 
 
 class HarmonizedEstimate(BaseModel):

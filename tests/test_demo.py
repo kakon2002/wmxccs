@@ -19,6 +19,7 @@ assuming breakage would be wrong, and the line preventing that reading is the de
 from __future__ import annotations
 
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -134,3 +135,46 @@ def test_the_demonstration_does_not_invent_precision_the_interval_cannot_support
     assert "The model holds more digits than these" in flowed
     assert "it is what the API serves" in flowed
     assert "The ORIGINAL above is never rounded" in flowed
+
+
+def test_every_figure_a_reader_can_recompute_from_the_screen_agrees_with_the_screen(output):
+    """The demo printed rounded bounds beside an unrounded width, and they disagreed.
+
+        interval  162.3 to 169.1 A^2   (width 6.696, 4.05% of CCS)
+
+    169.1 - 162.3 is 6.8. Three widths across two adjacent lines, on the screen this whole
+    demonstration exists to deliver, catchable by subtraction in seconds. The shift had the
+    same defect: computed from 165.905 while 165.9 was displayed.
+
+    So this parses what is actually printed and does the arithmetic a reader would do. It
+    deliberately reads the TEXT rather than the objects behind it - the objects agreed all
+    along, and that was the problem.
+    """
+    interval = re.search(
+        r"interval\s+([\d.]+) to ([\d.]+) A\^2\s+\(width ([\d.]+),\s+([\d.]+)% of the harmonized value\)",
+        output,
+    )
+    assert interval, "the interval line is not in the form this test knows how to check"
+    low, high, stated_width, stated_percent = (float(g) for g in interval.groups())
+    assert high - low == pytest.approx(stated_width, abs=5e-4), (
+        f"the printed bounds give a width of {high - low:.4f}, the line says {stated_width}"
+    )
+
+    harmonized = re.search(r"harmonized\s+([\d.]+) A\^2", output)
+    original = re.search(r"ORIGINAL\s+([\d.]+) A\^2", output)
+    shift = re.search(r"shift\s+([+-][\d.]+)%", output)
+    assert harmonized and original and shift
+    shown_ccs, shown_original, stated_shift = (
+        float(harmonized.group(1)), float(original.group(1)), float(shift.group(1))
+    )
+    assert 100 * (shown_ccs - shown_original) / shown_original == pytest.approx(
+        stated_shift, abs=5e-4
+    ), f"the printed values give a shift the printed shift does not match"
+
+    assert 100 * stated_width / shown_ccs == pytest.approx(stated_percent, abs=5e-3), (
+        "the stated percentage is not the stated width over the stated value"
+    )
+
+    # and the same width again, further down the screen
+    restated = re.search(r"is what an interval ([\d.]+) wide", output)
+    assert restated and float(restated.group(1)) == pytest.approx(stated_width, abs=5e-4)
