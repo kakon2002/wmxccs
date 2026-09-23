@@ -61,8 +61,11 @@ The other two licence-clear sources are retrieved and characterised, not ingeste
 - **CCSbase** - 25,020 records read in full, DT 10,967 / TW 8,529 / TIMS 5,524, with
   SMILES and a per-record calibration method. **Its drift gas is not a column**, so
   every record is unmatchable and it yields no matched ions until the gas is resolved
-  from the 36 primary papers it aggregates.
-- **Bush Lab** - eight sheets, about 6,500 rows of protein, peptide and drug-like
+  from the primary papers it aggregates. It lists **36**, of which **35 contribute any
+  records**, and **14 per cent of records (3,572 of 25,020) cite no reference at all** -
+  so resolving all 36 papers still leaves a seventh of the database without a stated
+  origin to resolve it from.
+- **Bush Lab** - eight sheets, 1,804 data rows of protein, peptide and drug-like
   ions: the only real data the biopharmaceutical layer has been offered. Its gas IS
   stated, so it is matchable. Its protein sheets state a charge with no adduct, which
   is the unstated-charge-carrier case CONTEXT.md predicted for exactly this source.
@@ -141,9 +144,9 @@ what the result may and may not be called. It asserts nothing; the assertions ar
 Run these from the repository root. Substitute `.venv/bin/python` on macOS and Linux.
 
 ```
-.venv/Scripts/python -m pytest -q                    # the suite: 2258 tests
+.venv/Scripts/python -m pytest -q                    # the suite: 2269 tests
 .venv/Scripts/python -m tools.mutation --check       # anchors only, about a second
-.venv/Scripts/python -m tools.mutation               # the full sweep: 276 mutations
+.venv/Scripts/python -m tools.mutation               # the full sweep: 278 mutations
 ```
 
 The sweep breaks each guard in the package one at a time and requires a test to notice. A

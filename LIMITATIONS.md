@@ -245,7 +245,7 @@ meeting.
 
 With no mutations, `python -m tools.mutation` prints "no mutation label contains
 any of []" and exits 1, which describes a filter that matched nothing rather than
-an empty catalogue. Latent only: the catalogue holds 276, so nothing reaches it.
+an empty catalogue. Latent only: the catalogue holds 278, so nothing reaches it.
 Left alone because it is cosmetic and unreachable, not because the harness is
 untouchable: see the entry in section 4A for a case where the opposite call was
 made.
@@ -732,6 +732,19 @@ Stated plainly because CONTEXT.md is the document everyone reads first.
   *derived* by the loader's shared-peak detector from exact CCS equality within a
   calibration group across differing analyte identity. Port the detector away and
   all 28 rows clear with nothing to show it happened.
+- **"~6,500 rows" for the Bush Lab database is wrong, and four of its eight per-sheet
+  figures were artefacts.** The workbook holds **1,804 data rows**, not roughly 6,500 -
+  an overstatement of 3.6x on the only biopharmaceutical dataset this project has
+  identified. CONTEXT.md and LIMITATIONS 7E both gave 1,000 for native-like protein
+  cations, denatured protein cations, anionic homopolymers and other peptides; the true
+  figures are 72, 27, 35 and 12. A round 1,000 repeated four times is a reader default or
+  a pre-allocated range, not a count. The four small figures in the old table (33, 24,
+  1,441 and 989) were real but counted the header row, which is the tell: accurate counts
+  and artefacts sat side by side and looked alike. Corrected in both documents on
+  23 September 2026, with the per-sheet header-row counts shown so the arithmetic can be
+  checked. Counting non-empty rows instead of data rows gives 1,815, and treating every
+  sheet as having a single header row gives 1,805; three sheets carry a merged banner
+  above their column names, so 1,804 is the figure.
 - **Calibration reference lineage was not missing from the glycan repository.**
   The objective document has no field for it, but `ccs_is_calibrated`,
   `calibrant_reference` and the primary-versus-calibrated distinction all existed
@@ -1422,7 +1435,7 @@ The table carries twelve columns, and they are better than expected:
 | Name, Adduct, m/z, CCS, Z | the measurement |
 | SMI | **SMILES**, so a structural identity is reachable |
 | Type | compound class |
-| Ref | one of 36 primary papers, each linked to its DOI |
+| Ref | a primary paper, linked to its DOI - 36 listed, 35 with records, blank on 3,572 |
 | CCS Type | **the platform**: DT 10,967, TW 8,529, TIMS 5,524 |
 | CCS method | 23 distinct methods, most naming a calibrant |
 
@@ -1435,15 +1448,23 @@ code problem:
    the database is not uniformly nitrogen and therefore that assuming nitrogen would
    be writing in a method detail. Under the keying rule of section 4.6 every one of
    these records is unmatchable until its gas is resolved, so **CCSbase currently
-   contributes zero matched ions.** The gas is stated in the 36 primary papers, so
-   this is a bounded curation task - 36 papers - rather than an open one, and each
-   paper resolved unlocks its own records.
+   contributes zero matched ions.** The gas is stated in the primary papers, so this is
+   a bounded curation task rather than an open one, and each paper resolved unlocks its
+   own records.
+
+   **THE BOUND DOES NOT COVER EVERYTHING, and that is the part to carry.** The
+   bibliography lists 36 papers; only **35 contribute any record** to this export (ref
+   30, ToxBase, contributes none); and **3,572 of the 25,020 records - 14 per cent -
+   carry no reference at all.** So the bounded task resolves at most 21,448 records, and
+   a seventh of the database has no stated origin to resolve the gas from. Those records
+   need CCSbase itself to say where they came from, which is a question for the
+   maintainers rather than a curation task.
 2. **8,388 records name no calibrant.** `CCS method` reads "single field, calibrated"
    for 5,233 DT and 2,950 TIMS records, and "?" for 205 more. Those take
    `UNSTATED_CALIBRANT` and are held - exactly as the steroid trapped-ion values were until
    the article resolved them, which is the first thing to try here too.
-3. **PROVENANCE IS TWO-LAYERED.** The values belong to 36 primary papers; CCSbase is
-   the compilation. Its terms govern the compilation and were the terms read on
+3. **PROVENANCE IS TWO-LAYERED.** The values belong to the 36 listed primary papers,
+   where one is named at all; CCSbase is the compilation. Its terms govern the compilation and were the terms read on
    11 September 2026, so a record's `source` should be CCSbase - that is where the
    value was obtained and whose terms permit the use - with the primary paper's
    reference and DOI recorded in `source_locator`. That keeps the licence claim
@@ -1461,18 +1482,32 @@ stronger than the plain citation requirement the registry recorded.
 ### The Bush Lab database: the only real biopharmaceutical data identified
 
 Downloaded from the documented published-to-web xlsx URL, which needs no
-workaround. 213 KB, eight sheets, roughly 6,500 rows:
+workaround. 213 KB, eight sheets, **1,804 data rows**:
 
-| sheet | rows |
-| --- | --- |
-| Native-Like Protein Cations | 1,000 |
-| Native-Like Protein Cations and (complexes) | 989 |
-| Denatured Protein Cations | 1,000 |
-| Polyalanine Cations | 33 |
-| Anionic Homopolymers | 1,000 |
-| Other Peptides | 1,000 |
-| Small Molecular Ions | 24 |
-| MicroSource Collection | 1,441 |
+| sheet | header rows | data rows |
+| --- | --- | --- |
+| Native-Like Protein Cations | 1 | 72 |
+| Native-Like Protein Cations and (complexes) | 2 | 164 |
+| Denatured Protein Cations | 1 | 27 |
+| Polyalanine Cations | 2 | 31 |
+| Anionic Homopolymers | 2 | 35 |
+| Other Peptides | 1 | 12 |
+| Small Molecular Ions | 1 | 23 |
+| MicroSource Collection | 1 | 1,440 |
+| **total** | **11** | **1,804** |
+
+CORRECTED 23 September 2026. This table previously read "roughly 6,500 rows" and gave
+1,000 for four of the eight sheets. Four figures were an artefact rather than a count -
+a reader default or a pre-allocated range - and the true total is 1,804, so the only
+biopharmaceutical dataset this project has identified was overstated by a factor of 3.6.
+The four small figures in the old table were accurate but counted the header, which is
+the tell: real counts and artefacts sat side by side.
+
+**Count data rows, not non-empty rows, and mind the two-row headers.** Three sheets put
+a merged banner above the column names - Cations/Anions on the complexes sheet,
+`z = 1 | z = 2 | z = 3` on Polyalanine, and a grouping row on Anionic Homopolymers - so
+non-empty rows total 1,815 and data rows total 1,804. A count that treats every sheet as
+having one header row gives 1,805 and is wrong by one, on Polyalanine.
 
 This is the data the M1 biopharmaceutical identity layer was built for and has never
 seen: native-like and denatured protein cations, protein complexes, peptides. Five
@@ -1941,7 +1976,7 @@ person, and merged deliberately - which is a product, not a feature.
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 276 mutations against the package's modules. It began smaller than
+- the catalogue holds 278 mutations against the package's modules. It began smaller than
   the glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone; it has since passed it. The floor in
   the catalogue test goes up, never quietly down;

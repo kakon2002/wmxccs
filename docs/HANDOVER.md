@@ -1,7 +1,7 @@
 # Handover
 
-For an engineer picking up `wmxccs` cold. Written 21 September 2026, against tag
-`v0.6.0-mvp` (commit `b3bb443`).
+For an engineer picking up `wmxccs` cold. Written 21 September 2026 against `v0.6.0-mvp`;
+figures and tag reference corrected 23 September 2026 for `v0.6.2-mvp`.
 
 This is an orientation document. It does not repeat `LIMITATIONS.md`, which is the long
 and authoritative account of what this platform does not do and does not know. What this
@@ -73,9 +73,9 @@ Then, from the repository root:
 
 ```
 .venv/Scripts/python tools/demo_end_to_end.py    # one ion through every stage
-.venv/Scripts/python -m pytest -q                # 2258 tests
+.venv/Scripts/python -m pytest -q                # 2269 tests
 .venv/Scripts/python -m tools.mutation --check   # anchors only, about a second
-.venv/Scripts/python -m tools.mutation           # the full sweep, 276 mutations, ~80 min
+.venv/Scripts/python -m tools.mutation           # the full sweep, 278 mutations, ~80 min
 ```
 
 **Deploy from a checkout, not from a built wheel.** The seed CSVs are deliberately not
@@ -342,8 +342,8 @@ This is deliberate and is tested in both directions.
 Two gates, and the second is the one that means something.
 
 ```
-.venv/Scripts/python -m pytest -q        # 2258 tests
-.venv/Scripts/python -m tools.mutation   # 276 mutations, 276 killed, none survived
+.venv/Scripts/python -m pytest -q        # 2269 tests
+.venv/Scripts/python -m tools.mutation   # 278 mutations, 278 killed, none survived
 ```
 
 **A green suite says the tests ran. The sweep says they would have caught something.** The
@@ -373,7 +373,7 @@ Three conventions you will notice in the tests and should keep:
 
 ## 7. Status
 
-M0 to M5 complete and tagged `v0.6.0-mvp`. Deadline: deployable by 25 September 2026, 27 at
+M0 to M5 complete and tagged `v0.6.2-mvp`. Deadline: deployable by 25 September 2026, 27 at
 the latest — so the remaining time is for whatever the owner decides, not for a rewrite.
 
 Six things are recorded as decided-not-to-build in `LIMITATIONS.md` §7G, each with what
