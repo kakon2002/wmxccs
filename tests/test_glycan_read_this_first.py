@@ -410,6 +410,41 @@ def test_the_api_serves_the_derivation_rather_than_a_list(client):
     assert set(body["decision_values"]) == {one.value for one in Decision}
 
 
+def test_the_served_reachability_moves_with_the_gates_and_is_not_a_constant(monkeypatch, shared):
+    """The API's WIRING is derived, not just the function behind it.
+
+    WHY THIS IS SEPARATE. `test_the_published_reachability_agrees_with_the_probe` exercises
+    `decision_reachability()`; this mutation lives one layer up, in what api.py passes to the
+    response. Replacing that with `(Decision.IM_VALIDATION_REQUIRED.value,)` produces an identical
+    response today, so it SURVIVED two sweeps - once as a hand-written tuple under a comment
+    claiming it was derived, and once after the comment was fixed but nothing reached the wiring.
+
+    The endpoint calls `decision_reachability()` per request, so patching the module gates and
+    asking again is enough: a derivation moves and a constant does not.
+    """
+    with TestClient(create_app(store=Store(), **shared)) as client:
+        shut = client.get("/v1/models/current").json()
+        assert shut["decision_reachable_today"] == [Decision.IM_VALIDATION_REQUIRED.value]
+        assert Decision.AI_ONLY.value in shut["decision_unreachable_today"]
+
+        monkeypatch.setattr(ranking, "VALIDATED_MODEL", object())
+        monkeypatch.setattr(ranking, "CORPUS_CAN_ESTABLISH_COMPLETENESS", True)
+
+        opened = client.get("/v1/models/current").json()
+        assert Decision.AI_ONLY.value in opened["decision_reachable_today"], (
+            "both gates are open and the SERVED list still excludes AI_ONLY, so api.py is passing a"
+            " constant rather than the derivation"
+        )
+        assert Decision.AI_ONLY.value not in opened["decision_unreachable_today"], (
+            "AI_ONLY is served as both reachable and unreachable"
+        )
+        # The value that no gate reaches stays out of the list in BOTH states, which is the
+        # distinction the whole of item 4 rests on.
+        for body in (shut, opened):
+            assert Decision.IM_VALIDATION_RECOMMENDED.value not in body["decision_reachable_today"]
+            assert Decision.IM_VALIDATION_RECOMMENDED.value in body["decision_unreachable_today"]
+
+
 def test_the_enum_itself_carries_the_warning_a_reader_would_otherwise_have_to_look_for():
     """Item 4's instruction was "at the enum definition itself", so the docstring is the artefact.
 
