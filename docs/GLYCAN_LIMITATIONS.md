@@ -398,6 +398,33 @@ cross section that resolves to one structure, and this repository has neither.
   `members` is a `frozenset` that `json.dumps` refuses. A serialisation contract belongs with the
   API layer that will consume this, not ahead of it.
 
+### The sweep found two guards that no test protected, after two adversarial passes
+
+The first glycan sweep ran 35 mutations and killed 33. **Both survivors were guards this
+repository had just written, in code two adversarial passes had already been over.** That is the
+argument for the harness in one sentence: a green suite and two reviews still left two behaviours
+with nothing behind them.
+
+**One: a validator made a redundant guard untestable.** `_decide` reads
+`evidence.level is EvidenceLevel.STRUCTURE` as well as the `discriminates_between_candidates`
+flag — defence in depth, added by the implementation review. But the `CCSEvidence` validator now
+*refuses* that combination outright, so no ordinary construction can tell the two versions of
+`_decide` apart, and the mutation removing the level check survived.
+
+The two fixes were each correct and together they hid one of themselves. The test now builds the
+illegal object with `model_construct`, which skips every validator, exactly as the CCS core's
+suite does for a record that reached it without validation — and that is the real threat model
+rather than a contrivance: the validator guards the constructor, and a producer using
+`model_construct` or `model_copy(update=...)` reaches `_decide` without ever passing it.
+
+**Two: a clause added and never exercised.** The `records_consulted <= 0` arm was added to close
+the zero-denominator hole, and the test beside it covered `None` and a missing corpus name and
+not zero. The guard was present and unprotected for as long as it existed.
+
+Both are killed now, and both are the same shape as instance Twelve: **a guard whose coverage
+nobody checked.** Neither was found by writing more tests. They were found by breaking the code
+on purpose and noticing that nothing complained.
+
 ### A process failure worth recording: a review agent edited the live source
 
 The implementation review ran against the working tree while it was being edited, and one

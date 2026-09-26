@@ -163,7 +163,22 @@ def test_a_searched_absence_cannot_be_constructed_without_a_denominator():
         CCSEvidence(state=CCSEvidenceState.NONE_IN_CORPUS_SEARCHED)
     with pytest.raises(ValueError, match="must name the corpus it searched"):
         CCSEvidence(state=CCSEvidenceState.NONE_IN_CORPUS_SEARCHED, corpus_searched="c")
+    # AND A DENOMINATOR OF ZERO. THE SWEEP FOUND THIS MISSING: the `<= 0` clause was added to
+    # the validator and no test exercised it, so the mutation that removes the clause survived -
+    # a guard present and unprotected, which is the failure class in miniature.
+    for count in (0, -1):
+        with pytest.raises(ValueError, match="must name the corpus it searched"):
+            CCSEvidence(
+                state=CCSEvidenceState.NONE_IN_CORPUS_SEARCHED,
+                corpus_searched="c",
+                records_consulted=count,
+            )
+    # The positive control, so the guard is not simply refusing everything.
+    assert CCSEvidence(
+        state=CCSEvidenceState.NONE_IN_CORPUS_SEARCHED, corpus_searched="c", records_consulted=1
+    ).records_consulted == 1
     assert NO_CORPUS_NAMED.startswith("a searched-absence finding")
+    assert "above zero" in NO_CORPUS_NAMED
 
 
 def test_a_failed_lookup_must_say_what_failed():

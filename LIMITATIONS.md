@@ -712,7 +712,7 @@ build_default_model() -> None
 
 WHAT IS ACTUALLY LOST, and it is much less than that sounds
 
-One test. The shadow baseline reads `3765 passed, 1 skipped` where a direct run reads `3766
+One test. The shadow baseline reads `3841 passed, 1 skipped` where a direct run reads `3842
 passed`, and the skip is
 `test_entry_point.py::test_the_banner_carries_the_model_version_an_answer_can_be_reproduced_from`,
 which skips itself when the banner says `NO MODEL LOADED`. So during a sweep nothing checks that
@@ -2451,7 +2451,7 @@ person, and merged deliberately - which is a product, not a feature.
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the wmxccs catalogue holds 282 mutations against that package's modules, and is closed at that number; tools/mutation/catalogue_glycan.py holds 22 more against src/wmxglycan, and runner.all_mutations() joins the two so a sweep covers 304. It began smaller than
+- the wmxccs catalogue holds 282 mutations against that package's modules, and is closed at that number; tools/mutation/catalogue_glycan.py holds 35 more against src/wmxglycan, and runner.all_mutations() joins the two so a sweep covers 317. It began smaller than
   the glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone; it has since passed it. The floor in
   the catalogue test goes up, never quietly down;

@@ -1197,3 +1197,53 @@ def test_a_refused_set_still_returns_its_candidates_and_its_evidence(ranked):
     assert len(result.classes) == 6
     assert result.coverage.reference_structures == 28
     assert result.attestation_licence == "MIT"
+
+
+def test_the_decision_reads_the_evidence_level_even_when_the_validator_is_bypassed():
+    """Defence in depth, and THE SWEEP FOUND IT UNTESTED.
+
+    `_decide` checks `evidence.level is EvidenceLevel.STRUCTURE` as well as the
+    `discriminates_between_candidates` flag, and the `CCSEvidence` validator forbids that
+    combination outright - so no ordinary construction can tell the two versions of `_decide`
+    apart, and the mutation that removes the level check SURVIVED. A guard present and
+    unprotected is the failure class this project keeps meeting.
+
+    So the input is built with `model_construct`, which skips every validator, exactly as the
+    CCS core's suite does for a record that reached it without validation. That is the real
+    threat model too: the validator guards the constructor, and a producer using
+    `model_construct` or `model_copy(update=...)` reaches `_decide` without passing it.
+    """
+    smuggled = CCSEvidence.model_construct(
+        state=CCSEvidenceState.MEASURED_REFERENCE,
+        level=EvidenceLevel.COMPOSITION,
+        reference=_reference(),
+        discriminates_between_candidates=True,
+    )
+    # The bypass really did produce the illegal object the validator refuses.
+    assert smuggled.level is EvidenceLevel.COMPOSITION
+    assert smuggled.discriminates_between_candidates is True
+    with pytest.raises(ValueError, match="cannot also claim to discriminate"):
+        CCSEvidence(
+            state=CCSEvidenceState.MEASURED_REFERENCE,
+            level=EvidenceLevel.COMPOSITION,
+            reference=_reference(),
+            discriminates_between_candidates=True,
+        )
+
+    one = IndistinguishableClass(class_id="a", members=frozenset({"a"}), attested_structures=1)
+    _decision, rules = ranking._decide(
+        classes={"a": one},
+        bands=(),
+        coverage=Coverage(
+            composition="X", state=CoverageState.MEASURED, reference_structures=1,
+            attested_by_a_candidate=1, not_enumerated=0,
+        ),
+        evidence=smuggled,
+        refused=False,
+    )
+    held = [r for r in rules if r.name == "no cross section is held for this structure"]
+    assert len(held) == 1
+    assert held[0].fires is True, (
+        "a composition-level measurement is shared by every candidate, so the rule must still"
+        " fire however the finding labels itself"
+    )
