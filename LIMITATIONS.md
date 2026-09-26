@@ -123,8 +123,10 @@ What has NOT changed is the shape of the limitation, only its size:
 - **one source.** Every matched ion in the repository comes from a single paper by a
   single group. Cross-platform bias measured within one study is bias between that
   study's instruments, which is not the same quantity as bias between platforms in
-  general, and nothing here separates the two. Two more sources are registered and
-  not yet ingested (CCSbase, the Bush Lab database).
+  general, and nothing here separates the two. CCSbase is registered and not ingested;
+  the Bush Lab database is registered and PARTLY ingested - 1,437 MicroSource records as
+  a reference library that contributes no matched ion and cannot, so this limitation is
+  untouched by it.
 - **one compound class.** 87 steroids. Nothing about a glycan, a peptide, a protein
   or an antibody has a matched ion, so the biopharmaceutical identity layer built in
   M1 has still never seen real data.
@@ -245,7 +247,7 @@ meeting.
 
 With no mutations, `python -m tools.mutation` prints "no mutation label contains
 any of []" and exits 1, which describes a filter that matched nothing rather than
-an empty catalogue. Latent only: the catalogue holds 278, so nothing reaches it.
+an empty catalogue. Latent only: the catalogue holds 282, so nothing reaches it.
 Left alone because it is cosmetic and unreachable, not because the harness is
 untouchable: see the entry in section 4A for a case where the opposite call was
 made.
@@ -2336,7 +2338,7 @@ person, and merged deliberately - which is a product, not a feature.
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 278 mutations against the package's modules. It began smaller than
+- the catalogue holds 282 mutations against the package's modules. It began smaller than
   the glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone; it has since passed it. The floor in
   the catalogue test goes up, never quietly down;

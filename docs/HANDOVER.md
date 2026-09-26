@@ -73,9 +73,9 @@ Then, from the repository root:
 
 ```
 .venv/Scripts/python tools/demo_end_to_end.py    # one ion through every stage
-.venv/Scripts/python -m pytest -q                # 2269 tests
+.venv/Scripts/python -m pytest -q                # 2317 tests
 .venv/Scripts/python -m tools.mutation --check   # anchors only, about a second
-.venv/Scripts/python -m tools.mutation           # the full sweep, 278 mutations, ~80 min
+.venv/Scripts/python -m tools.mutation           # the full sweep, 282 mutations, ~85 min
 ```
 
 **Deploy from a checkout, not from a built wheel.** The seed CSVs are deliberately not
@@ -127,9 +127,16 @@ One study. Everything below comes from
 `tools/ingest_steroid.py`. Nothing was transcribed by hand.
 
 ```
-rows read            638   across three seed files, 0 failed to parse
-records cleared      541
-records held          97   89 struwe2015 (licence), 4 struwe2016, 4 steroid (shared-peak check)
+rows read          2,075   across four seed files, 0 failed to parse
+records built      2,075
+records cleared      541   UNCHANGED by the Bush Lab ingest: see below
+records held       1,534   1,437 Bush Lab, 89 struwe2015, 4 struwe2016, 4 steroid
+
+held, by reason      876   suspected shared peak
+                     552   reuse claim not backed by a licence record
+                      89   gas AND uncertainty both unstated (all of struwe2015)
+                      12   held for curation review
+                       5   conformer set incomplete
 
 matched ions         142   on two or more platforms
                        2   span two platforms
@@ -153,7 +160,15 @@ grades                 0   supported
 scope                517   distinct measurements, entering 701 cross-platform pairings
 ```
 
-Two of the three seed files contribute nothing to the fit. `struwe2015_analyst.csv` is held
+THE CORPUS GREW AND THE FIT DID NOT. 1,437 Bush Lab MicroSource records were ingested on
+26 September 2026 as a REFERENCE LIBRARY: stored, complete, and none of them trainable. They
+contribute no matched ion and structurally cannot - one paper on one platform, where a matched
+ion needs two - so `records cleared`, `matched ions`, every grade figure and the fingerprint are
+all unchanged by their arrival. Every one of the 1,437 also fails the licence check
+independently: permission for those values comes from the database page's citation request,
+and the gate requires a published source to name a DOI with a licence record. See LIMITATIONS 7E.
+
+Two of the four seed files contribute nothing to the fit. `struwe2015_analyst.csv` is held
 entirely on licence — 89 records, none cleared. That is the licence gate working, not a bug.
 
 Note the two counts in the last line. **517 is distinct measurements; 701 is pairings.**
@@ -342,8 +357,8 @@ This is deliberate and is tested in both directions.
 Two gates, and the second is the one that means something.
 
 ```
-.venv/Scripts/python -m pytest -q        # 2269 tests
-.venv/Scripts/python -m tools.mutation   # 278 mutations, 278 killed, none survived
+.venv/Scripts/python -m pytest -q        # 2317 tests
+.venv/Scripts/python -m tools.mutation   # 282 mutations, 282 killed, none survived
 ```
 
 **A green suite says the tests ran. The sweep says they would have caught something.** The
