@@ -1,20 +1,42 @@
-# wmxccs
+# wmxccs and wmxglycan
 
-Cross-platform CCS harmonization pipeline. Stores DTIMS, TWIMS, TIMS and cIMS
-measurements without merging them, pairs the same ion across platforms,
-quantifies inter-platform bias and agreement, and returns a harmonized CCS with
-uncertainty and a confidence grade alongside the original values.
+**One repository, two packages, two services, one dashboard.** They share no code and meet
+through an explicit schema.
 
-It never overwrites an original measurement with a corrected one. Both are
-returned.
+`src/wmxccs` is a **cross-platform CCS harmonization pipeline**. It stores DTIMS, TWIMS, TIMS
+and cIMS measurements without merging them, pairs the same ion across platforms, quantifies
+inter-platform bias and agreement, and returns a harmonized CCS with uncertainty and a
+confidence grade **alongside** the original values. It never overwrites an original measurement
+with a corrected one; both are returned.
 
-Separate from the glycan platform. See `CLAUDE.md` for the constraints,
-`CONTEXT.md` for everything established before this repository existed, and
-`LIMITATIONS.md` for what this does not do and does not know.
+`src/wmxglycan` is a **glycan and isomer prediction layer**, ported beside it on 26 September
+2026. It enumerates the candidate N-glycan structures for a composition and bands them by the
+evidence that attests them. **It does not predict a cross section** - there is no glycan CCS
+model and V1 will not have one - so every cross section it reports is a measured value.
 
-**Deadline: deployable by 25 September 2026, 27 at the latest.**
+The two packages **never import each other, in either direction**. `tools/glycan_service.py` is
+the only file that imports both, and `tests/test_glycan_boundary.py` enforces the wall rather
+than describing it.
 
-## Status: M0 to M5 complete. The model is fitted and served over HTTP
+Start here, then:
+
+| | |
+|---|---|
+| `CLAUDE.md` | the hard constraints, and the process rules |
+| `LIMITATIONS.md` | what the CCS core does not do and does not know |
+| `docs/GLYCAN_LIMITATIONS.md` | the same for the glycan layer, including what the dashboard refuses to show |
+| `docs/HANDOVER.md` | for picking this up cold |
+| `docs/GLYCAN_PORT.md` | what was ported from `Project2`, with digests |
+| `CONTEXT.md` | everything established before this repository existed |
+
+`docs/CCS_Harmonization_Plan.md` and `docs/KICKOFF_PROMPT.md` are **historical**: they record
+what was asked in September and both predate the glycan layer. They are kept as a record and
+are not a description of what is here now.
+
+## Status of the CCS core: M0 to M5 complete, the model fitted and served over HTTP
+
+**This section is about `src/wmxccs` alone.** The glycan layer is at a different maturity and has
+its own section below it.
 
 **142 cross-platform matched ions**, from the steroid interplatform study
 (DOI 10.1021/jasms.2c00196). 521 records, 517 of them clear to train, 2 ions paired
@@ -72,40 +94,155 @@ The other two licence-clear sources are retrieved and characterised, not ingeste
 
 Both are in `LIMITATIONS.md` section 7E, with what each one still needs.
 
+## Status of the glycan layer: enumerated, banded, served, and not fitted
+
+Nothing in the section above carries across the wall. `src/wmxglycan` has a candidate enumerator
+working under 15 curated mammalian rules, an attestation index over **3,640 distinct reference
+structures** deduplicated from 4,001 rows, a ranker that bands candidates and refuses to order
+what nothing separates, six endpoints, a store in which a frozen prediction cannot be rewritten,
+and a dashboard wired to all six.
+
+It has **no fitted model of any kind**, and that is not a gap waiting on code. `training.py` is a
+refuse-to-fit guard: every path to a fit raises, and it raises on an absence of records to fit on.
+The 24 glycan cross sections that clear the licence gate record no structure to featurise, and the
+89 that would are held on a drift gas and an uncertainty type their source never stated. The error
+class is `InsufficientTrainingDataError` and it is deliberately **not** a subclass of the licence
+gate, because a data gap and a permission problem are different failures and a reader should be
+able to tell which one they are looking at.
+
+So the two packages sit at different maturities on purpose, and their version numbers say so:
+**wmxccs 0.8.0** with a model fitted on 142 matched ions, **wmxglycan 0.1.0** with none. A single
+version across both would make the second look like the first.
+
+The consequence for anything the glycan service returns: it ranks on structural plausibility and
+attestation, a cross section appears only where a measured reference exists for that composition
+and ion, and where none exists the field says so rather than being omitted. See
+`docs/GLYCAN_LIMITATIONS.md`.
+
 ## Running it
 
-Python 3.11 or newer; developed and verified on 3.14. The LIBRARY is platform-neutral;
-the commands are not, because a virtual environment puts its interpreter in
-`.venv/Scripts` on Windows and `.venv/bin` everywhere else. Every command below is given
-for both, and every one names the environment's own interpreter rather than a bare
-`python` - a bare `python` after this install runs whichever interpreter is on PATH, which
-is usually not the one the package was just installed into.
+**Verified from a fresh `git clone` into a fresh virtual environment**, not by reading these
+instructions and believing them. Every command below was run that way on 27 September 2026.
+
+Python 3.11 or newer; developed and verified on 3.14. The LIBRARY is platform-neutral; the
+commands are not, because a virtual environment puts its interpreter in `.venv/Scripts` on
+Windows and `.venv/bin` everywhere else. Every command is given for both, and every one names
+the environment's own interpreter rather than a bare `python` - a bare `python` after this
+install runs whichever interpreter is on PATH, which is usually not the one the package was
+just installed into.
+
+### Install
 
 Windows:
 
 ```
+git clone <this repository> wmxccs
+cd wmxccs
 python -m venv .venv
-.venv/Scripts/python -m pip install -e ".[dev,serve]"
-.venv/Scripts/python -m wmxccs                  # serves on http://127.0.0.1:8000
+.venv/Scripts/python -m pip install -e ".[dev,serve,glycan]"
 ```
 
 macOS and Linux:
 
 ```
+git clone <this repository> wmxccs
+cd wmxccs
 python3 -m venv .venv
-.venv/bin/python -m pip install -e ".[dev,serve]"
-.venv/bin/python -m wmxccs                      # serves on http://127.0.0.1:8000
+.venv/bin/python -m pip install -e ".[dev,serve,glycan]"
 ```
 
-Activating the environment first (`.venv\Scripts\Activate.ps1`, or
-`source .venv/bin/activate`) lets you write `python` for the rest of the session
-instead.
+Activating first (`.venv\Scripts\Activate.ps1`, or `source .venv/bin/activate`) lets you write
+`python` for the rest of the session instead.
 
-`-m wmxccs` prints what it is serving before it starts - how many corrections the
-model holds, how many matched ions are behind it, and the scope caveat - so an operator can
-see whether a model was found. Interactive documentation is at `/docs`.
+**`[glycan]` is not optional if you want the glycan service or the test suite.** Leaving it out
+installs a working CCS service and nothing else: `import wmxglycan` then fails on `networkx`,
+and `pytest` stops with 16 collection errors. That is exactly what happened when this section
+was checked against a clean clone, which is why the extra is in the command rather than in a
+footnote.
 
-Three endpoints:
+### What each extra is for, and what is deliberately absent
+
+| extra | pulls in | needed for |
+|---|---|---|
+| *(base)* | `pydantic`, `fastapi` | the CCS library and its request/response contracts |
+| `[serve]` | `uvicorn` | running either service over HTTP |
+| `[dev]` | `pytest`, `httpx`, `openpyxl` | the test suite |
+| `[glycan]` | `networkx`, `glycowork==1.10.0`, `scikit-learn` | the glycan package, its service, and the suite |
+| `[ingest]` | `openpyxl` | only the source-workbook adapters in `tools/` |
+
+`glycowork` is **pinned exactly**, not ranged: the 50,461-structure SugarBase v12 release and
+the curated enzyme and constraint tables ship inside it, so its version is part of the dataset
+version string that every glycan response quotes. A range would let the data under a cited
+figure change without the citation changing.
+
+**The CCS core has no numerical stack and that is on purpose.** Its statistics are pure Python -
+Passing-Bablok is a median of pairwise slopes, jackknife+ is a loop of refits - so a base
+install carries no `numpy`. Installing `[glycan]` brings one in for `glycowork`, and
+`tests/test_glycan_boundary.py` asserts that fitting the CCS model still loads none of it.
+
+**Optional: `node`.** Six tests execute the dashboard's own JavaScript to check what it renders.
+Without `node` on PATH they skip with that reason and the suite reports **4,082 passed,
+6 skipped**; with it, **4,088 passed**. Nothing else needs it and it is not a runtime dependency.
+
+### Run
+
+Two services. They are independent; run either or both.
+
+```
+# the CCS harmonization service, on http://127.0.0.1:8000
+.venv/Scripts/python -m wmxccs
+
+# the glycan service AND the dashboard, on http://127.0.0.1:8010
+.venv/Scripts/python -m uvicorn tools.glycan_service:app --port 8010
+```
+
+Then open **http://127.0.0.1:8010/** for the six-page dashboard, which the glycan service hosts
+itself. Interactive API documentation is at `/docs` on either port.
+
+`-m wmxccs` prints what it is serving before it starts - how many corrections the model holds,
+how many matched ions are behind it, and the scope caveat - so an operator can see whether a
+model was found.
+
+```
+.venv/Scripts/python tools/glycan_service.py
+```
+prints what the glycan service is wired to and serves nothing, which is the quickest way to see
+whether the CCS evidence adapter found the seed corpus.
+
+### Configuration
+
+There is deliberately very little, and none of it is required.
+
+| what | default | how to change it |
+|---|---|---|
+| CCS seed corpus | `data/seed` in the source tree | `build_default_model(Path(...))`; the CLI has no flag |
+| glycan prediction store | `data/glycan_service.sqlite3`, created on first use | `tools.glycan_service.build(database=...)`; `":memory:"` for a throwaway |
+| CCS evidence for the glycan service | the CCS seed corpus | `build(seed=Path(...))` |
+| ports | 8000 and 8010 | `--port` on uvicorn; `-m wmxccs` also takes `--host` and `--port` |
+| CCS evidence source | **wired** in `tools.glycan_service:app`, **absent** in `wmxglycan.api:app` | see below |
+
+**There are two glycan apps and the difference is a fact about the deployment.**
+`wmxglycan.api:app` is built with no CCS evidence source, so every cross section reports
+`not_consulted` - the honest state of a deployment nobody configured, and distinguishable from
+an absence. `tools.glycan_service:app` is the wired one. Serve the wired one unless you have a
+reason not to.
+
+**No environment variables, no config file, no secrets.** The service reads committed CSVs and
+a SQLite file it creates. `data/*.sqlite3` is gitignored: it is runtime state holding whoever's
+predictions, not a reviewable artefact, and the schema that recreates it is in
+`src/wmxglycan/store.py`.
+
+**Deploy from a checkout, not from a built wheel.** The seed CSVs are deliberately not declared
+as package data, so a wheel carries no measurements and its `/harmonize` answers 501. That is a
+licensing decision rather than an oversight: the steroid data is `academic_only` with an
+attribution obligation, and bundling it into a redistributable artefact is a decision nobody has
+made. An editable install from a clone - which is what the commands above do - resolves
+`data/seed` in the source tree and serves a real model. (The glycan dashboard *is* package data,
+because an HTML page carries no measurements.)
+
+### The endpoints
+
+CCS core, on 8000:
 
 | | |
 |---|---|
@@ -113,19 +250,27 @@ Three endpoints:
 | `GET /confidence/rules` | the grading scheme as data, so it can be challenged |
 | `POST /harmonize` | 200 with harmonized values, or 501 where the model covers nothing |
 
-The model is fitted at startup from the CSV files in `data/seed`, which are committed. An
-installation whose seed directory is empty serves a working API whose `/harmonize` answers
-501 - which is correct rather than broken, and `/health` says so.
+Glycan service, on 8010:
 
-`pip install -e .` alone installs the library without a web server; `[serve]` adds uvicorn
-and `[ingest]` adds openpyxl, which only the source-workbook adapters in `tools/` need.
+| | |
+|---|---|
+| `GET /` | the six-page dashboard, a client of the five below |
+| `POST /v1/predictions` | rank the candidates for a composition and ion, freeze the answer, 201 |
+| `GET /v1/predictions/{id}` | the frozen prediction, served from the stored bytes and never recomputed |
+| `POST /v1/predictions/{id}/validation` | attach experimental measurements; append-only, 201 |
+| `GET /v1/predictions/{id}/comparison` | delta CCS, interval coverage and status, each with its reason |
+| `GET /v1/runs` | history, filtered and paged |
+| `GET /v1/models/current` | pipeline fingerprint, data snapshot, applicability domain |
 
-**Deploy from a checkout, not from a built wheel.** The seed CSVs are deliberately not
-declared as package data, so a wheel carries no measurements and its `/harmonize` answers
-501. That is a licensing decision rather than an oversight: the steroid data is
-`academic_only` with an attribution obligation, and bundling it into a redistributable
-artefact is a decision nobody has made. An editable install from a clone - which is what
-the commands above do - resolves `data/seed` in the source tree and serves a real model.
+**Nothing is ever overwritten.** A prediction is frozen on creation; a second create under the
+same `client_reference` answers 409 and names the prediction that stands. Attaching measurements
+appends a record and the reply carries the prediction's stored digest read before and after the
+write, so "the prediction was not touched" is a measurement rather than a promise. All of it
+survives a restart.
+
+The CCS model is fitted at startup from the CSVs in `data/seed`, which are committed. An
+installation whose seed directory is empty serves a working API whose `/harmonize` answers 501 -
+correct rather than broken, and `/health` says so.
 
 ### Seeing it work end to end
 
@@ -144,18 +289,30 @@ what the result may and may not be called. It asserts nothing; the assertions ar
 Run these from the repository root. Substitute `.venv/bin/python` on macOS and Linux.
 
 ```
-.venv/Scripts/python -m pytest -q                    # the suite: 4088 tests (2317 wmxccs, 1771 wmxglycan)
-.venv/Scripts/python -m tools.mutation --check       # anchors only, about a second
-.venv/Scripts/python -m tools.mutation               # the full sweep: 339 mutations (282 wmxccs, 57 wmxglycan)
+.venv/Scripts/python -m pytest -q                  # 4105 tests (2317 wmxccs, 1777 wmxglycan, 11 repository-level)
+                                                   # 6 of those skip without node; nothing else skips
+.venv/Scripts/python -m tools.mutation --check     # 339 anchors, about a second
+.venv/Scripts/python -m tools.mutation             # the full sweep: 339 mutations, several hours
 ```
 
-The sweep breaks each guard in the package one at a time and requires a test to notice. A
-green suite says the tests ran; the sweep says they would have caught something. A mutation
-that survives is a behaviour with no test behind it, and is treated as a failure rather
-than as a note.
+**The counts in that block are derived-checked, not maintained.** `tests/test_repository_counts.py`
+collects the suite in a subprocess, counts the three groups, and asserts this file matches. They
+were hand-written in two places before and drifted three times, so the duplicate was deleted and
+what remains is a tested claim. The split is three-way because "2,317 wmxccs" is the evidence that
+the glycan layer changed nothing in the CCS core, and a repository-level test file belongs to
+neither package.
 
-It never writes the repository: the package is copied to a temporary directory, the
-mutation is applied to the copy, and the copy is put first on `PYTHONPATH`.
+The sweep breaks each guard one at a time and requires a test to notice. A green suite says the
+tests ran; the sweep says they would have caught something. A mutation that survives is a
+behaviour with no test behind it, and is treated as a failure rather than as a note.
+
+It never writes the repository: both packages are copied to a temporary directory, the mutation
+is applied to the copy, and the copy is put first on `PYTHONPATH`.
+
+**The sweep refuses a working tree with uncommitted changes.** It copies `src/` once at the start
+and reads `tests/` live, so an edit made mid-run changes the suite between one mutation and the
+next and every later kill may be a kill by that edit. `--dirty` overrides it; a figure measured
+that way is not a sweep result. This is not theoretical - see `LIMITATIONS.md` section 4.9.
 
 To rebuild the seed files from the transcriptions:
 
@@ -180,9 +337,27 @@ src/wmxccs/
   contracts.py    the request and response bodies
   api.py          health, the confidence scheme, and a harmonize that refuses
   fixtures.py     a synthetic corpus that cannot be quoted as a result
+src/wmxglycan/
+  composition.py  parsing and canonicalisation; a partial parse is refused
+  glycan_graph.py structures as graphs; what a string leaves open stays open
+  enumeration.py  the candidate generator, under curated mammalian rules
+  features.py     the 44-column featuriser: 9 analyte, 11 condition, 24 structure
+  splits.py       grouped splits, keyed on composition and nothing else
+  evaluation.py   the evaluation harness and the maturity stamp
+  training.py     the refuse-to-fit guard: every path to a fit refuses
+  attestation.py  what the reference corpus attests, deduplicated on structure
+  ranking.py      bands, indistinguishable classes, and the refusal to order
+  ccs_evidence.py CCS as measured evidence or a stated absence, never a prediction
+  fingerprint.py  the deterministic pipeline's identity, so a prediction reconstructs
+  store.py        SQLite; frozen means frozen, and there is no UPDATE statement
+  prediction.py   the served shapes
+  api.py          the six endpoints, and the dashboard at /
+  static/         the dashboard: one self-contained HTML file
 tools/
   mutation/       the mutation harness: break a guard, require a test to notice
   seed_struwe.py  one-off conversion of the two transcriptions into seed format
+  glycan_service.py      the composition root: the ONLY file importing both packages
+  glycan_ccs_evidence.py the adapter that carries CCS evidence across the wall
 tests/
 data/
   raw/            gitignored

@@ -73,9 +73,9 @@ Then, from the repository root:
 
 ```
 .venv/Scripts/python tools/demo_end_to_end.py    # one ion through every stage
-.venv/Scripts/python -m pytest -q                # 4088 tests (2317 wmxccs, 1771 wmxglycan)
+.venv/Scripts/python -m pytest -q                # counts: README.md, section "Checking it"
 .venv/Scripts/python -m tools.mutation --check   # anchors only, about a second
-.venv/Scripts/python -m tools.mutation           # the full sweep, 339 mutations, ~7 h. REFUSES a dirty tree; commit first
+.venv/Scripts/python -m tools.mutation           # the full sweep, ~7 h. REFUSES a dirty tree; commit first
 
 # the two services
 .venv/Scripts/python -m uvicorn wmxccs.api:app --port 8000          # the CCS core
@@ -360,38 +360,26 @@ This is deliberate and is tested in both directions.
 
 ## 6. How work is verified here
 
-Two gates, and the second is the one that means something.
+Two gates, and the second is the one that means something. **The commands are in section 1
+and are not repeated here**; the counts are in `README.md` § Checking it and are not repeated
+anywhere.
 
-```
-.venv/Scripts/python -m pytest -q        # 3842 tests
-.venv/Scripts/python -m tools.mutation   # 317 mutations; the 35 glycan entries were 35 killed on
-                                        # 26 September 2026, and the 282 wmxccs entries 282 killed at v0.7.0-mvp
-```
+The first gate is the suite. The second is the mutation sweep, which breaks each guard one at a
+time and requires a test to notice: a green suite says the tests ran, the sweep says they would
+have caught something. A mutation that survives is a behaviour with no test behind it and is
+treated as a failure rather than as a note.
 
-**A green suite says the tests ran. The sweep says they would have caught something.** The
-catalogue breaks one guard at a time in a shadow copy of the package and requires a test to
-notice. A mutation that survives is a behaviour with no test behind it, and is treated as a
-**failure, not a note.** There are no documented expected survivors, so any survivor is a
-finding.
+**WHY THERE IS NO SECOND COMMAND BLOCK HERE.** There was one, carrying the same two counts as
+section 1, and **they drifted three times**: 2,269 against 2,317, then 3,766 against 3,842, then
+3,842 against 4,088 - each time correct in one block and wrong in the other, and each time found
+after the fact. On 27 September 2026 the duplicate was deleted rather than refreshed a fourth
+time, on the owner's instruction: a figure maintained in two places is a figure that will be
+wrong in one of them.
 
-The sweep never writes the repository: the package is copied to a temporary directory, the
-mutation applied to the copy, and the copy put first on `PYTHONPATH`.
-
-If an ordinary edit moves a line a mutation anchors on, the mutation must be **re-anchored,
-not deleted** — `tests/test_mutation_catalogue.py` fails on every run until it is. Deleting
-one is a deliberate act and the comment left behind must say what now covers its intent.
-
-Three conventions you will notice in the tests and should keep:
-
-- **assert in both directions.** A rule that always fired and a rule that never fired would
-  each satisfy half of a one-directional suite;
-- **prefer function-level tests for anything about which input the code read.** An
-  end-to-end test exercises a path but cannot establish that. Several mutations have survived
-  on exactly this, most recently a precision rule where reading the full width instead of the
-  half width gave the same answer on most of the corpus;
-- **a test that exercises an earlier return is not a test of a later one.**
-
----
+The counts now live in one file and `tests/test_repository_counts.py` derives the real numbers
+and asserts that file matches them, so the figure cannot go stale without the suite failing. It
+is no longer maintained by hand at all, which is the only arrangement that has ever survived a
+busy week here.
 
 ## 7. Status
 

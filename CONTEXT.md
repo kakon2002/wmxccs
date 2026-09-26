@@ -10,7 +10,13 @@ replaced the objective with a cross-platform CCS harmonization pipeline, to be b
 as a separate platform. This repo is that platform.
 
 The glycan work is not wasted. Its data layer is the data layer this project needs.
-Its glycan-specific layer is not needed and does not come across.
+
+> **CORRECTED 26 September 2026.** This paragraph used to end "Its glycan-specific layer is not
+> needed and does not come across." That was true of every milestone up to `v0.7.0-mvp` and is
+> now false: the CEO's brief of 26 September required a glycan and isomer layer on top of this
+> service, and fifteen modules were ported into `src/wmxglycan` beside `src/wmxccs`. The two
+> packages never import each other. See `docs/GLYCAN_PORT.md` for what came across and
+> `CLAUDE.md` for the wall between them.
 
 > **Counts corrected 18 September, from the repository rather than from memory.**
 > The test figure was written here as 1,796. `pytest` collects **1,868** cases from

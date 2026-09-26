@@ -245,7 +245,8 @@ class SetCompleteness(StrEnum):
 # THE ONE GATE THAT MAKES AI_ONLY UNREACHABLE. A named module-level fact rather than a condition
 # buried in a branch, so that a test can patch it and prove the branch is LIVE CODE - "AI_ONLY
 # never appears" is equally satisfied by dead code, a misspelled comparison or an enum member
-# nothing references, and this project has met that shape twelve times.
+# nothing references, and this project has met that shape repeatedly (LIMITATIONS 4.5 counts
+# them; the count is kept in one place on purpose).
 VALIDATED_MODEL: object | None = None
 
 

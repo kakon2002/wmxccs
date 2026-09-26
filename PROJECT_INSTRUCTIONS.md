@@ -11,11 +11,14 @@ DTIMS, TWIMS, TIMS and cIMS without merging them, pairs the same ion across
 platforms, quantifies bias and agreement, returns a harmonized CCS with uncertainty
 and a confidence grade alongside the untouched originals.
 
-Repo: `wmxccs`. Separate from the glycan platform (`Project2`, package `wmxglycan`),
-which is superseded but must not be deleted while code is being ported from it.
+Repo: `wmxccs`. **Corrected 26 September 2026:** this said "Separate from the glycan
+platform (`Project2`, package `wmxglycan`), which is superseded but must not be deleted while
+code is being ported from it." The porting is done - fifteen modules, recorded in
+`docs/GLYCAN_PORT.md` - and `src/wmxglycan` now lives beside `src/wmxccs` in this repository as
+a second package. `Project2` is still not a dependency and is not on this repository's path.
 
-Deadline: deployable 25 September 2026, 27 at the absolute latest. Daily report to
-James Kang each evening.
+Deadline: the CCS service was deployable 25 September 2026. The glycan layer and its dashboard
+are due Tuesday 29 September 2026. Daily report to James Kang each evening.
 
 ## Who
 

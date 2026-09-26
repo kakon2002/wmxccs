@@ -286,10 +286,15 @@ by hand should copy.
 
 ### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
 
-Twelve separate instances in this repository so far, in twelve different shapes. They
+Thirteen separate instances in this repository so far, in thirteen different shapes. They
 are collected here rather than filed apart, because the shape is the point: in every
 one, the suite was green, the coverage looked complete, and a behaviour nobody was
 actually protecting could have been deleted without a single test going red.
+
+**Instance Thirteen is the one to read first if you only read one.** A defect was found,
+fixed, and annotated with a comment at the site explaining exactly what it had been - and
+no test was written. Nothing in this section is subtler than that, and nothing in it is
+more likely to happen again.
 
 **One: a guard removed to make a test pass.** `runner.py`'s refusal on a filter that
 matches nothing was replaced with a fallback that runs everything. One test went
@@ -617,6 +622,60 @@ something asserts the derivation is not empty.
   separate repository written to the same standards. Expect it in anything ported in, and look
   for it deliberately rather than hoping a copied suite surfaces it - this one surfaced only
   because a module was absent, which was luck.
+
+**Thirteen: A FIX WITH A COMMENT AND NO TEST, plus five others the sweep found in one night.**
+CLOSED 27 September 2026, by the mutation sweep of `c145eaf`. 120 mutations ran, 114 were
+killed, and **six survived** - four in `api.py` and two in `store.py`, all six in code written
+that same week.
+
+The one that matters is `attested`. Earlier in the week a defect was found in the create
+endpoint: a candidate's attestation was being read off its indistinguishable CLASS, so every
+member of a partly attested class was reported as attested. For Hex5HexNAc4Fuc1 that reports
+**40 attested candidates where 17 are attested**, and attestation is the only thing this
+platform has that discriminates between candidates at all. It was fixed, and a five-line
+comment was written at the site explaining precisely what the wrong reading had been:
+
+```
+# PER CANDIDATE, from the index, and NOT read off the class. The first version
+# reported `class.attested_structures > 0`, which marks every member of a partly
+# attested class as attested - so a class of 10 holding 4 attested structures
+# would have reported 10 attested candidates.
+```
+
+No test was written. The comment is a complete description of the defect and a complete
+description of how to detect it, and the sweep put the old reading back and every one of
+4,088 tests passed.
+
+**The other five are a category worth naming, because it explains why they were missed.** Each
+only misbehaves in a state that another layer already prevents:
+
+| survivor | the layer that already prevents it |
+|---|---|
+| the attach guard stops noticing a prediction moved | `store.py` has no UPDATE and no DELETE |
+| a held reference value reaches the comparison | a validator forbids a held finding carrying a reference |
+| the attach response asserts the prediction was unchanged | the store refuses an attach that moved it |
+| the decision is not re-derived from its evidence | the decision is constant today anyway |
+| the run total is the size of one page | no caller has yet made more than fifty runs |
+
+That is the definition of defence in depth, and **defence in depth that nothing tests is
+decoration.** It reads as covered precisely because it cannot currently fire - which is the same
+sentence as instance Eight and instance Eleven, arrived at from a new direction. All six now
+have tests in `tests/test_glycan_sweep_survivors.py`, and four of those tests have to
+manufacture the prevented state: a `Store` subclass that reports a moved digest, and a
+`CCSEvidence` built through `model_construct` to walk past its own validator. Each test says
+which layer it is bypassing and why doing so is legitimate.
+
+- **a comment at the site is not a test, and it is the most convincing substitute for one.**
+  A comment that accurately describes a defect makes the code look considered, and a reader
+  who sees it stops looking for the test. Whenever a fix is worth a comment, ask what would
+  now go red.
+- **"it cannot happen today" is the reason to test it, not the reason to skip it.** Every one
+  of the five above is a guard for a change nobody has made yet. If the guard has no test, the
+  change that needs it will also be the change that silently removes it.
+- **write the new code's mutations before the code is finished, not after the release.** All
+  six were in one week's work, and they were found by a sweep run because the week was ending.
+  The suite written alongside new code asserts what the code does; the sweep is what finds what
+  nobody broke on purpose.
 
 ### 4.6 An unstated drift gas keyed records together; an unstated carrier did not
 

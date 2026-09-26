@@ -1,3 +1,7 @@
+> **HISTORICAL DOCUMENT.** This records what was asked in September 2026 and predates
+> the glycan layer added on 26 September. It is kept as a record and is NOT a description
+> of what this repository contains now; for that, read `README.md`.
+
 # Kickoff prompt
 
 Paste this as the first message in a fresh Claude Code session opened in a new

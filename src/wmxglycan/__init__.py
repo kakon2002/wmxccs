@@ -14,4 +14,13 @@ them shows up at the boundary as a validation error rather than silently inside
 one of them. See docs/GLYCAN_PORT.md, "the boundary".
 """
 
-__version__ = "0.1.0.dev0"
+# 0.1.0, and the `.dev0` marker is dropped: as of 27 September 2026 this package is deployed.
+# It serves six endpoints and hosts a dashboard, and a version that says "dev" on something a
+# CEO is asked to open is a version that misdescribes it.
+#
+# A SEPARATE NUMBER FROM wmxccs ON PURPOSE. Two packages with two histories: the CCS core is at
+# 0.8.0 with a model fitted on 142 matched ions, this layer is at 0.1.0 with no fitted model at
+# all, and one number across both would make the second look like the first. The distribution
+# version is wmxccs's, because that is what pyproject reads; this one travels on every glycan
+# response inside the pipeline stamp.
+__version__ = "0.1.0"
