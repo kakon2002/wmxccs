@@ -97,6 +97,13 @@ class Mutation:
     file: str
     find: str
     replace: str
+    # WHICH PACKAGE `file` sits in. Defaulted so that not one of the 282 wmxccs entries
+    # changes, and so that the default is the package this catalogue was written for. It
+    # exists because the repository now holds two packages and BOTH have a models.py, a
+    # sources.py, a reuse.py, a licensing.py and a contracts.py - so a mutation identified
+    # by filename alone would name two files and the sweep would pick one of them by
+    # accident. That is this tool's own failure mode, so it is not left to a convention.
+    package: str = "wmxccs"
     expect: Expect = Expect.KILLED
     reason: str = ""  # required when the mutation is expected to survive
     # Further edits, applied in order after the first. Needed for a mutation
@@ -112,6 +119,8 @@ class Mutation:
             raise ValueError("a mutation needs a label saying what would go wrong")
         if not self.file.strip():
             raise ValueError(f"{self.label}: names no file to mutate")
+        if not self.package.strip():
+            raise ValueError(f"{self.label}: names no package, so its file cannot be located")
         for find, _replace in self.edits:
             if not find:
                 raise ValueError(f"{self.label}: an empty anchor would match anywhere")
@@ -123,6 +132,16 @@ class Mutation:
                 f"{self.label}: a mutation expected to survive must say why no test can reach it."
                 " Without a reason, an exemption cannot be told apart from a gap in the tests."
             )
+
+    @property
+    def target(self) -> str:
+        """Package and file together. The identity of the file this mutation edits.
+
+        Used as the key wherever sources are held per file, because `file` alone is not
+        unique across packages and a collision there would silently mutate the wrong
+        module while reporting the right one.
+        """
+        return f"{self.package}/{self.file}"
 
     @property
     def edits(self) -> tuple[tuple[str, str], ...]:

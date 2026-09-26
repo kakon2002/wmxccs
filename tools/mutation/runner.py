@@ -51,9 +51,34 @@ from typing import Callable, Iterable, Sequence
 
 from . import Anchor, Expect, Mutation, Verdict, repeated_labels
 from .catalogue import MUTATIONS
+from .catalogue_glycan import GLYCAN_MUTATIONS
+
+def all_mutations() -> tuple[Mutation, ...]:
+    """The whole catalogue, both packages, assembled on every call.
+
+    Derived rather than maintained as a third hand-written list: a list of lists goes stale
+    exactly as a list of module names does. tests/test_glycan_mutation_catalogue.py asserts
+    this holds every entry of both.
+
+    A FUNCTION AND NOT A MODULE CONSTANT, and that is not a style preference. A constant
+    computed at import time would silently ignore a test that patches MUTATIONS - the test
+    would exercise the real catalogue and pass for a reason it did not intend, which is this
+    tool's own failure mode aimed at itself. Four existing tests patch that name, and they
+    caught this the first time it was written as a constant.
+    """
+    return (*MUTATIONS, *GLYCAN_MUTATIONS)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SRC = PROJECT_ROOT / "src" / "wmxccs"
+SRC_ROOT = PROJECT_ROOT / "src"
+SRC = SRC_ROOT / "wmxccs"
+GLYCAN_SRC = SRC_ROOT / "wmxglycan"
+
+# EVERY package the sweep shadows, and it shadows all of them on every run even when the
+# selected mutations touch only one. Shadowing only the packages a filtered run names would
+# mean a filtered run and a full run measure different code, and the difference would be
+# invisible in the report - so the environment is the same for every run and the filter
+# changes only which mutations are applied.
+PACKAGE_SOURCES: tuple[Path, ...] = (SRC, GLYCAN_SRC)
 
 # pytest's own: 0 all passed, 1 some test failed, 2 interrupted, 3 internal
 # error, 4 usage error, 5 nothing collected. Only 1 means a test NOTICED.
@@ -69,9 +94,10 @@ USAGE = """Run the mutation catalogue against the test suite.
     python -m tools.mutation "[S] " conform  only mutations whose label contains one of these
 
 The repository is never written: mutations are applied to a copy that shadows
-the installed package. Exit status is zero only when every mutation selected
-identified exactly one site, changed the file, and did what it was expected
-to do."""
+the installed packages - BOTH wmxccs and wmxglycan, on every run, so a filtered
+run measures the same code a full sweep does. Exit status is zero only when every
+mutation selected identified exactly one site, changed the file, and did what it
+was expected to do."""
 
 KNOWN_FLAGS = ("--check", "--list", "--help")
 
@@ -161,14 +187,26 @@ def read_source(path: Path) -> str | None:
         return None
 
 
-def shadow_of(src: Path, into: Path) -> Path:
-    """A fresh copy of the package under `into`, ready to go first on PYTHONPATH."""
+def shadow_of_all(srcs: Sequence[Path], into: Path) -> Path:
+    """A fresh copy of every package under one root, ready to go first on PYTHONPATH.
+
+    One root holding several packages, not one root each: PYTHONPATH gets a single entry
+    and `import wmxccs` and `import wmxglycan` both land inside it.
+    """
+    if not srcs:
+        raise ValueError("no package to shadow, so nothing could be measured")
     root = into / "shadow"
-    package = root / src.name
-    if package.exists():
-        shutil.rmtree(package)
-    shutil.copytree(src, package, ignore=shutil.ignore_patterns("__pycache__"))
+    for src in srcs:
+        package = root / src.name
+        if package.exists():
+            shutil.rmtree(package)
+        shutil.copytree(src, package, ignore=shutil.ignore_patterns("__pycache__"))
     return root
+
+
+def shadow_of(src: Path, into: Path) -> Path:
+    """A fresh copy of one package under `into`. The single-package case of shadow_of_all."""
+    return shadow_of_all((src,), into)
 
 
 def _env_for(shadow: Path) -> dict[str, str]:
@@ -206,19 +244,30 @@ def shadowing_worked(resolved: str, package: Path) -> bool:
     return Path(resolved).resolve().is_relative_to(package.resolve())
 
 
-def verified_shadow(src: Path, into: Path) -> Path:
-    """A shadow that `import <package>` demonstrably resolves to, or ShadowFailed."""
-    shadow = shadow_of(src, into)
-    package = shadow / src.name
-    resolved = where_package_resolves(shadow, src.name)
-    if not shadowing_worked(resolved, package):
-        raise ShadowFailed(
-            f"`import {src.name}` resolves to {resolved or '(nothing)'}, which is not inside"
-            f" {package.resolve()}. Every result would be measured against unmutated code, so every"
-            " mutation would look like a survivor and the report would read as a collapse of the test"
-            " suite rather than a broken tool"
-        )
+def verified_shadow_all(srcs: Sequence[Path], into: Path) -> Path:
+    """A shadow that every package demonstrably resolves into, or ShadowFailed.
+
+    EVERY package is checked, not the first one. A shadow that takes for wmxccs and not for
+    wmxglycan would measure one package mutated and the other installed, and the report
+    would read as a clean sweep of everything.
+    """
+    shadow = shadow_of_all(srcs, into)
+    for src in srcs:
+        package = shadow / src.name
+        resolved = where_package_resolves(shadow, src.name)
+        if not shadowing_worked(resolved, package):
+            raise ShadowFailed(
+                f"`import {src.name}` resolves to {resolved or '(nothing)'}, which is not inside"
+                f" {package.resolve()}. Every result would be measured against unmutated code, so every"
+                " mutation would look like a survivor and the report would read as a collapse of the test"
+                " suite rather than a broken tool"
+            )
     return shadow
+
+
+def verified_shadow(src: Path, into: Path) -> Path:
+    """The single-package case of verified_shadow_all."""
+    return verified_shadow_all((src,), into)
 
 
 # --- running the suite ----------------------------------------------------------------
@@ -268,10 +317,20 @@ def _detail(text: str) -> str:
 # --- the sweep ------------------------------------------------------------------------
 
 
+class UnshadowedPackage(RuntimeError):
+    """A mutation names a package the sweep is not shadowing.
+
+    Deliberately fatal rather than a per-mutation STALE. STALE says "the guard moved",
+    which is a fact about the source; this says the tool was configured wrongly, and
+    reporting it as a stale anchor would send someone to re-anchor a mutation that is
+    perfectly well anchored in a file nobody copied.
+    """
+
+
 def sweep(
     mutations: Sequence[Mutation],
     *,
-    src: Path = SRC,
+    srcs: Sequence[Path] = PACKAGE_SOURCES,
     run: SuiteRun = run_suite,
     log: Callable[[str], None] = print,
     verify: bool = True,
@@ -284,13 +343,26 @@ def sweep(
     throughout, which is the property the in-place version could not offer
     however carefully it restored.
     """
+    by_name = {src.name: src for src in srcs}
+    unshadowed = sorted({m.package for m in mutations} - set(by_name))
+    if unshadowed:
+        raise UnshadowedPackage(
+            f"mutation(s) name the package(s) {unshadowed}, which are not being shadowed"
+            f" (shadowing {sorted(by_name)}). Nothing was measured, because a mutation applied to a"
+            " file outside the shadow would either miss or write the repository"
+        )
+
     outcomes: list[Outcome] = []
     with tempfile.TemporaryDirectory(prefix="wmx-mutation-") as temporary:
-        shadow = verified_shadow(src, Path(temporary)) if verify else shadow_of(src, Path(temporary))
-        package = shadow / src.name
-        pristine = {name: read_source(package / name) for name in {m.file for m in mutations}}
+        into = Path(temporary)
+        shadow = verified_shadow_all(srcs, into) if verify else shadow_of_all(srcs, into)
+        # Keyed on package AND file: both packages have a models.py, so keying on the file
+        # name alone would hold one source under a name two mutations answer to.
+        pristine = {
+            m.target: read_source(shadow / m.package / m.file) for m in mutations
+        }
         for mutation in mutations:
-            original = pristine[mutation.file]
+            original = pristine[mutation.target]
             if original is None:
                 outcome = Outcome(mutation=mutation, anchor=Anchor.STALE, missing_file=True)
                 outcomes.append(outcome)
@@ -304,7 +376,7 @@ def sweep(
                 log(_line(anchor.value.upper(), mutation.label))
                 log(_detail(outcome.problem))
                 continue
-            target = package / mutation.file
+            target = shadow / mutation.package / mutation.file
             target.write_text(mutation.apply_to(original), encoding="utf-8")
             try:
                 code, lines = run(shadow)
@@ -382,12 +454,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     listing = "--list" in argv
     wanted = [arg for arg in argv if not arg.startswith("--")]
 
-    duplicates = repeated_labels(MUTATIONS)
+    catalogue = all_mutations()
+    duplicates = repeated_labels(catalogue)
     if duplicates:
         print(f"the catalogue uses a label more than once, so a filtered run is ambiguous: {duplicates}")
         return 1
 
-    chosen = select(MUTATIONS, wanted)
+    chosen = select(catalogue, wanted)
     if not chosen:
         print(f"no mutation label contains any of {wanted}")
         return 1
@@ -395,15 +468,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if listing:
         for mutation in chosen:
             marker = "  " if mutation.expect is Expect.KILLED else "~ "
-            print(f"{marker}{mutation.label}  [{mutation.file}]")
-        print(f"\n{len(chosen)} of {len(MUTATIONS)} mutations")
+            print(f"{marker}{mutation.label}  [{mutation.target}]")
+        print(f"\n{len(chosen)} of {len(all_mutations())} mutations")
         return 0
 
     if check_only:
         # Anchors only: no suite, no copy, about a second.
         problems = 0
         for mutation in chosen:
-            source = read_source(SRC / mutation.file)
+            source = read_source(SRC_ROOT / mutation.package / mutation.file)
             if source is None:
                 problems += 1
                 print(_line(Anchor.STALE.value.upper(), mutation.label))
@@ -422,7 +495,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # mutation has been blamed for it.
     try:
         with tempfile.TemporaryDirectory(prefix="wmx-baseline-") as temporary:
-            shadow = verified_shadow(SRC, Path(temporary))
+            shadow = verified_shadow_all(PACKAGE_SOURCES, Path(temporary))
             code, lines = run_suite(shadow)
     except ShadowFailed as failure:
         print(f"the shadow copy is not in effect, so nothing could be measured:\n  {failure}")
@@ -434,4 +507,4 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"baseline: {lines[-1] if lines else '(no output)'}  (through the shadow)\n")
 
     outcomes = sweep(chosen)
-    return report(outcomes, selected=len(chosen), total=len(MUTATIONS))
+    return report(outcomes, selected=len(chosen), total=len(catalogue))

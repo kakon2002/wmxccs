@@ -88,10 +88,21 @@ def test_the_glycan_layer_never_imports_from_the_repository_it_was_ported_from(p
 def test_importing_the_ccs_core_does_not_load_the_glycan_layer():
     # The AST tests above cannot see an import inside a function body reached at
     # runtime, or one performed by importlib. This can.
+    #
+    # THE SEED DIRECTORY IS PASSED EXPLICITLY, and that is not tidiness. A zero-argument
+    # `build_default_model()` finds its seed data at `Path(__file__).parents[2]/data/seed`,
+    # which does not exist inside the mutation harness's shadow copy - so it returns None
+    # there, having loaded nothing, and the assertion below would pass because NO module was
+    # imported rather than because the right ones were not. The test would be vacuous during
+    # every mutation sweep and green in both places. `test_api_harmonize.py` already guards
+    # the same trap with the same assertion; see LIMITATIONS 4.8.
+    seed = SRC.parent / "data" / "seed"
     code = (
         "import sys\n"
+        "import pathlib\n"
         "import wmxccs.api\n"
-        "wmxccs.api.build_default_model()\n"
+        f"model = wmxccs.api.build_default_model(pathlib.Path({str(seed)!r}))\n"
+        "assert model is not None, 'the seed corpus must yield a model or this test is vacuous'\n"
         "print(sorted(m for m in sys.modules if m.split('.')[0] in"
         " ('wmxglycan', 'networkx', 'glycowork', 'sklearn', 'numpy', 'pandas')))\n"
     )

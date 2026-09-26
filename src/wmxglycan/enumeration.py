@@ -383,6 +383,15 @@ class Enumerator:
         budget[residue] += 1
         node.children.pop()
 
+    def broken_rules(self, graph: GlycanGraph) -> tuple[str, ...]:
+        """Public: every curated rule this structure breaks, in words.
+
+        Exists so the ranker can VERIFY that a candidate breaks no rule rather than trusting
+        that the enumerator rejected the violators. Those are different claims, and the second
+        one is the sort that stays true right up until it does not.
+        """
+        return self._broken_rules(graph)
+
     def _broken_rules(self, graph: GlycanGraph) -> tuple[str, ...]:
         """Every curated rule this structure breaks, in words. Empty if it breaks none.
 
@@ -428,10 +437,55 @@ class Enumerator:
                         enzymes=enzymes,
                     )
                 )
-        for rule, product, _ in self._rules:
-            if not _nodes_matching(graph, product):
+        # THE ORDERING NOTE IS GATED ON THE CONTEXT, NOT ONLY ON THE PRODUCT.
+        #
+        # This loop used to attach the note whenever the rule's PRODUCT was present, and the
+        # note's own words are "This candidate carries {product} alongside that context". For a
+        # candidate that carries the product and NOT the context, that sentence is false - and
+        # it is false while carrying an enzyme and a literature citation, which is the form a
+        # reader trusts most. Measured before the fix, on Hex5HexNAc4Fuc1: 114 of 167 candidates
+        # carried an ordering note and only 18 contained the bisecting GlcNAc that every one of
+        # the four order rules names as its context, so 108 candidates published a cited claim
+        # about themselves that was not true of them.
+        #
+        # THE CONTEXT IS SEARCHED ANYWHERE IN THE MOLECULE, not anchored to the product's own
+        # residue, and the difference matters. `_context_holds` anchors the two fragments to one
+        # residue when they end at the same residue-and-linkage pair, which is right for MGAT4 -
+        # both its fragments name the SAME alpha1-3 mannose. It is wrong for all four ORDER
+        # rules, whose context is the bisecting GlcNAc: FUT8's product `Fuc(a1-6)GlcNAc` ends at
+        # ('GlcNAc', None) and the bisecting context `GlcNAc(b1-4)Man(b1-4)GlcNAc` also ends at
+        # ('GlcNAc', None), so the anchoring treats the REDUCING GlcNAc and the CHITOBIOSE
+        # GlcNAc as one residue, the intersection is empty, and FUT8's note can never fire - on
+        # exactly the bisected, core-fucosylated structures the note exists to explain. There
+        # are 321 of them in the reference set.
+        #
+        # Searched anywhere is also the right reading of what an order rule says. "Bisecting
+        # GlcNAc blocks SUBSEQUENT MGAT2 action" is a claim about the state of the molecule, not
+        # about two residues sharing a position: once the bisecting GlcNAc is there, that enzyme
+        # can no longer act, wherever it would have acted.
+        #
+        # This is deliberately confined to the rationale and never reaches `_broken_rules`,
+        # which skips order rules entirely. So no candidate is included or excluded by this
+        # change - only what a candidate says about itself. The candidate counts are unmoved:
+        # 10 / 63 / 167 / 6 for the four reported compositions, asserted in the tests.
+        #
+        # The ANCHORING DEFECT ITSELF IS NOT FIXED HERE. `_context_holds` still identifies two
+        # different GlcNAc as one residue, and it still gates `_broken_rules` for the non-order
+        # rules, where changing it could change which candidates are refused. That is a
+        # rule-semantics decision with a candidate-count consequence, and it is recorded in
+        # docs/GLYCAN_LIMITATIONS.md rather than made as a side effect of building a ranker.
+        #
+        # Where the product is present and the context is not, the rule is not an ordering
+        # caveat at all - it is a FORBIDS rule this candidate satisfies non-vacuously, because
+        # the thing that would forbid the product is absent. So it is reported as an ordinary
+        # rule reason, which is how every other satisfied FORBIDS rule is already reported.
+        for rule, product, contexts in self._rules:
+            anchors = _nodes_matching(graph, product)
+            if not anchors:
                 continue
-            if is_order_constraint(rule):
+            if is_order_constraint(rule) and any(
+                _nodes_matching(graph, context) for context in contexts
+            ):
                 reasons.append(
                     CandidateReason(
                         kind="ordering",

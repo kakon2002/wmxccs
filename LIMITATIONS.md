@@ -687,6 +687,75 @@ Two derived sizes now exist, both computed from alpha rather than tabulated:
 The warning now tests the quantile index itself rather than comparing against a
 remembered number, so the floor, the refusal and the warning cannot drift apart.
 
+### 4.8 THE MUTATION SWEEP MEASURES A SUITE WITH NO SERVED MODEL
+
+OPEN, found 26 September 2026 while extending the harness to a second package, and it has been
+true of **every mutation sweep ever run in this repository** - including the 282-of-282 at
+`v0.7.0-mvp`. It is not caused by the glycan work; the glycan work is what noticed it.
+
+The harness copies `src/wmxccs` into a temporary directory and puts that first on `PYTHONPATH`.
+`api.py` locates the corpus relative to its own file:
+
+```python
+SEED_DIRECTORY = Path(__file__).resolve().parents[2] / "data" / "seed"
+```
+
+Inside the shadow, `__file__` is `<temp>/shadow/wmxccs/api.py`, so `parents[2]` is `<temp>` and
+`<temp>/data/seed` does not exist. **`build_default_model()` therefore returns `None` during
+every sweep.** Measured, not inferred:
+
+```
+SEED_DIRECTORY : C:\Users\...\Temp\probe2-eqsrmwmz\data\seed
+exists         : False
+build_default_model() -> None
+```
+
+WHAT IS ACTUALLY LOST, and it is much less than that sounds
+
+One test. The shadow baseline reads `3765 passed, 1 skipped` where a direct run reads `3766
+passed`, and the skip is
+`test_entry_point.py::test_the_banner_carries_the_model_version_an_answer_can_be_reproduced_from`,
+which skips itself when the banner says `NO MODEL LOADED`. So during a sweep nothing checks that
+the startup banner carries the model version, the scope line, or
+"NOT interlaboratory reproducibility".
+
+The 26 other call sites of `build_default_model` are safe, and one of them is safe on purpose:
+`test_api_harmonize.py` passes the seed directory **explicitly**, computed from the TEST file's
+location rather than the package's, and then asserts
+
+```python
+assert model is not None, "the seed corpus must yield a model or this whole file is vacuous"
+```
+
+Somebody had already met this trap and guarded it. That assertion is the reason twenty
+harmonization tests measure a real fit inside the shadow instead of quietly measuring the
+501 branch.
+
+IT CAUGHT A NEW TEST THE SAME DAY. `tests/test_glycan_boundary.py` asserts that fitting the
+served model loads no `numpy`, `networkx`, `glycowork` or `sklearn`. Written with a
+zero-argument `build_default_model()`, it passed inside the shadow because **nothing was
+imported at all** rather than because the right things were not - green in both places,
+meaningless in one. It now passes the seed directory explicitly and asserts the model is not
+None, exactly as `test_api_harmonize.py` does.
+
+WHY IT IS NOT FIXED HERE
+
+The fix is small - expose `data/` inside the shadow - and it changes the environment the
+282-of-282 figure was measured in, so taking it would require a fresh full sweep of roughly six
+hours to re-establish that number. The owner asked for the ranker and to stop after it. Two
+things make deferring defensible rather than convenient:
+
+- the direction of the error is towards LESS coverage, never towards a false kill. A test that
+  cannot see a model either skips or exercises the no-model branch; neither can make a mutation
+  look dead when it is alive.
+- every mutation in the catalogue was killed at `v0.7.0-mvp`, so no mutation depends on the
+  skipped test as its only killer. The loss is bounded to that test's own assertions.
+
+**The general lesson is the one worth carrying:** a test harness that relocates the package
+relocates every path the package derives from `__file__`, and anything the package finds that
+way silently disappears. Any guard written against a resource located relative to the package
+rather than to the repository is a guard that does not exist during a sweep.
+
 ## 4A. Defects found during M0 and fixed
 
 Recorded because each was a real hole, and because the test that found it is the
@@ -2382,7 +2451,7 @@ person, and merged deliberately - which is a product, not a feature.
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the catalogue holds 282 mutations against the package's modules. It began smaller than
+- the wmxccs catalogue holds 282 mutations against that package's modules, and is closed at that number; tools/mutation/catalogue_glycan.py holds 22 more against src/wmxglycan, and runner.all_mutations() joins the two so a sweep covers 304. It began smaller than
   the glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone; it has since passed it. The floor in
   the catalogue test goes up, never quietly down;

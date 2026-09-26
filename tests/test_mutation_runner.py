@@ -69,7 +69,7 @@ def quiet(_message):
 
 def test_the_source_is_never_modified(src):
     before = (src / "thing.py").read_text(encoding="utf-8")
-    sweep([GUARD], src=src, run=killed, log=quiet)
+    sweep([GUARD], srcs=[src], run=killed, log=quiet)
     assert (src / "thing.py").read_text(encoding="utf-8") == before
 
 
@@ -80,7 +80,7 @@ def test_the_source_is_untouched_even_when_the_suite_runner_raises(src):
         raise RuntimeError("pytest could not start")
 
     with pytest.raises(RuntimeError):
-        sweep([GUARD], src=src, run=explode, log=quiet)
+        sweep([GUARD], srcs=[src], run=explode, log=quiet)
     assert (src / "thing.py").read_text(encoding="utf-8") == before
 
 
@@ -93,7 +93,7 @@ def test_the_mutation_is_applied_to_the_copy_and_only_to_the_copy(src):
         assert (src / "thing.py").read_text(encoding="utf-8") == BODY
         return killed(shadow)
 
-    sweep([GUARD], src=src, run=look, log=quiet)
+    sweep([GUARD], srcs=[src], run=look, log=quiet)
     assert "if False:" in seen[0] and "if guard:" not in seen[0]
 
 
@@ -105,7 +105,7 @@ def test_the_copy_is_put_back_between_mutations(src):
         seen.append((shadow / PACKAGE / "thing.py").read_text(encoding="utf-8"))
         return killed(shadow)
 
-    sweep([GUARD, other], src=src, run=look, log=quiet)
+    sweep([GUARD, other], srcs=[src], run=look, log=quiet)
     # The second run must not still be carrying the first mutation.
     assert "if False:" in seen[0] and "gone" not in seen[0]
     assert "gone" in seen[1] and "if False:" not in seen[1]
@@ -139,7 +139,7 @@ def test_the_copy_is_put_back_even_when_the_suite_runner_raises_mid_sweep(src, t
         raise RuntimeError("pytest could not start")
 
     with pytest.raises(RuntimeError):
-        sweep([GUARD], src=src, run=look_then_explode, log=quiet)
+        sweep([GUARD], srcs=[src], run=look_then_explode, log=quiet)
     assert "if False:" in seen[0]  # it really was applied before the crash
     assert (kept / "shadow" / PACKAGE / "thing.py").read_text(encoding="utf-8") == BODY
 
@@ -191,7 +191,7 @@ def test_a_shadow_that_did_not_take_is_refused_rather_than_swept(src, tmp_path, 
     # the test suite rather than as a broken tool.
     monkeypatch.setattr("tools.mutation.runner.where_package_resolves", lambda _shadow, _name: "")
     with pytest.raises(ShadowFailed):
-        sweep([GUARD], src=src, run=never, log=quiet)
+        sweep([GUARD], srcs=[src], run=never, log=quiet)
 
 
 def test_the_shadow_is_a_copy_not_a_link(src, tmp_path):
@@ -205,7 +205,7 @@ def test_the_shadow_is_a_copy_not_a_link(src, tmp_path):
 
 def test_a_stale_anchor_is_a_failure_and_the_suite_is_never_run(src):
     stale = Mutation(label="moved away", file="thing.py", find="if vanished:", replace="if False:")
-    (outcome,) = sweep([stale], src=src, run=never, log=quiet)
+    (outcome,) = sweep([stale], srcs=[src], run=never, log=quiet)
     assert outcome.anchor is Anchor.STALE
     assert not outcome.ok
     assert "matches nothing" in outcome.problem and "Re-anchor" in outcome.problem
@@ -213,7 +213,7 @@ def test_a_stale_anchor_is_a_failure_and_the_suite_is_never_run(src):
 
 def test_an_ambiguous_anchor_is_a_failure(src):
     (src / "thing.py").write_text("if guard:\n    a()\nif guard:\n    b()\n", encoding="utf-8")
-    (outcome,) = sweep([GUARD], src=src, run=killed, log=quiet)
+    (outcome,) = sweep([GUARD], srcs=[src], run=killed, log=quiet)
     assert outcome.anchor is Anchor.AMBIGUOUS
     assert not outcome.ok
     assert "more than once" in outcome.problem
@@ -224,7 +224,7 @@ def test_the_old_behaviour_of_taking_the_first_match_is_gone(src):
     # site came first, reporting a kill for a guard it had never touched.
     (src / "thing.py").write_text("if guard:\n    a()\nif guard:\n    b()\n", encoding="utf-8")
     before = (src / "thing.py").read_text(encoding="utf-8")
-    sweep([GUARD], src=src, run=killed, log=quiet)
+    sweep([GUARD], srcs=[src], run=killed, log=quiet)
     assert (src / "thing.py").read_text(encoding="utf-8") == before
 
 
@@ -236,7 +236,7 @@ def test_a_mutation_naming_a_file_that_is_not_there_is_stale_rather_than_a_crash
     # A module can vanish the same way a line can: renamed, split, or dropped
     # between milestones. That is the case this harness exists to make loud.
     ghost = Mutation(label="its module went away", file="vanished.py", find="if guard:", replace="if False:")
-    (outcome,) = sweep([ghost], src=src, run=never, log=quiet)
+    (outcome,) = sweep([ghost], srcs=[src], run=never, log=quiet)
     assert outcome.anchor is Anchor.STALE
     assert not outcome.ok
     assert "matches nothing" in outcome.problem
@@ -251,7 +251,7 @@ def test_a_missing_target_file_does_not_cost_the_other_results(src):
     # other verdict in the run, which is a total loss of coverage reported as a
     # traceback. One bad entry must cost exactly one result.
     ghost = Mutation(label="its module went away", file="vanished.py", find="if guard:", replace="if False:")
-    outcomes = sweep([ghost, GUARD, ghost], src=src, run=killed, log=quiet)
+    outcomes = sweep([ghost, GUARD, ghost], srcs=[src], run=killed, log=quiet)
     assert [outcome.anchor for outcome in outcomes] == [Anchor.STALE, Anchor.OK, Anchor.STALE]
     assert outcomes[1].verdict is Verdict.KILLED
     assert outcomes[1].ok
@@ -274,7 +274,7 @@ def test_a_mutation_can_make_several_coordinated_edits(src):
         seen.append((shadow / PACKAGE / "thing.py").read_text(encoding="utf-8"))
         return killed(shadow)
 
-    (outcome,) = sweep([moved], src=src, run=look, log=quiet)
+    (outcome,) = sweep([moved], srcs=[src], run=look, log=quiet)
     assert outcome.anchor is Anchor.OK
     assert seen[0] == "before\nafter\nif guard:\n    stop()\n"
 
@@ -295,7 +295,7 @@ def test_edits_that_cancel_out_are_inert(src):
     circular = Mutation(
         label="there and back", file="thing.py", find="after", replace="later", also=(("later", "after"),)
     )
-    (outcome,) = sweep([circular], src=src, run=killed, log=quiet)
+    (outcome,) = sweep([circular], srcs=[src], run=killed, log=quiet)
     assert outcome.anchor is Anchor.INERT
     assert "changed nothing" in outcome.problem
 
@@ -306,7 +306,7 @@ def test_an_inert_mutation_never_starts_the_suite(src):
     circular = Mutation(
         label="there and back", file="thing.py", find="after", replace="later", also=(("later", "after"),)
     )
-    (outcome,) = sweep([circular], src=src, run=never, log=quiet)
+    (outcome,) = sweep([circular], srcs=[src], run=never, log=quiet)
     assert outcome.anchor is Anchor.INERT
 
 
@@ -314,13 +314,13 @@ def test_an_inert_mutation_never_starts_the_suite(src):
 
 
 def test_a_killed_mutation_that_was_expected_to_be_killed_is_fine(src):
-    (outcome,) = sweep([GUARD], src=src, run=killed, log=quiet)
+    (outcome,) = sweep([GUARD], srcs=[src], run=killed, log=quiet)
     assert outcome.verdict is Verdict.KILLED and outcome.ok and outcome.problem is None
     assert outcome.killer.startswith("FAILED")
 
 
 def test_a_survivor_that_was_expected_to_be_killed_fails_the_run(src):
-    (outcome,) = sweep([GUARD], src=src, run=survived, log=quiet)
+    (outcome,) = sweep([GUARD], srcs=[src], run=survived, log=quiet)
     assert outcome.verdict is Verdict.SURVIVED and not outcome.ok
     assert "NO TEST CAUGHT THIS" in outcome.problem
 
@@ -337,7 +337,7 @@ def documented(label="unreachable guard"):
 
 
 def test_a_documented_survivor_that_survives_is_fine(src):
-    (outcome,) = sweep([documented()], src=src, run=survived, log=quiet)
+    (outcome,) = sweep([documented()], srcs=[src], run=survived, log=quiet)
     assert outcome.ok and outcome.problem is None
 
 
@@ -345,7 +345,7 @@ def test_a_documented_survivor_that_gets_killed_also_fails_the_run(src):
     # The exemption has rotted: a test now covers it, so the documentation is
     # wrong and should be deleted. An exemption that cannot expire would train
     # the signal away.
-    (outcome,) = sweep([documented()], src=src, run=killed, log=quiet)
+    (outcome,) = sweep([documented()], srcs=[src], run=killed, log=quiet)
     assert not outcome.ok
     assert "exemption has rotted" in outcome.problem and "no path reaches it" in outcome.problem
 
@@ -355,7 +355,7 @@ def test_a_suite_that_could_not_run_is_not_a_kill(src, code):
     # pytest exits 1 when a test failed and 2 or more when it could not run at
     # all. Treating every non-zero code as a kill would let a mutation that
     # breaks collection report a success nothing earned.
-    (outcome,) = sweep([GUARD], src=src, run=lambda _s: (code, ["ERROR collecting"]), log=quiet)
+    (outcome,) = sweep([GUARD], srcs=[src], run=lambda _s: (code, ["ERROR collecting"]), log=quiet)
     assert outcome.verdict is Verdict.UNRUNNABLE
     assert not outcome.ok
     assert "could not run" in outcome.problem and f"exit {code}" in outcome.problem
@@ -363,8 +363,8 @@ def test_a_suite_that_could_not_run_is_not_a_kill(src, code):
 
 
 def test_only_exit_one_counts_as_a_kill(src):
-    (one,) = sweep([GUARD], src=src, run=killed, log=quiet)
-    (zero,) = sweep([GUARD], src=src, run=survived, log=quiet)
+    (one,) = sweep([GUARD], srcs=[src], run=killed, log=quiet)
+    (zero,) = sweep([GUARD], srcs=[src], run=survived, log=quiet)
     assert one.verdict is Verdict.KILLED and one.exit_code == 1
     assert zero.verdict is Verdict.SURVIVED and zero.exit_code == 0
 
@@ -372,7 +372,7 @@ def test_only_exit_one_counts_as_a_kill(src):
 def test_a_documented_survivor_is_not_excused_from_being_unrunnable(src):
     # An exemption says "no test can reach this", not "any outcome is fine". A
     # mutation that stops the suite starting has tested nothing either way.
-    (outcome,) = sweep([documented()], src=src, run=lambda _s: (3, ["INTERNALERROR"]), log=quiet)
+    (outcome,) = sweep([documented()], srcs=[src], run=lambda _s: (3, ["INTERNALERROR"]), log=quiet)
     assert outcome.verdict is Verdict.UNRUNNABLE
     assert not outcome.ok
 
@@ -468,7 +468,7 @@ def test_help_prints_the_usage_and_runs_nothing(capsys):
 def test_listing_the_catalogue_runs_no_suite(capsys):
     assert main(["--list"]) == 0
     printed = capsys.readouterr().out
-    assert "mutations" in printed and "[models.py]" in printed
+    assert "mutations" in printed and "[wmxccs/models.py]" in printed
 
 
 def test_a_filter_matching_no_label_is_refused(capsys):

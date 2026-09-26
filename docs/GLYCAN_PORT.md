@@ -45,15 +45,18 @@ wording and say when it stopped being true.
 Fifteen modules. The five the owner named need ten more to import at all, so the whole
 dependency closure came across; nothing outside that closure did.
 
-Every one is **byte-identical to the file it came from.** The digest is of the original
-in `Project2`, recorded so a later edit here can be told from a bad copy:
+**Fourteen of the fifteen are still byte-identical to the file they came from.** One is not,
+and that is what this table is for: the digest is of the ORIGINAL in `Project2`, so a
+deliberate edit here can be told from a bad copy. Updated 26 September 2026, when building the
+ranker turned up a defect in `enumeration.py`; what changed and why is in § 4A of
+[`GLYCAN_LIMITATIONS.md`](GLYCAN_LIMITATIONS.md) and summarised below the table.
 
 | module | lines | sha256 (first 16) of the original | state |
 |---|---|---|---|
 | `composition.py` | 310 | `80cf439cbfcd5434` | identical |
 | `constraints.py` | 148 | `f739d4f5a384b643` | identical |
 | `contracts.py` | 92 | `37116dc88cc1886e` | identical |
-| `enumeration.py` | 576 | `291e61875a0fa0d7` | identical |
+| `enumeration.py` | 630 | `291e61875a0fa0d7` | **ADAPTED, see below** |
 | `enzymes.py` | 156 | `25b56780dc437d9d` | identical |
 | `evaluation.py` | 344 | `5c6a676b61513f6a` | identical |
 | `features.py` | 529 | `69b529363353098e` | identical |
@@ -66,7 +69,25 @@ in `Project2`, recorded so a later edit here can be told from a bad copy:
 | `sugarbase.py` | 243 | `f696929dc7a9a715` | identical |
 | `training.py` | 412 | `8569792ac44b15e8` | identical |
 
-`__init__.py` is new and is the only source file here that was written rather than copied.
+`__init__.py` is new. `attestation.py`, `ranking.py` and `ccs_evidence.py` were written here
+and are not ported at all; `tools/glycan_ccs_evidence.py` is the adapter between the two
+packages and is the only file in the repository that imports both.
+
+### The one adapted module: `enumeration.py`
+
+Two changes, both confined to the RATIONALE a candidate carries. **No candidate is included or
+excluded by either, and the counts are unmoved at 10 / 63 / 167 / 6**, which is asserted in the
+tests rather than claimed here.
+
+1. **The ordering caveat is gated on its context.** It used to attach whenever a curated rule's
+   product was present, while its own wording claims the candidate "carries {product} alongside
+   that context". Measured on `Hex5HexNAc4Fuc1`: 114 of 167 candidates carried the note and only
+   18 contained the bisecting GlcNAc the note names, so **108 published a cited sentence that was
+   false about them.** After the fix there are 6 notes, all true.
+2. **`Enumerator.broken_rules()` was exposed**, a one-line public wrapper, so the ranker can
+   verify that a candidate breaks no rule by running the check instead of trusting that the
+   enumerator rejected the violators. Those are different claims, and "zero" is also what an
+   unrun check returns.
 
 Mapped against the five items in the brief:
 
@@ -92,7 +113,12 @@ and `test_glycan_sugarbase.py::test_the_shipped_records_keep_what_the_strings_le
   refrain from. `Project2`'s M5 ("Ranking. Score candidates using CCS interval
   consistency plus...") was never built, and no function in its package ranks or scores
   anything — checked, not assumed. This is recorded because "the ranker was not ported"
-  and "there is no ranker" are different facts and only the second one is true.
+  and "there was no ranker to port" are different facts and only the second one is true.
+
+  **A ranker was subsequently BUILT here**, on 26 September 2026, on the owner's decision that
+  V1 has no glycan CCS model: `src/wmxglycan/ranking.py`, with `attestation.py` and
+  `ccs_evidence.py` beside it. It is new code and not a port, and it shares no design with
+  anything in `Project2`, because there was nothing there to share a design with.
 - **`api.py`** — the glycan HTTP surface. Deliberately left. The brief puts the glycan
   layer *on top of the existing CCS service*, so what the endpoints are and what crosses
   between the two packages is the boundary decision, not a copy. Copying `Project2`'s app
@@ -175,15 +201,26 @@ the core — no rule rejects any of them, which is why its rejected column is em
   fit — and then `NotImplementedError("no model has ever been trained")`. The
   `from sklearn` import sits below every one of those guards, and there is a test that it
   stays there.
-- **There is no boundary schema yet, because nothing crosses yet.** The two packages have
-  no contact at all. `tests/test_glycan_boundary.py` protects the precondition for a
-  schema — that neither package can start importing the other by accident — so that when
-  one arrives it is the only road and not a convenience beside three shortcuts.
-- **The glycan layer has no mutation coverage.** `tools/mutation` and its 282-mutation
-  catalogue are scoped to `src/wmxccs` (`runner.py`: `SRC = PROJECT_ROOT / "src" / "wmxccs"`),
-  which is why adding a second package could not disturb the 282-of-282 figure — and also
-  why 1,220 passing glycan tests have not been checked the way the CCS tests have. A
-  green suite that has never had a mutation survive it is a weaker claim than it reads as.
+- **The ranker exists, and it ranks on evidence rather than on a prediction.** Built
+  26 September 2026 in `src/wmxglycan/ranking.py`, on the owner's decision that V1 has no
+  glycan CCS model. It bands indistinguishable classes of candidates by how many distinct
+  fully-resolved reference structures attest them, refuses to order a set nothing separates,
+  and reports CCS as measured evidence or a stated absence and never as a prediction. See
+  `docs/GLYCAN_LIMITATIONS.md` §§ 3-5.
+- **The boundary schema now exists and carries traffic.** It did not when this document was
+  first written, and the sentence here said so. `wmxglycan.ccs_evidence` declares the schema —
+  a `CCSEvidence` model with five states and a `CCSEvidenceLookup` Protocol — and
+  `tools/glycan_ccs_evidence.py` is the adapter, in neither package, the only file that imports
+  both. `tests/test_glycan_boundary.py` still holds the wall up in both directions, and a test
+  asserts the Protocol is satisfiable by a stub defined inside the glycan layer's own tests, so
+  the declaration cannot quietly come to depend on the CCS core.
+- **The code written here has mutation coverage; the ported code deliberately does not.**
+  `tools/mutation` now shadows BOTH packages on every run and a mutation names the package its
+  file sits in. The catalogue is two modules joined by a derived function: 282 wmxccs entries,
+  closed, and 22 glycan entries covering `ranking.py`, `attestation.py`, `ccs_evidence.py` and
+  the one changed line in `enumeration.py`. The 1,220 ported tests are NOT re-covered, on the
+  owner's instruction, and § 4A of `GLYCAN_LIMITATIONS.md` is what that costs: three defects in
+  ported code, none of which failed a test.
 - **`glycowork` is pinned exactly, at 1.10.0.** The 50,461-structure SugarBase v12
   release and the curated enzyme and constraint tables ship inside the package, so the
   version is part of the dataset version string (`SugarBase v12 via glycowork 1.10.0`)
