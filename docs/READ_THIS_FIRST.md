@@ -164,14 +164,19 @@ to one **structure**. Nothing in this repository has one.
 
 ## 6. Not everything counted here is mutation-verified here
 
-The suite is 4,105 tests and the mutation catalogue is 339 anchors. Both numbers are real and they
-do not mean the same thing, and the second is smaller than the first in a way that matters.
+The suite and the mutation catalogue both have counts, they are both real, and they do not mean the
+same thing. **No figure is repeated here** — they are in `README.md` § Checking it, where
+`tests/test_repository_counts.py` derives them from pytest and the catalogue and fails if the file
+disagrees. Three of the numbers that used to sit in this paragraph went stale within one commit of
+being written, which is the whole argument for not writing them here.
 
-The 339 anchors are 282 over the CCS core, verified at `v0.7.0-mvp`, plus 57 over the glycan code
-written in this repository. **The 1,771 ported glycan tests are not covered by this repository's
-sweep.** They were mutation-verified in the repository they were ported from, and re-covering them
-here was declined on cost with the deadline three days out. That is a decision, not an oversight,
-and it is the claim most likely to be repeated without its qualifier.
+The relationship, which does not change when the counts do: the anchors split into those over the
+CCS core, verified at `v0.7.0-mvp`, and those over the glycan code written in this repository.
+**The ported glycan tests are not covered by this repository's sweep at all.** They were
+mutation-verified in the repository they came from, and re-covering them here was declined on cost
+with the deadline three days out — `docs/GLYCAN_PORT.md` lists exactly which files those are. So a
+sentence like "every test in this repository is mutation-verified" would be false, and it is the
+claim most likely to be repeated without its qualifier.
 
 What a green suite and a green sweep each mean: the suite says the tests ran, the sweep says they
 would have caught something. A mutation that survives is a behaviour with no test behind it and is

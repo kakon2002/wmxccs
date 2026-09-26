@@ -151,6 +151,44 @@ def test_handover_states_no_count_and_has_one_command_block():
     assert 'README.md`' in handover or "README.md," in handover
 
 
+def test_read_this_first_states_no_count_at_all_and_points_at_readme():
+    """The orientation document must not carry figures, in a command block OR in prose.
+
+    IT DID, FOR ONE COMMIT. docs/READ_THIS_FIRST.md was written on 27 September 2026 stating the
+    test count, the anchor count and the glycan mutation count in prose, and all three were stale
+    before the day ended - the same commit that added the document also added ten mutations and
+    fifty-seven tests. The prose form is worse than the command-block form, because the check
+    written for command blocks does not see it.
+
+    A pattern WITHOUT the `#` prefix, therefore. Other figures - candidate counts, corpus sizes,
+    percentages - are welcome there and are derived-checked by the ranking and attestation suites;
+    what is banned is a second copy of the three numbers this file owns.
+    """
+    text = (REPO / "docs" / "READ_THIS_FIRST.md").read_text(encoding="utf-8")
+    pattern = r"[\d,]{3,7}\s+(?:tests|mutations|anchors)\b"
+
+    # A HISTORICAL figure is allowed and a CURRENT one is not, and the line itself has to say
+    # which it is: "the sweep of `c145eaf` ran 120 mutations" is a statement about one past run and
+    # is correctly frozen, where "the suite is 4,162 tests" is a second copy of a live number. The
+    # rule is therefore that any such figure NAMES THE COMMIT it was measured against. That is
+    # checkable, and it is the distinction LIMITATIONS and CONTEXT already rely on informally.
+    offenders = [
+        line.strip()
+        for line in text.splitlines()
+        if re.search(pattern, line) and not re.search(r"\b[0-9a-f]{7,40}\b", line)
+    ]
+    assert offenders == [], (
+        f"docs/READ_THIS_FIRST.md states a count with no commit behind it: {offenders}. Either"
+        " point at README.md § Checking it, where the figure is derived, or name the commit the"
+        " number was measured against so a reader can tell it is historical."
+    )
+    assert "README.md" in text, "it must say where the figures actually are"
+    # The floor, both ways: the pattern must see a bare current count, and must not see a figure
+    # that names its commit. Without these two the assertion above passes on anything.
+    assert re.search(pattern, "the suite is 4,162 tests now")
+    assert re.search(r"\b[0-9a-f]{7,40}\b", "the sweep of `c145eaf` ran 120 mutations")
+
+
 def test_the_counts_appear_in_readme_and_no_other_maintained_document():
     """LIMITATIONS and CONTEXT carry HISTORICAL counts - "the suite stayed green at 1,784 tests" -
     which are statements about a past moment and correctly frozen. What must not exist is a second

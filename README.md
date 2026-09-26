@@ -307,7 +307,7 @@ what the result may and may not be called. It asserts nothing; the assertions ar
 Run these from the repository root. Substitute `.venv/bin/python` on macOS and Linux.
 
 ```
-.venv/Scripts/python -m pytest -q                  # 4162 tests (2317 wmxccs, 1834 wmxglycan, 11 repository-level)
+.venv/Scripts/python -m pytest -q                  # 4163 tests (2317 wmxccs, 1834 wmxglycan, 12 repository-level)
                                                    # 6 of those skip without node; nothing else skips
 .venv/Scripts/python -m tools.mutation --check     # 349 anchors, about a second
 .venv/Scripts/python -m tools.mutation             # the full sweep: 349 mutations, several hours
