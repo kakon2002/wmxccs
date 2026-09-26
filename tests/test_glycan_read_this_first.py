@@ -27,12 +27,30 @@ import pytest
 from fastapi.testclient import TestClient
 
 import wmxglycan.ranking as ranking
-from wmxglycan.api import create_app
+from wmxglycan.api import (
+    _candidate_shares_sum,
+    _mass_off_the_candidates,
+    _shares_account_to_one,
+    create_app,
+)
 from wmxglycan.attestation import default_attestation_index
-from wmxglycan.ccs_evidence import CCSEvidenceState
+from wmxglycan.ccs_evidence import (
+    CCSEvidence,
+    CCSEvidenceState,
+    CCSReference,
+    EvidenceLevel,
+)
 from wmxglycan.enumeration import Enumerator
 from wmxglycan.fingerprint import default_fingerprint
-from wmxglycan.ranking import Decision, decision_reachability, rank
+from wmxglycan.ranking import (
+    Coverage,
+    CoverageState,
+    Decision,
+    IndistinguishableClass,
+    decision_reachability,
+    rank,
+)
+from wmxglycan.reuse import ReuseStatus
 from wmxglycan.store import Store
 
 REPO = Path(__file__).resolve().parents[1]
@@ -152,6 +170,46 @@ def test_the_unattested_mass_is_inside_the_candidate_sum_and_not_a_fourth_term(c
     assert unattested <= confidence["candidate_shares_sum"] + 1e-12, confidence
 
 
+def test_the_accounting_identity_reports_FALSE_when_it_does_not_close(shared):
+    """`shares_account_to_one` is CHECKED, not asserted - and this is what makes that true.
+
+    WHY IT NEEDS A BROKEN CASE. The identity holds for every composition the platform can rank, so
+    every test above is satisfied by a function that returns True unconditionally - and a mutation
+    replacing the body with `return True` SURVIVED the sweep of 27 September 2026 for exactly that
+    reason. A field that says "I checked" has to be able to say "it did not close", or it is a
+    constant wearing the name of a check.
+
+    So a RankedSet is taken apart and put back together with one share moved. Nothing in the serving
+    path can produce this state, which is the point: the field exists to notice if it ever does.
+    """
+    import dataclasses
+
+    result = rank(
+        shared["enumerator"].enumerate(MAN5),
+        index=shared["index"],
+        enumerator=shared["enumerator"],
+    )
+    assert _shares_account_to_one(result) is True, "the real result does not account to 1"
+    total = _candidate_shares_sum(result)
+    assert total is not None and total < 1.0
+
+    # Move the not-enumerated mass and the identity must fail. Half of it, so the number stays a
+    # plausible share rather than an obviously impossible one.
+    broken = dataclasses.replace(result, share_not_enumerated=(result.share_not_enumerated or 0.0) / 2)
+    assert _shares_account_to_one(broken) is False, (
+        "the accounting was broken on purpose and shares_account_to_one still reports True, so it"
+        " is not checking anything"
+    )
+
+    # And the other two helpers stay consistent with each other on the untouched result.
+    assert _mass_off_the_candidates(result) == pytest.approx(1.0 - total, abs=1e-12)
+
+    # A result with no bands at all reports None rather than a misleading True.
+    no_bands = dataclasses.replace(result, bands=())
+    assert _candidate_shares_sum(no_bands) is None
+    assert _shares_account_to_one(no_bands) is None
+
+
 def test_the_explanation_travels_with_the_number_rather_than_living_in_a_document(client):
     """Item 3's instruction: the answer must be where somebody adding the shares up is looking."""
     confidence = created(client, G2F, "[M+H]+", 1)["confidence"]
@@ -193,30 +251,124 @@ def test_only_one_decision_is_reachable_and_the_other_two_say_what_would_reach_t
     for one in blocked:
         assert one.blocked_by, f"{one.decision} is unreachable and names nothing that blocks it"
         assert one.what_would_reach_it, f"{one.decision} does not say what would reach it"
-    # AI_ONLY is blocked TWICE and RECOMMENDED once. If that ever collapses to one reason for
-    # both, the claim that AI_ONLY has two independent gates has stopped being true.
+    # AI_ONLY is blocked by TWO gates and RECOMMENDED by the RULE SET, which is a different kind
+    # of unreachable. If AI_ONLY's two reasons ever collapse to one, the claim that it has two
+    # independent gates has stopped being true.
     by_decision = {one.decision: one for one in blocked}
     assert len(by_decision[Decision.AI_ONLY].blocked_by) == 2
-    assert len(by_decision[Decision.IM_VALIDATION_RECOMMENDED].blocked_by) == 1
+    assert by_decision[Decision.AI_ONLY].unreachable_under_any_gate is False
+    assert by_decision[Decision.IM_VALIDATION_RECOMMENDED].unreachable_under_any_gate is True
+    assert "rule set" in by_decision[Decision.IM_VALIDATION_RECOMMENDED].blocked_by[0]
 
 
-def test_the_published_reachability_moves_when_a_gate_is_patched(monkeypatch):
-    """DERIVED, not listed - and this is what says so.
+def probe_every_decision(monkeypatch, *, validated: bool, completeness: bool) -> set[Decision]:
+    """Every decision `_decide` can actually return under one gate state. THE GROUND TRUTH.
 
-    A hand-written tuple would pass every assertion above and would not move here. That tuple is
-    what api.py held until 27 September 2026, under a comment claiming it was derived.
+    This calls the decision function rather than reading `decision_reachability()`, which is the
+    whole point: the two must be compared, not derived from each other.
     """
-    # raising=True is the default and is load-bearing here: a typo in the attribute name would
-    # otherwise patch nothing, the assertions below would test the unpatched module, and this test
-    # would quietly become one that cannot fail.
-    monkeypatch.setattr(ranking, "CORPUS_CAN_ESTABLISH_COMPLETENESS", True)
-    opened = {one.decision for one in decision_reachability() if one.reachable_today}
-    assert Decision.IM_VALIDATION_RECOMMENDED in opened, opened
-    assert Decision.AI_ONLY not in opened, "AI_ONLY needs the model gate too, and it is still shut"
+    monkeypatch.setattr(ranking, "VALIDATED_MODEL", object() if validated else None)
+    monkeypatch.setattr(ranking, "CORPUS_CAN_ESTABLISH_COMPLETENESS", completeness)
+
+    def reference(**over):
+        return CCSReference(
+            ccs=700.0, uncertainty=3.0, uncertainty_type="SD", adduct="[M+H]+", charge=1,
+            polarity="positive", ims_type="TWIMS", drift_gas="N2", source="fixture",
+            doi="10.0000/f", source_locator="T1",
+            reuse_status=ReuseStatus.SYNTHETIC_FIXTURE, **over,
+        )
+
+    evidences = (
+        CCSEvidence(
+            state=CCSEvidenceState.MEASURED_REFERENCE, level=EvidenceLevel.STRUCTURE,
+            discriminates_between_candidates=True,
+            reference=reference(measured_on_canonical_key="K"),
+        ),
+        CCSEvidence(
+            state=CCSEvidenceState.MEASURED_REFERENCE, level=EvidenceLevel.COMPOSITION,
+            reference=reference(),
+        ),
+        CCSEvidence(state=CCSEvidenceState.NOT_CONSULTED),
+    )
+    one = IndistinguishableClass(class_id="a", members=frozenset({"a"}), attested_structures=1)
+    two = IndistinguishableClass(class_id="b", members=frozenset({"b"}), attested_structures=0)
+    shapes = ({"a": one}, {"a": one, "b": two})
+
+    seen: set[Decision] = set()
+    for evidence in evidences:
+        for classes in shapes:
+            for refused in (False, True):
+                decision, _rules = ranking._decide(
+                    classes=classes, bands=(),
+                    coverage=Coverage(
+                        composition="X", state=CoverageState.MEASURED, reference_structures=1,
+                        attested_by_a_candidate=1, not_enumerated=0,
+                    ),
+                    evidence=evidence, refused=refused,
+                )
+                seen.add(decision)
+    return seen
+
+
+def test_what_the_decision_function_can_actually_return_under_every_gate_state(monkeypatch):
+    """THE PROBE, and the reason this file exists in its current form.
+
+    `decision_reachability()` and its first test were both written from one wrong reading of
+    `_decide`: that the completeness gate alone blocked IM_VALIDATION_RECOMMENDED and that opening
+    it would produce that value. The code and the test agreed with each other and neither agreed
+    with the decision function. An adversarial read of `_decide` found it; this probe is what would
+    have.
+
+    So the ground truth is obtained by CALLING `_decide`, never by reading the derivation.
+    """
+    today = probe_every_decision(monkeypatch, validated=False, completeness=False)
+    assert today == {Decision.IM_VALIDATION_REQUIRED}, today
+
+    completeness_open = probe_every_decision(monkeypatch, validated=False, completeness=True)
+    assert completeness_open == {Decision.IM_VALIDATION_REQUIRED}, (
+        f"opening the completeness gate alone produced {completeness_open}. The old claim was that"
+        " it produced IM_VALIDATION_RECOMMENDED; if that is true again, the rules changed and"
+        " decision_reachability() has to be re-derived."
+    )
+
+    both_open = probe_every_decision(monkeypatch, validated=True, completeness=True)
+    assert Decision.AI_ONLY in both_open, (
+        "with both gates open and structure-level discriminating evidence, AI_ONLY must appear -"
+        " otherwise it is a dead branch rather than live code behind a gate"
+    )
+
+    # AND THE HEADLINE: no gate state reaches it.
+    for state in (today, completeness_open, both_open):
+        assert Decision.IM_VALIDATION_RECOMMENDED not in state, state
+
+
+def test_the_published_reachability_agrees_with_the_probe(monkeypatch):
+    """The derivation is compared against `_decide`, not against its own reasoning.
+
+    This also kills the mutation that replaces the served derivation with a hand-written tuple:
+    under the gates the probe opens, the published answer has to move, and a constant cannot.
+    """
+    for validated, completeness in ((False, False), (False, True), (True, True)):
+        actual = probe_every_decision(monkeypatch, validated=validated, completeness=completeness)
+        published = {one.decision for one in decision_reachability() if one.reachable_today}
+        # The published set must not claim anything the decision function cannot produce. The
+        # reverse direction is checked below for AI_ONLY, which additionally needs an input.
+        assert published <= actual | {Decision.AI_ONLY}, (
+            f"gates validated={validated} completeness={completeness}: published {published},"
+            f" reachable {actual}"
+        )
+        assert Decision.IM_VALIDATION_RECOMMENDED not in published, (
+            "the derivation publishes IM_VALIDATION_RECOMMENDED as reachable and no input reaches"
+            " it under any gate state"
+        )
 
     monkeypatch.setattr(ranking, "VALIDATED_MODEL", object())
-    both = {one.decision for one in decision_reachability() if one.reachable_today}
-    assert both == set(Decision), both
+    monkeypatch.setattr(ranking, "CORPUS_CAN_ESTABLISH_COMPLETENESS", True)
+    opened = {one.decision for one in decision_reachability() if one.reachable_today}
+    assert Decision.AI_ONLY in opened, (
+        "with both gates open the published reachability still excludes AI_ONLY, so it is a"
+        " constant rather than a derivation"
+    )
 
 
 def test_the_completeness_fact_lives_in_one_place(monkeypatch, shared):
@@ -239,9 +391,13 @@ def test_the_completeness_fact_lives_in_one_place(monkeypatch, shared):
         "the coverage property did not move with the constant, so the fact is written twice and"
         " one of the two copies will eventually be wrong"
     )
-    assert Decision.IM_VALIDATION_RECOMMENDED in {
-        one.decision for one in decision_reachability() if one.reachable_today
-    }
+    # AND THE OTHER READER MOVES TOO. Not by making IM_VALIDATION_RECOMMENDED reachable - nothing
+    # does that - but by dropping the completeness reason from AI_ONLY's blockers, leaving only the
+    # model gate. An earlier version of this test asserted RECOMMENDED appeared here, which was the
+    # same wrong reading the derivation held; see the probe above.
+    ai_only = next(one for one in decision_reachability() if one.decision is Decision.AI_ONLY)
+    assert len(ai_only.blocked_by) == 1, ai_only.blocked_by
+    assert "VALIDATED_MODEL" in ai_only.blocked_by[0]
 
 
 def test_the_api_serves_the_derivation_rather_than_a_list(client):

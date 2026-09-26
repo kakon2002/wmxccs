@@ -7,9 +7,14 @@ cross section. Candidates are separated by ONE thing: whether the reference
 corpus attests them. Everything else the platform knows is reported and is
 deliberately kept out of the number, and each exclusion has a reason:
 
-- THE CURATED RULES CANNOT ORDER THE SET. All fifteen govern MGAT branching order
-  and bisecting interference, and the enumerator already rejected every candidate
-  that breaks one. What is constant across survivors is the count of rules
+- THE CURATED RULES CANNOT ORDER THE SET. ELEVEN of the fifteen reach N-glycan
+  enumeration at all - nine MGAT rules governing branching order and bisecting
+  interference, FUT8 on core fucosylation, and one class-agnostic blood group rule;
+  the other four are O-glycan core rules. (This said "all fifteen govern MGAT
+  branching order and bisecting interference" until 27 September 2026, which was
+  wrong three ways, and the same sentence was in four files. The repository's own
+  `tests/test_glycan_constraints.py` pins the 11/5 split.) The enumerator already
+  rejected every candidate that breaks one of the eleven. What is constant across survivors is the count of rules
   VIOLATED, which is zero - and this module VERIFIES that by running the check
   rather than trusting that the enumerator did. "Rules satisfied" is a different
   quantity and it measurably varies: 1 to 5 rules bear on a candidate, across
@@ -211,20 +216,32 @@ class Decision(StrEnum):
     before concluding the decision field is a stub: `IM_VALIDATION_REQUIRED` is the only value any
     input can produce, because two of the published rules in `decide()` fire on EVERY input.
 
-        AI_ONLY                    UNREACHABLE. Two independent gates, and both would have to
-                                   change: no model here has been validated against known truth
-                                   (`a_validated_model_exists()`), and the completeness of a
-                                   candidate set cannot be established from a corpus of
-                                   depositions (`CORPUS_CAN_ESTABLISH_COMPLETENESS`).
-        IM_VALIDATION_RECOMMENDED  UNREACHABLE. Blocked by the completeness gate alone.
+        AI_ONLY                    UNREACHABLE TODAY, but LIVE CODE behind two gates. Both would
+                                   have to change - no model here has been validated against known
+                                   truth (`a_validated_model_exists()`), and completeness is not
+                                   establishable from a corpus of depositions
+                                   (`CORPUS_CAN_ESTABLISH_COMPLETENESS`) - and structure-level
+                                   discriminating evidence has to arrive as an input. Open both
+                                   gates and supply that evidence and this value appears, which
+                                   `tests/test_glycan_ranking.py` does.
+        IM_VALIDATION_RECOMMENDED  UNREACHABLE UNDER ANY GATE STATE. A different kind of
+                                   unreachable, and the distinction is the whole of this entry:
+                                   its `return` is a fall-through no input can reach, because
+                                   silencing every rule requires exactly the condition the AI_ONLY
+                                   branch above it tests. Only a change to the RULES reaches it.
         IM_VALIDATION_REQUIRED     The value served for every request in this release.
 
-    **What would reach them** is in `decision_reachability()` below, which DERIVES the answer by
-    reading the same two gates `decide()` reads instead of restating it in prose. So the day either
-    gate changes, the reachability this module publishes changes with it - and the sentence above
-    cannot quietly become false, because `tests/test_glycan_ranking.py` patches both gates and
-    asserts the other two values then appear. That is also how the branches are shown to be LIVE
-    CODE rather than an enum member nothing references.
+    **What would reach them** is in `decision_reachability()` below, which reads the same two gates
+    `_decide` reads instead of restating them in prose, so a gate that opens cannot leave a
+    published claim behind.
+
+    THE SECOND ENTRY ABOVE SAID THE WRONG THING UNTIL 27 SEPTEMBER 2026, and it is worth leaving
+    the correction visible. It read "UNREACHABLE. Blocked by the completeness gate alone", and the
+    test written beside it asserted the same thing - so the claim was verified against its author's
+    belief rather than against `_decide`, which is LIMITATIONS 4.5 in miniature. An adversarial read
+    found it; a probe of `_decide` over both gates, three evidence shapes, one and two classes and
+    refused-or-not confirmed it: 48 combinations, 47 IM_VALIDATION_REQUIRED, 1 AI_ONLY, 0
+    IM_VALIDATION_RECOMMENDED. That probe is now the test.
 
     Do not "fix" this by relaxing a threshold. A platform with no validated CCS model asking for
     instrument validation on every answer is the correct output, and it is what the specification
@@ -295,23 +312,45 @@ class DecisionReachability:
     reachable_today: bool
     blocked_by: tuple[str, ...]
     what_would_reach_it: str | None
+    # TWO DIFFERENT KINDS OF UNREACHABLE, and conflating them was a real error here. A value can be
+    # out of reach because a GATE is shut - open the gate and it appears - or because the published
+    # RULES make its guard contradictory, in which case no gate state and no input reaches it and
+    # only a change to the rules would. The second is a dead branch; the first is live code behind
+    # a fact about the world.
+    unreachable_under_any_gate: bool = False
 
 
 def decision_reachability() -> tuple[DecisionReachability, ...]:
-    """Which of the three decisions any input can produce, DERIVED from the two gates.
+    """Which of the three decisions any input can produce, and why the other two cannot.
 
-    WHY DERIVED. The served list of reachable values was a hand-written tuple in `api.py` until
-    27 September 2026, which is the shape LIMITATIONS 4.5 collects: a statement about what the
-    code can do, maintained by hand next to the code that does it. This reads the same two
-    predicates `decide()` reads, so a gate that opens cannot leave a published claim behind.
+    WHY IT IS COMPUTED HERE. The served list of reachable values was a hand-written tuple in
+    `api.py` until 27 September 2026, under a comment claiming it was derived - the shape
+    LIMITATIONS 4.5 collects. This reads the two module-level gates `_decide` reads, so a gate that
+    opens cannot leave a published claim behind.
 
-    THE LOGIC, which is just `decide()` read backwards. Every published rule maps to
-    IM_VALIDATION_REQUIRED and `decide()` returns it the moment ANY rule fires. Two rules fire on
-    every input while the gates hold: "the candidate set may not contain the answer" (the
-    completeness gate) and "no validated model exists". So while the completeness gate holds,
-    nothing else is reachable at all; if it opened, a single-class set with structure-level
-    evidence would reach IM_VALIDATION_RECOMMENDED, and AI_ONLY additionally needs a validated
-    model.
+    THE LOGIC, which is `_decide` read backwards. Every published rule carries
+    IM_VALIDATION_REQUIRED and `_decide` returns that the moment ANY rule fires. Two rules fire on
+    every input while the gates hold - "the candidate set may not contain the answer" (the
+    completeness gate) and "no validated model exists" - so today nothing else is reachable.
+
+    AND `IM_VALIDATION_RECOMMENDED` IS NOT MERELY GATED: NO GATE STATE REACHES IT. The first
+    version of this function said the completeness gate alone blocked it and that opening that gate
+    would produce it. That was wrong, and the test written beside it asserted the same wrong thing,
+    so the pair agreed with each other and not with `_decide` - a guard verified against its own
+    author's belief, which is LIMITATIONS 4.5 in miniature. It was caught on 27 September 2026 by
+    an adversarial read of the decision function, and confirmed by probing `_decide` over both
+    gates, three evidence shapes, one and two classes, and refused and not: 48 combinations gave
+    47 IM_VALIDATION_REQUIRED, 1 AI_ONLY and 0 IM_VALIDATION_RECOMMENDED.
+
+    The reason is structural. `fires` on "no cross section is held for this structure" is exactly
+    `not structure_level`, and `fires` on "no validated model exists" is exactly
+    `not a_validated_model_exists()`. Silencing every rule therefore requires structure-level
+    evidence AND a validated model - which is precisely the condition tested one line above the
+    fall-through, so AI_ONLY is returned first and the fall-through is dead. Only a change to the
+    RULES would reach it, not a change to any gate or any input.
+
+    `tests/test_glycan_read_this_first.py` re-runs that probe and asserts this function agrees with
+    it, so the claim is checked against `_decide` rather than against this docstring.
     """
     validated = a_validated_model_exists()
     completeness = CORPUS_CAN_ESTABLISH_COMPLETENESS
@@ -324,13 +363,19 @@ def decision_reachability() -> tuple[DecisionReachability, ...]:
         "the completeness of a candidate set is not establishable from a corpus of depositions"
         " (ranking.CORPUS_CAN_ESTABLISH_COMPLETENESS is False)"
     )
+    the_rule_set = (
+        "the published rule set, NOT a gate and NOT the data: the rule \"no cross section is held"
+        " for this structure\" fires whenever the evidence is not structure-level, which is the"
+        " same condition the AI_ONLY branch requires, so silencing every rule always selects"
+        " AI_ONLY first and the IM_VALIDATION_RECOMMENDED fall-through is never reached under any"
+        " gate state"
+    )
 
     ai_only_blockers = tuple(
         reason
         for reason, holds in ((no_model, not validated), (no_completeness, not completeness))
         if holds
     )
-    recommended_blockers = (no_completeness,) if not completeness else ()
 
     return (
         DecisionReachability(
@@ -342,23 +387,26 @@ def decision_reachability() -> tuple[DecisionReachability, ...]:
                 if not ai_only_blockers
                 else (
                     "a model validated against structures known by another method, AND a way to"
-                    " establish that a candidate set is complete. Both, not either: each blocks"
-                    " this value on its own"
+                    " establish that a candidate set is complete, AND structure-level evidence"
+                    " that discriminates between candidates for the ion asked about. All three:"
+                    " each of the first two blocks this value on its own, and the third is an"
+                    " input rather than a gate"
                 )
             ),
         ),
         DecisionReachability(
             decision=Decision.IM_VALIDATION_RECOMMENDED,
-            reachable_today=not recommended_blockers,
-            blocked_by=recommended_blockers,
+            reachable_today=False,
+            blocked_by=(the_rule_set,),
             what_would_reach_it=(
-                None
-                if not recommended_blockers
-                else (
-                    "a source that establishes completeness rather than recording depositions."
-                    " A validated model is NOT required for this value, only for AI_ONLY"
-                )
+                "a change to the published rules, not to a gate or an input. The"
+                " cross-section rule would have to be able to stay silent in a case where the"
+                " AI_ONLY condition is not met - if it fired on a total absence of evidence"
+                " rather than on evidence that is not structure-level, for instance. Until then"
+                " this is a fall-through no input reaches, and it is reported as such rather"
+                " than as a value waiting on data"
             ),
+            unreachable_under_any_gate=True,
         ),
         DecisionReachability(
             decision=Decision.IM_VALIDATION_REQUIRED,

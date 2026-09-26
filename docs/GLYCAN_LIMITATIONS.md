@@ -99,8 +99,14 @@ absence where we do not, never a prediction.
 
 ### The curated rules cannot order a candidate set. This is arithmetic, not an omission.
 
-All 15 curated biosynthetic rules govern MGAT branching order and bisecting interference.
-**Not one constrains galactosylation type, fucose position, chain extension or LacdiNAc** —
+**11 of the 15 curated biosynthetic rules reach N-glycan enumeration at all**: nine MGAT rules
+governing branching order and bisecting interference, FUT8 on core fucosylation, and one
+class-agnostic blood group rule. The other four are O-glycan core rules the enumerator never
+applies. (This said "All 15 ... govern MGAT branching order and bisecting interference" until
+27 September 2026. Wrong three ways, and in four files; `tests/test_glycan_constraints.py` pins the
+split at 11 for N-linked and 5 for O-linked.) The conclusion is unaffected and is the point:
+**not one of the eleven constrains galactosylation type, fucose position, chain extension or
+LacdiNAc** —
 which is precisely what the 167 candidates for `Hex5HexNAc4Fuc1` differ in. The enumerator
 rejects every candidate that breaks a rule, so **every survivor satisfies every rule
 identically**, and a score built from rule compliance is a constant across the set.

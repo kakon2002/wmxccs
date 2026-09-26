@@ -122,8 +122,10 @@ and a dashboard wired to all six.
 
 It has **no fitted model of any kind**, and that is not a gap waiting on code. `training.py` is a
 refuse-to-fit guard: every path to a fit raises, and it raises on an absence of records to fit on.
-The 24 glycan cross sections that clear the licence gate record no structure to featurise, and the
-89 that would are held on a drift gas and an uncertainty type their source never stated. The error
+The 24 glycan cross sections that clear every gate record no composition to key them by, and the
+89 that would are held on a drift gas and an uncertainty type their source never stated. (The
+licence gate refuses none of them: all 117 glycan rows are `open_attribution`. What blocks them is
+not permission.) The error
 class is `InsufficientTrainingDataError` and it is deliberately **not** a subclass of the licence
 gate, because a data gap and a permission problem are different failures and a reader should be
 able to tell which one they are looking at.
@@ -307,10 +309,10 @@ what the result may and may not be called. It asserts nothing; the assertions ar
 Run these from the repository root. Substitute `.venv/bin/python` on macOS and Linux.
 
 ```
-.venv/Scripts/python -m pytest -q                  # 4163 tests (2317 wmxccs, 1834 wmxglycan, 12 repository-level)
+.venv/Scripts/python -m pytest -q                  # 4168 tests (2317 wmxccs, 1839 wmxglycan, 12 repository-level)
                                                    # 6 of those skip without node; nothing else skips
-.venv/Scripts/python -m tools.mutation --check     # 349 anchors, about a second
-.venv/Scripts/python -m tools.mutation             # the full sweep: 349 mutations, several hours
+.venv/Scripts/python -m tools.mutation --check     # 350 anchors, about a second
+.venv/Scripts/python -m tools.mutation             # the full sweep: 350 mutations, several hours
 ```
 
 **The counts in that block are derived-checked, not maintained.** `tests/test_repository_counts.py`

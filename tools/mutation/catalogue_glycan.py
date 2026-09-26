@@ -527,12 +527,25 @@ GLYCAN_MUTATIONS: tuple[Mutation, ...] = (
         find="            blocked_by=ai_only_blockers,",
         replace="            blocked_by=(),",
     ),
+    # RE-ANCHORED AND RELABELLED 27 September 2026, same day it was written. It targeted
+    # `recommended_blockers = (no_completeness,) if not completeness else ()`, a line that existed
+    # because the derivation wrongly held that the completeness gate alone blocked
+    # IM_VALIDATION_RECOMMENDED. An adversarial read showed no gate state reaches that value at all,
+    # the line went away with the correction, and the mutation follows the intent to where the claim
+    # now lives: the distinction between "a gate is shut" and "no input can reach this".
     Mutation(
-        label="[R] IM_VALIDATION_RECOMMENDED is blocked by the model gate rather than completeness",
+        label="[R] an unreachable-under-any-gate decision is published as merely gated",
         file="ranking.py",
         package=GLYCAN,
-        find="    recommended_blockers = (no_completeness,) if not completeness else ()",
-        replace="    recommended_blockers = (no_model,) if not validated else ()",
+        find="            unreachable_under_any_gate=True,",
+        replace="            unreachable_under_any_gate=False,",
+    ),
+    Mutation(
+        label="[R] the fall-through is blamed on a data gate rather than on the rule set",
+        file="ranking.py",
+        package=GLYCAN,
+        find="            blocked_by=(the_rule_set,),",
+        replace="            blocked_by=(no_completeness,),",
     ),
     Mutation(
         label="[R] the served reachability goes back to a hand-written list",

@@ -3,9 +3,12 @@
 This is the ONLY component of the ranker's score that can discriminate between
 candidates, and it is worth being exact about why.
 
-The curated biosynthetic rules cannot score. All fifteen govern MGAT branching
-order and bisecting interference, and the enumerator has already rejected every
-candidate that breaks one, so what is constant across a candidate set is the
+The curated biosynthetic rules cannot score. ELEVEN of the fifteen reach N-glycan
+enumeration - nine MGAT rules on branching order and bisecting interference, FUT8 on
+core fucosylation, and one class-agnostic blood group rule - and the other four are
+O-glycan core rules. (Corrected 27 September 2026 from "all fifteen govern MGAT
+branching order and bisecting interference".) The enumerator has already rejected every
+candidate that breaks one of the eleven, so what is constant across a candidate set is the
 number of rules VIOLATED, which is zero. "Rules satisfied" is a different
 quantity and it measurably varies: for Hex5HexNAc4Fuc1 the number of rules that
 actually bear on a candidate is 1, 2 or 3 across 54, 83 and 30 candidates, and

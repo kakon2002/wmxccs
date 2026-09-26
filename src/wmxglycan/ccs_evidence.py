@@ -111,9 +111,12 @@ class CCSEvidenceState(StrEnum):
 
     **`MEASURED_REFERENCE` IS UNREACHABLE IN THIS RELEASE. Not thin, not rare - unreachable, for
     every candidate set the platform can produce.** Say it that way round, because "24 glycan CCS
-    records clear the licence gate" reads like 24 usable values and it is zero:
+    records clear the licence gate" reads like 24 usable values and it is zero. And note what
+    does the blocking, because the shorthand misleads: THE LICENCE GATE REFUSES NONE OF THEM. All
+    117 glycan rows are `open_attribution`; 24 clear every gate, 4 are dropped as a suspected
+    shared peak and 89 for an unstated gas and an absent uncertainty type.
 
-      - all 24 cleared glycan records are milk oligosaccharides and **not one of them records a
+      - all 24 fully cleared glycan records are milk oligosaccharides and **not one of them records a
         composition**, so nothing can key a reference to a candidate set. `0 of 541 cleared
         record(s) carry a composition` is COUNTED by the adapter's `reachable_states()`, not
         asserted here, and a test fails the moment that count changes;

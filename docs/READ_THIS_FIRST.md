@@ -37,8 +37,10 @@ so it is not evidence of anything.
 
 What the glycan layer is: an enumerator, an attestation index over 3,640 distinct reference
 structures, a ranker that refuses to order what nothing separates, six endpoints and a dashboard.
-`training.py` is a refuse-to-fit guard in which every path to a fit raises, and it raises on an
-absence of records to fit on rather than on unfinished code.
+`training.py` is a refuse-to-fit guard in which every path to a fit raises. With today's corpus it
+raises on an absence of records to fit on — not on a licence problem, and the error class says which
+— though past the readiness gate the terminal raise is a `NotImplementedError`, because no model has
+ever been trained here.
 
 The wall is enforced by `tests/test_glycan_boundary.py`, not by this paragraph. The two packages
 never import each other in either direction. `tools/glycan_ccs_evidence.py` is the only production
@@ -68,8 +70,10 @@ The thing to be careful about is the word "band" doing work a hurried reader wil
 of 3" reads like a podium. It means "the tier with the most attestation", where the most is four
 deposited structures out of 34.
 
-Also: the curated rules **cannot order a candidate set at all.** All 15 govern MGAT branching and
-bisecting, and not one of them constrains what the candidates for a single composition differ in.
+Also: the curated rules **cannot order a candidate set at all.** Eleven of the fifteen reach
+N-glycan enumeration — nine MGAT rules on branching order and bisecting interference, FUT8 on core
+fucosylation, one class-agnostic blood group rule; the other four are O-glycan core rules — and not
+one of the eleven constrains what the candidates for a single composition differ in.
 Attestation in the reference corpus carries the whole discriminating load, and where the corpus
 attests nothing, a tie is the honest output.
 
@@ -123,21 +127,45 @@ no validated CCS model asking for instrument validation on every answer is the c
 it is precisely what the specification means by identifying predictions that require experimental
 validation.
 
-Do not fix it by relaxing a threshold. What would actually reach the other two values is written
-at the enum in `src/wmxglycan/ranking.py`, and it is **derived** from the two gates rather than
-described beside them — `decision_reachability()` reads the same predicates the decision function
-reads, so a gate that opens changes the published reachability in the same commit. The API serves
-that derivation as `decision_reachable_today` and `decision_unreachable_today`, the latter naming
-what would reach each one; the dashboard's Model Monitor shows both.
+Do not fix it by relaxing a threshold. What would reach the other two values is written at the enum
+in `src/wmxglycan/ranking.py`. `decision_reachability()` reads the same two gates the decision
+function reads, so a gate that opens changes the published reachability in the same commit, and the
+API serves that as `decision_reachable_today` and `decision_unreachable_today` — the latter naming
+what would reach each blocked value. The dashboard's Model Monitor shows both.
 
-Both branches are live code, not dead enum members: `tests/test_glycan_ranking.py` patches each
-gate and asserts the other values then appear. That matters because "AI_ONLY never appears" is
-equally satisfied by dead code, a misspelled comparison, or an enum member nothing references.
+**The two are unreachable in two different ways, and the difference matters more than the fact.**
+
+`AI_ONLY` is live code behind two gates. Open both — a validated model, and a way to establish
+completeness — supply structure-level evidence that discriminates between candidates, and the value
+appears. `tests/test_glycan_ranking.py` does exactly that, which is what shows the branch is real;
+"AI_ONLY never appears" is otherwise equally satisfied by dead code, a misspelled comparison, or an
+enum member nothing references.
+
+`IM_VALIDATION_RECOMMENDED` is different: **no gate state and no input reaches it.** Its `return` is
+a fall-through, and reaching a fall-through means silencing every rule — but the rule "no cross
+section is held for this structure" fires whenever the evidence is not structure-level, which is the
+same condition the `AI_ONLY` branch above it tests. So whenever every rule is silent, `AI_ONLY` is
+returned first. Only a change to the published rules would reach it.
+
+This paragraph said something else until it was checked. It claimed both branches had positive
+controls and that the completeness gate alone blocked the second, and the code and its test agreed
+with each other because I wrote both from the same wrong reading of the decision function. A probe
+over both gates × three evidence shapes × one and two classes × refused-or-not settled it: 48
+combinations, 47 `IM_VALIDATION_REQUIRED`, 1 `AI_ONLY`, **0 `IM_VALIDATION_RECOMMENDED`**. That
+probe is now the test, so the claim is checked against the decision function rather than against
+this document. It is the clearest example in the repository of the failure `LIMITATIONS.md` § 4.5
+collects, and it was found by an adversarial read rather than by the suite.
 
 ## 5. The measured-reference path is unreachable. Not thin — unreachable
 
-Twenty-four glycan cross sections clear the licence gate. That reads like 24 usable values. **It
-is zero.**
+Twenty-four glycan cross sections clear every gate the loader applies. That reads like 24 usable
+values. **It is zero.**
+
+(And it is not the licence gate that does the work, though the shorthand suggests it: all 117
+glycan rows are `open_attribution` and the licence refuses none of them. 4 are dropped as a
+suspected shared peak, 89 for an unstated gas and an absent uncertainty type. Permission is not
+what is missing here — which is worth knowing, because it is the one blocker that could in
+principle be resolved by correspondence.)
 
 All 24 are milk oligosaccharides and not one of them records a composition, so nothing can key a
 reference value to a candidate set. The state `MEASURED_REFERENCE` is therefore unreachable for
@@ -159,13 +187,21 @@ count changes. The claim cannot quietly become false. It is stated at the enum i
 
 There is a second, larger step behind the first. Even a cleared record carrying a composition
 would give a value keyed on composition and ion — shared by every isomer of that composition, and
-therefore unable to confirm one of them. Separating candidates needs a measurement that resolves
-to one **structure**. Nothing in this repository has one.
+therefore unable to confirm one of them. Separating candidates needs a measurement that resolves to
+one **structure** and is keyed to a candidate this platform produces.
+
+Be precise about which half is missing, because the obvious phrasing is wrong: **the repository does
+hold 24 structure-resolved measurements.** The milk oligosaccharides are fully linkage- and
+anomericity-specified, and each carries an IUPAC string. What it holds none of is structure-level
+evidence keyed to a candidate — those 24 are outside the N-glycan candidate space and record no
+composition, so no candidate set can reach one. `EvidenceLevel.STRUCTURE` is the term for the thing
+that is absent, and it is absent because of the keying, not because nothing was resolved.
 
 ## 6. Not everything counted here is mutation-verified here
 
 The suite and the mutation catalogue both have counts, they are both real, and they do not mean the
-same thing. **No figure is repeated here** — they are in `README.md` § Checking it, where
+same thing. **No CURRENT count is repeated here** — a figure tied to a named commit is allowed and
+one is used below, which is what the guard enforces. They are in `README.md` § Checking it, where
 `tests/test_repository_counts.py` derives them from pytest and the catalogue and fails if the file
 disagrees. Three of the numbers that used to sit in this paragraph went stale within one commit of
 being written, which is the whole argument for not writing them here.
@@ -174,7 +210,9 @@ The relationship, which does not change when the counts do: the anchors split in
 CCS core, verified at `v0.7.0-mvp`, and those over the glycan code written in this repository.
 **The ported glycan tests are not covered by this repository's sweep at all.** They were
 mutation-verified in the repository they came from, and re-covering them here was declined on cost
-with the deadline three days out — `docs/GLYCAN_PORT.md` lists exactly which files those are. So a
+with the deadline three days out. `docs/GLYCAN_PORT.md` § 2 lists exactly which fifteen MODULES
+came across, with a digest each; **the ported test files are not listed anywhere**, and the prefix
+`test_glycan_` does not identify them either, because most files carrying it were written here. So a
 sentence like "every test in this repository is mutation-verified" would be false, and it is the
 claim most likely to be repeated without its qualifier.
 
@@ -193,7 +231,11 @@ reads `tests/` live, so an edit made mid-run changes the suite between one mutat
 ## 7. `Project2` is not a dependency and you cannot fetch it
 
 `docs/GLYCAN_PORT.md` references a repository called `Project2` throughout, against a digest for
-every ported file. Fifteen of the glycan modules are byte-identical to their source there.
+every ported module. **Fourteen of the fifteen** are byte-identical to their source there;
+`enumeration.py` was deliberately adapted, and GLYCAN_PORT.md records the original's digest so the
+edit can be told from a bad copy. (This document said "fifteen" until it was checked against
+GLYCAN_PORT.md, which says fourteen. The `v0.8.0-mvp` tag message says fifteen too — see the note
+at the end of this file.) The digests cover the ported MODULES; the ported test files carry none.
 
 It is **not** a dependency. Code was copied and adapted, never imported; it is not on this
 repository's path; and a checkout anywhere else will not have it. Nothing in the install or the
@@ -216,3 +258,29 @@ looking for it, that is a bug in the test and not a missing package.
 
 `docs/CCS_Harmonization_Plan.md` and `docs/KICKOFF_PROMPT.md` are historical. They record what was
 asked in September, they predate the glycan layer, and they are not a description of what is here.
+
+---
+
+## Three figures in the `v0.8.0-mvp` tag message are wrong
+
+The tag was written and pushed before the claims in this document were checked against the code, and
+the check found errors the tag repeats. A pushed annotated tag is not rewritten here without being
+asked, so the corrections live in the repository instead. If you read the tag, read this:
+
+| the tag says | the truth |
+|---|---|
+| "15 of them are byte-identical to the repository they came from" | **Fourteen of the fifteen.** `enumeration.py` was deliberately adapted, and `docs/GLYCAN_PORT.md` § 2 has always said fourteen |
+| "All 15 govern MGAT branching and bisecting" | **Eleven reach N-glycan enumeration** — nine MGAT, plus FUT8 on core fucosylation, plus one class-agnostic blood group rule. Four are O-glycan core rules. The conclusion the sentence draws is unaffected |
+| "`tests/test_glycan_ranking.py` patches both gates and asserts the other two values then appear" | Only `AI_ONLY` appears. `IM_VALIDATION_RECOMMENDED` is unreachable under any gate state — see item 4 |
+
+None of the three changes a served number, a fingerprint, or a test result. All three are
+overstatements — of how much the curated rules cover, of how clean the port was, and of how much the
+suite proves — and they are recorded here rather than quietly fixed, because a tag is meant to be a
+fixed record of what was claimed at a release.
+
+**How they were found** is the part worth carrying forward. Seven read-only agents were pointed at
+this document with one instruction: check every factual claim against the repository and report only
+what is false, unsupported, or stale. They checked 127 claims and found several real errors,
+including the `IM_VALIDATION_RECOMMENDED` one — which the full suite did not catch and could not have
+caught, because the test asserting it was written from the same wrong reading of the code as the code
+itself. A suite checks that the code does what its author believed. It does not check the belief.
