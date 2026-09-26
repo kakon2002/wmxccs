@@ -1,0 +1,35 @@
+{
+  "_README": [
+    "Per-paper platform resolution for the Bush Lab CCS database. The workbook states no",
+    "instrument, method or platform anywhere, so tools/ingest_bushlab.py will not emit a seed",
+    "row for any paper absent from this file. Each entry must name where it was read from, so",
+    "that a resolution is evidence rather than a preference.",
+    "Eight of the nine cited papers are deliberately unread: they govern 605 values, 559 of",
+    "which carry an unstated charge carrier and can never match whatever platform they are on.",
+    "See LIMITATIONS 7E."
+  ],
+  "Hines 2017": {
+    "ims_type": "TWIMS",
+    "dtims_method": "",
+    "drift_gas": "N2",
+    "cell_gas": "N2",
+    "instrument": "Waters Synapt G2-Si HDMS",
+    "replicates": 3,
+    "doi": "10.1021/acs.analchem.7b01709",
+    "calibrant": "PolyAla n=2-21, the peptide Ac-ETDYYRKG-NH2, and nine drug standards (acetaminophen, betaine hydrochloride, alprenolol hydrochloride, clozapine N-oxide, erythromycin, ondansetron hydrochloride, reserpine, vancomycin hydrochloride, verapamil hydrochloride)",
+    "calref_reference_set": "the authors' own nitrogen DTIMS values for PolyAla n=2-21 and nine drug standards, measured for this paper on a modified Waters Synapt G2 HDMS with an RF-confining drift cell in place of the traveling wave cell",
+    "calref_doi": "10.1021/acs.analchem.7b01709",
+    "calref_platform": "DTIMS",
+    "calref_method": "stepped_field",
+    "read_from": "Hines, Ross, Davidson, Bush & Xu, Anal. Chem. 89, 9023-9030 (2017), doi:10.1021/acs.analchem.7b01709, read in full text from Europe PMC PMC5616088 on 26 September 2026. Platform: 'IM-MS analysis was performed on a Waters Synapt G2-Si HDMS'. Gas: 'using nitrogen as the drift gas'. Calibrants: 'Using a combination of small molecule and polypeptide CCS calibrants'. Reference values: 'Nitrogen DTIM CCS measurements of the drug standards and PolyAla (n = 2-21) were performed in positive mode using a modified Waters Synapt G2 HDMS ... containing a radio frequency (RF) confining drift cell in place of the previous traveling wave cell'. Reference method is stepped-field, from 'the slopes of plots of drift time versus reciprocal drift voltage'. Replicates: 'All wells were analyzed in triplicates over the course of 2 months'.",
+    "protomer_pairs_named_by_the_paper": [
+      "ciprofloxacin",
+      "norfloxacin",
+      "enoxacin",
+      "pefloxacine mesylate",
+      "sarafloxacin hydrochloride",
+      "cefpodoxime proxetil"
+    ],
+    "protomer_note": "The paper says 16 drugs 'display two peaks, had two major adducts, or were mixtures for which we have reported a CCS value of each component' - three different situations, and the sheet does not say which applies to which compound. Four of the 16 differ by adduct and are ordinary separate ions. Of the remaining twelve, the paper NAMES only the fluoroquinolone protomers and its new cephalosporin finding; the listed six are those. The other six are recorded as conformers with a curation flag, because a mixture's two components are two analytes and not two conformers of one."
+  }
+}

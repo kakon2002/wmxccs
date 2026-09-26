@@ -1534,7 +1534,8 @@ for it. **Prediction confirmed.** Every such record keys uniquely to itself and 
 never pair, so the native and denatured protein data - roughly 3,000 rows - arrives
 unmatchable unless the carrier can be established from the cited papers.
 
-**4. The MicroSource Collection is the clean part.** 1,441 drug-like molecules with a
+**4. The MicroSource Collection is the clean part.** 1,440 CCS VALUES over 1,424 distinct
+COMPOUND NAMES - see the figures below for which number counts what - with a
 stated adduct (`[M+H]+`), charge, nitrogen CCS, a per-row standard deviation in
 `s / Å^2`, a formula, a CAS number and a reference. Adduct, charge, gas and
 uncertainty all stated: this is the most immediately usable table found in any source
@@ -1554,6 +1555,365 @@ rather than assumed.
 Its terms ask only that users cite the appropriate publications, which is the
 lightest obligation of the three sources, and the registry records it as
 `academic_only` on the conservative reading.
+
+### Bush Lab: converted, and every value blocked on a platform the file never states
+
+OPEN as of 26 September 2026, and the blocker is one column.
+
+`tools/ingest_bushlab.py` reads all eight sheets, resolves every structural trap, and writes
+the flat conversion to `data/seed/as_delivered/bushlab_ccs_database_converted.csv` - one row
+per CCS value, carrying the native unit, the native value, the conversion factor and the
+converted value, so the arithmetic is checkable rather than trusted. **1,804 data rows yield
+2,045 CCS values**, because a row can hold a helium and a nitrogen column and the polymer
+sheets hold one column pair per charge state.
+
+**IT WRITES NO SEED FILE, and that is the result rather than a gap.** The workbook states NO
+instrument, method or platform anywhere - not on any sheet, not in any cell, not in any
+header. It states the gas, the charge, the cross section and a per-row `Ref` naming one of
+nine papers. A `CCSMeasurement` requires an `ims_type`, `IMSType` has no UNSTATED member, and
+DTIMS additionally requires `dtims_method`. So not one of the 2,045 values can become a
+record until the nine papers are read. The database page's "primarily traveling-wave" is a
+sentence about the collection, and `primarily` is not a value a row can carry.
+
+| blocker | values | what resolves it |
+| --- | --- | --- |
+| no platform stated | **2,045** (all) | the nine cited papers, each stating its own |
+| no charge stated | 46 | `Small Molecular Ions` has no charge column at all |
+| adduct the schema refuses | 3 | `M+` twice, `[M+3H]+3` once; NOT repaired, see below |
+
+The three adducts are left exactly as written. `[M+3H]+3` is almost certainly `[M+3H]3+`, and
+that is the reason it is not corrected: "almost certainly" is a guess about somebody else's
+data, in the column that decides which ions match each other.
+
+**MATCHED IONS UNDER THE STRICT RULE: ZERO, AND ZERO EVEN ONCE THE PLATFORMS ARE KNOWN.**
+This is the finding worth carrying, and it is not the platform blocker. Of the 2,045 values,
+559 carry an UNSTATED CHARGE CARRIER - the protein, peptide and polymer sheets give a charge
+and never say what the charges are - and such a key is unique per record by design, so those
+values can never match anything, including each other. 46 more have no charge and 3 have an
+unusable adduct. That leaves **1,437 values that could ever participate, and every one of
+them is on the MicroSource sheet, from a single paper**: 1,425 distinct ion keys, **none of them
+appearing in more than one cited paper**. One paper is one platform, and a matched ion needs
+two. So the ceiling is zero, and resolving the nine papers does not raise it.
+
+**CROSS-GAS PAIRS: 165**, over 347 values, being one analyte at one charge measured in both
+helium and nitrogen. 146 of the 165 have both gases on one sheet - usually the two columns of
+a single row. By sheet: Native-Like Protein Cations 96, Anionic Homopolymers 88, Polyalanine
+86, Denatured Protein Cations 36, Other Peptides 22, complexes 19.
+
+### Hines 2017 IS READ, and it resolves the platform for 70 per cent of the source
+
+READ 26 September 2026, open access, and the one paper worth reading of the nine. DOI
+10.1021/acs.analchem.7b01709, PMC5616088. Hines, Ross, Davidson, **Bush** and Xu,
+"Large-Scale Structural Characterization of Drug and Drug-Like Compounds by High-Throughput
+Ion Mobility-Mass Spectrometry", Anal. Chem. 89, 9023-9030 (2017). Read in full text from
+Europe PMC; the ACS page refuses automated access and PubMed answers with a CAPTCHA.
+
+It governs the MicroSource sheet, which is 1,440 of the 2,045 CCS values in this source - 70
+per cent - and the only sheet whose values could ever participate in a matched ion.
+
+| what the ingest needed | what the paper states, quoted |
+| --- | --- |
+| platform | **TWIMS**: "IM-MS analysis was performed on a Waters Synapt G2-Si HDMS" |
+| drift gas | **nitrogen**: "using nitrogen as the drift gas" |
+| calibrated? | **yes**: "Using a combination of small molecule and polypeptide CCS calibrants" |
+| charge carrier | **stated**: "masses corresponding to the protonated, sodiated, and water-loss ions were extracted for each data file" |
+| values / compounds | "A total of 1440 CCS values representing 1425 unique compounds (71% coverage) were obtained" |
+
+So the sheet's own adduct column is the paper's carriers, and the three adducts it holds in
+bulk - 1,279 [M+H]+, 89 [M+Na]+, 40 [M+H-H2O]+ - are exactly protonated, sodiated and
+water-loss. THE CARRIER IS STATED FOR THESE RECORDS, which is what separates MicroSource from
+the 559 protein, peptide and polymer values that give a charge and never say what it is.
+
+**THE CALIBRATION IS THE FINDING, AND IT IS A CIRCULARITY RISK.** The calibrants are PolyAla,
+acetaminophen, betaine hydrochloride, alprenolol hydrochloride, clozapine N-oxide,
+erythromycin, ondansetron hydrochloride, reserpine, vancomycin hydrochloride, verapamil
+hydrochloride, and a peptide Ac-ETDYYRKG-NH2. Their reference values are **the authors' own
+nitrogen DTIMS measurements on a modified Waters Synapt G2 HDMS** - an RF-confining drift
+cell in the same laboratory.
+
+That matters to this repository specifically. These TWIMS values are DERIVED from Bush Lab
+DTIMS values, so a comparison of Bush Lab TWIMS against Bush Lab DTIMS would be partly
+circular: it would be measuring how well a calibration reproduces the thing it was calibrated
+against. The `calref_reference_set`, `calref_doi`, `calref_platform` and `calref_method`
+fields exist to make exactly this visible, and they must be filled for these records rather
+than left blank. It does not block ingestion and it does block one comparison.
+
+**Coverage is 71 per cent of the plate, not of the drug universe.** "The CCS values for the
+rest of the 560 drugs ... were not successfully determined due to either low peak intensity
+(<1 x 10^3 counts) or the peak being too wide (>=25 bins)." So roughly 1,985 compounds were
+attempted. The absent 560 are absent for measurement reasons, which is a selection this
+corpus inherits and should not describe as coverage of anything wider.
+
+**What it does NOT change: the matched-ion count is still zero.** MicroSource is one paper on
+one platform, and a matched ion needs two platforms. Resolving Hines 2017 turns 1,440 blocked
+values into 1,440 records that can be BUILT and held as a reference library; it creates no
+pair. That was established before the paper was read and the paper does not alter it.
+
+### MicroSource is INGESTED as a reference library: 1,437 records, none trainable
+
+INGESTED 26 September 2026, by `tools/ingest_bushlab.py --platform-map
+data/seed/bushlab_platforms.json`, into `data/seed/bushlab_microsource.csv`.
+
+| | |
+| --- | --- |
+| values offered by the sheet | 1,440 |
+| records BUILT | **1,437** (the 3 unusable adducts are not built) |
+| records CLEARED to train | **0** |
+| records HELD | **1,437** |
+| matched ions contributed | **0**, unchanged at 142 for the corpus |
+| model fingerprint | `064eb9fba603/0d69f799f6f1`, UNMOVED |
+
+Zero cleared is the correct outcome and not a failure of the ingest. These are a reference
+library by instruction and by structure: MicroSource is one paper on one platform, so it can
+form no matched ion, so nothing was ever going to enter a fit. The gate refuses for four
+reasons and each is worth reading.
+
+**552 refused because permission does not reach the publication.** The row claims
+`academic_only`, and the gate requires a published source to name a DOI with a licence record.
+The licence that was read is the DATABASE PAGE's citation request; the ACS paper's licence has
+not been read - Europe PMC flags it open access and states no licence, and an open-access flag
+is not a licence. So `doi` is left null, following the decision already taken for CCSbase, and
+the paper is named in `source_locator` instead. The gate then refuses because a null DOI cannot
+back a published claim, which is correct: nobody has read terms that cover these values as a
+publication. *To clear them:* read the licence on the ACS page and register it, or get the
+written grant from the laboratory that this entry has recommended since 19 September.
+
+**868 refused as suspected shared peaks, and THIS HEURISTIC DOES NOT TRANSFER.** The detector
+refuses a record whose CCS is identical to another analyte's in the same calibration group. On
+the steroid study that caught 4 rows in 521 and meant something: an unresolved peak shared
+between two compounds. Here all 1,437 records sit in ONE calibration group and the sheet
+reports **one decimal place** across a range of 108.8 to 355.8 square angstroms - **2,470
+available 0.1 slots for 1,437 records**. Collisions are arithmetically inevitable: 833 distinct
+CCS values, 375 of them shared, 979 records sharing one. Eight different compounds report
+159.4.
+
+That is the pigeonhole principle, not evidence of a shared peak. The heuristic is sound on a
+few hundred records across several calibration groups and produces mostly false positives on a
+single-platform library of this size and precision. **It has NOT been changed**: it is doing
+what it was written to do, and loosening a detector because a new source trips it is how a
+guard gets quietly weakened. What it needs is a decision - whether a reference library should
+be gated by a rule written for a harmonization corpus - and that is a decision, not a code
+change. Recorded here so the 868 is not read as 868 suspicious measurements.
+
+**12 held for curation review**, being the six conformer pairs the paper does not name - see
+below. **5 held as incomplete conformer sets**, which is the holds cascading: when one member
+of a pair is refused for a shared peak, its sibling claims a sibling that is no longer in the
+cleared set, and the loader holds it rather than letting it stand as though it were the only
+peak. That interaction is correct and worth knowing about.
+
+### The calibration lineage is recorded, and a comparison against it is now REFUSED
+
+Condition 1 of the ingest, and the reason for the rest. Every one of the 1,437 records carries:
+
+    calref_reference_set  the authors' own nitrogen DTIMS values for PolyAla n=2-21 and nine
+                          drug standards, measured for this paper on a modified Waters Synapt
+                          G2 HDMS with an RF-confining drift cell
+    calref_doi            10.1021/acs.analchem.7b01709
+    calref_platform       DTIMS
+    calref_method         stepped_field
+
+**Recording it was not enough, so the consequence is now encoded.**
+`statistics.circularity_between` refuses any pair where one member's calibration reference
+traces to the other member's publication and platform, and the refusal happens BEFORE a
+stratum exists, so a circular pair cannot enter a fit even as one point among many. It is
+counted on `ComparisonReport.pairs_refused_as_circular`, because a refusal nobody can count
+cannot be told apart from an absence of data.
+
+`CalibrationReference` has carried this lineage since M0 and its docstring named the risk
+exactly - and until 26 September 2026 NOTHING READ IT at comparison time. The circularity was
+detectable and undetected, which is the LIMITATIONS 4.5 class again. Ten tests in
+`tests/test_circularity.py` pin it, including the case the guard exists for: a synthetic
+stepped-field DTIMS record carrying the same lineage is refused, and an otherwise identical
+record from a DIFFERENT publication is not. Four mutations, all killed.
+
+### THE CIRCULARITY GUARD DOES NOT CATCH A SAME-LABORATORY CHAIN ACROSS TWO PAPERS
+
+OPEN, and the most important thing to know before adding any more Bush Lab data. Read this
+before ingesting Bush 2010, Bush 2012, Allen 2012, Allen 2013, Allen 2016, Salbo 2012,
+Campuzano 2012 or Forsythe 2015.
+
+**What the guard catches.** A pair where one member's `calibration_reference` names the
+publication AND platform of the other member. That is provable circularity from the records
+themselves: these MicroSource TWIMS values were calibrated against nitrogen DTIMS values
+measured in the same paper, so a DTIMS record from `doi:10.1021/acs.analchem.7b01709` is
+refused against them, and the refusal is counted.
+
+**What it does not catch, and will not warn you about.** A chain that runs through the same
+laboratory and the same instrument but a DIFFERENT publication. The Hines 2017 calibration used
+an RF-confining drift cell on a modified Waters Synapt G2 at the University of Washington. Bush
+2010, Bush 2012, Allen 2012, Allen 2013 and Allen 2016 are that laboratory's own DTIMS work on
+that class of instrument. **If any of them is ingested, the guard will compare it against these
+TWIMS records without objection**, because no field in either record says the two are related:
+the DOIs differ, and the schema has no laboratory or instrument-identity field to match on.
+
+**Why it was built this narrow rather than broader.** Whether Bush 2010's values are
+independent of a calibration built in 2017 is a JUDGEMENT ABOUT TWO PAPERS - did the later
+calibration use the earlier values, or re-measure the same standards? - and it is not a fact
+recorded in either record. A guard that refused every same-laboratory pair would refuse real
+comparisons, and one that claimed to catch this and did not would be worse than one that says
+plainly that it does not. Widening it on a guess is the failure class LIMITATIONS 4.5 collects:
+a guard that reads broader than it is.
+
+*To close it,* in ascending order of effort:
+
+1. **Read the papers before pairing them.** Each of the five states whether it measured its own
+   standards or took published values. That answer, recorded as the `calref_doi` of whichever
+   record is the calibrated one, makes the existing guard fire with no code change. This is the
+   cheap answer and it is the right one.
+2. **Give the schema a laboratory or instrument identity** and match on it. That is a real
+   field on `CCSMeasurement` and a real decision about what counts as one laboratory across
+   twelve years and an instrument modification, which is why it is not done here.
+3. **Refuse same-`source` cross-platform pairs by default** and require an explicit
+   declaration of independence to compare them. Blunt, safe, and it would refuse a legitimate
+   comparison the day this corpus holds one - so it needs the CEO's decision, not a commit.
+
+Until one of those happens, the honest statement is: **this platform can prove circularity
+inside one publication and cannot see it across two papers from one laboratory.** The
+MicroSource records are safe against the specific paper they were calibrated from, and unguarded
+against the rest of the Bush Lab corpus.
+
+### The sixteen doubled compounds: twelve conformers, four separate ions, six flagged
+
+Condition 3. Hines 2017: the sixteen "display two peaks, had two major adducts, or were
+mixtures for which we have reported a CCS value of each component" - three situations the sheet
+does not separate. Reading the adducts separates them part of the way.
+
+- **4 differ by adduct** and are ordinary separate ions, not conformers: glycocholic acid and
+  methyldopa ([M+H]+ and [M+Na]+), methoxamine hydrochloride and podofilox ([M+H]+ and
+  [M+H-H2O]+).
+- **12 share an adduct**, so their two values are two peaks of one ion or two components of a
+  mixture. All 24 rows are kept, numbered `conformer` 1 and 2 of `conformers_total` 2, ordered
+  by cross section so the numbering is reproducible. Neither averaged nor dropped.
+- **6 of those 12 are flagged for curation**, because the paper NAMES only the fluoroquinolone
+  protomers (ciprofloxacin, norfloxacin, enoxacin, pefloxacine mesylate, sarafloxacin) and its
+  new cephalosporin finding (cefpodoxime proxetil). The other six - antimycin A, bacampicillin,
+  irigenin 7-benzyl ether, methimazole, montelukast sodium, temefos - are recorded as
+  conformers AND carry a flag saying the sheet does not distinguish a second peak from a
+  mixture component. **A mixture's two components are two analytes**, and calling them
+  conformers of one ion would merge two compounds. Antimycin A is the clearest worry: the sheet
+  labels it "antimycin a (a1 shown)", and antimycin A is a mixture of A1 to A4. Resolving these
+  six means reading the paper's figures.
+
+### The selection this corpus inherits: 1,440 of about 1,985 attempted
+
+Condition 4. Hines 2017: "The CCS values for the rest of the 560 drugs ... were not
+successfully determined due to either low peak intensity (<1 x 10^3 counts) or the peak being
+too wide (>=25 bins)." So roughly 1,985 compounds were attempted and 1,425 succeeded, a stated
+71 per cent.
+
+**The 560 absences are not random.** They are compounds that ionised poorly or gave broad
+arrival-time distributions, and broad peaks are what conformationally flexible or multi-protomer
+species give. So this library is biased toward compounds that behave well in TWIMS, and any
+statement about coverage of drug chemistry inherits that. It is a reference library of what
+could be measured, not of what exists.
+
+### The other eight papers are unread, deliberately, and none can change the matched-ion count
+
+The economics are lopsided and were checked before choosing. Hines 2017 alone governs 1,440 of
+2,045 values. The remaining eight govern 605, and **559 of those 605 are the unstated-carrier
+values** - protein, peptide and polymer rows that give a charge and never say what the charges
+are. An unstated carrier keys uniquely per record by design, so those values can never match
+anything whatever platform they turn out to have been measured on. Reading their papers would
+resolve `ims_type` and would not make one pair.
+
+| unread paper | values it governs | what reading it would add |
+| --- | --- | --- |
+| Bush 2010 | 174 | reference-library records only |
+| Allen 2013 | 102 | reference-library records only |
+| Allen 2016 | 92 | reference-library records only |
+| Bush 2012 | 86 | reference-library records only |
+| Allen 2012 | 76 | reference-library records only |
+| Campuzano 2012 | 46 | nothing: that sheet also states no charge |
+| Forsythe 2015 | 16 | reference-library records only |
+| Salbo 2012 | 13 | reference-library records only |
+
+Campuzano 2012 is worth its own line: it governs `Small Molecular Ions`, which has no charge
+column at all, so its 46 values stay unbuildable even with a platform. It is the one paper of
+the eight that would resolve nothing on its own.
+
+**The matched-ion count for this source is structurally zero and no reading changes it.** Not
+zero-for-now, and not zero-pending-curation: zero because of what the file contains. 559
+values carry a key that cannot match by construction, 46 have no charge, 3 have an adduct the
+schema refuses, and the 1,437 that remain are one paper on one platform. Reading all nine
+papers would produce a reference library of up to 2,042 records and zero matched ions. That is
+the honest description of this source and it should be what the coverage matrix says.
+
+### The three MicroSource figures, and which counts what
+
+Stated once here because they differ by one and by sixteen, and a document that uses the
+wrong one is wrong in a way nobody notices.
+
+| figure | what it counts | where it comes from |
+| --- | --- | --- |
+| **1,440** | CCS VALUES, one per row | counted from the sheet, and the paper's own figure |
+| **1,424** | DISTINCT COMPOUND NAMES in the sheet | counted from the sheet |
+| **1,425** | the paper's stated count of UNIQUE COMPOUNDS | Hines 2017, abstract and results |
+| 1,425 | also, coincidentally, the distinct (name, adduct, charge, gas) ION KEYS | counted from the sheet |
+
+**1,425 is not a count of anything we hold.** It is the figure Hines 2017 reports - "A total
+of 1440 CCS values representing 1425 unique compounds (71% coverage) were obtained" - and the
+sheet does not reproduce it: 1,440 values over exactly 16 doubled names gives 1,424, which is
+what the file contains. One of the two is off by one and this repository cannot settle which,
+so both are recorded and neither is presented as the compound count without saying whose it
+is. That the distinct ION-KEY count also lands on 1,425 is a coincidence and must not be used
+to reconcile them.
+
+CORRECTED 26 September 2026. An earlier report of this to the owner said 1,425 was the
+ion-key count and therefore the origin of the figure in the coverage matrix. That was wrong:
+it is the paper's compound count, and the key count matching it is chance.
+
+### What the sixteen doubled compounds are, and why they are not one ion each
+
+Hines 2017 says it plainly: "16 of these drugs display two peaks, had two major adducts, or
+were mixtures for which we have reported a CCS value of each component". Three different
+situations, and the sheet does not say which applies to which compound. Reading the adducts
+separates them partly:
+
+- **12 share one adduct**, so their two values are two PEAKS or a mixture, not two ions:
+  ciprofloxacin, norfloxacin, enoxacin, pefloxacine mesylate and sarafloxacin - all
+  fluoroquinolones, matching the paper's "known fluoroquinolone protomers" - plus cefpodoxime
+  proxetil, which is the paper's "new finding of cephalosporin protomers", and antimycin A,
+  bacampicillin, irigenin 7-benzyl ether, methimazole, montelukast sodium and temefos.
+- **4 differ by adduct** and are therefore legitimately different ions: glycocholic acid and
+  methyldopa ([M+H]+ and [M+Na]+), methoxamine and podofilox ([M+H]+ and [M+H-H2O]+).
+
+The twelve matter more than their number suggests. A protomer is a CONFORMER of one ion, not a
+second measurement of it, and the schema carries `conformer` and `conformers_total` for
+exactly this. Ingesting the pair as one ion would average two structures; ingesting it as two
+identical keys would make one ion look like a disagreeing duplicate. Which of the twelve are
+protomers and which are mixtures is in the paper's figures, not in the sheet.
+
+### Cross-gas comparison is a different kind of comparison, and is NOT a matched ion
+
+Asked and answered rather than assumed, 26 September 2026. **Under our own rule it is not a
+matched ion, and the rule is right.** The gas is part of the matched-ion key because a helium
+cross section and a nitrogen cross section of one ion are not two measurements of one
+quantity - they are measurements against different collision partners, and the nitrogen value
+is larger by a margin that varies with the ion. Pooling them would be averaging two different
+physical quantities, which is the failure the key exists to prevent.
+
+So Bush Lab's headline strength - the same ions in both gases - is real and is NOT
+harmonization data. It is **gas-dependence** data: same laboratory, same instrument, same ion,
+two collision gases. Our comparison is the opposite shape: two platforms, one gas.
+
+*What building it would take,* if it is wanted, and it is NOT built:
+
+1. **Its own pairing unit.** A cross-gas pair keys on everything EXCEPT gas - analyte, adduct,
+   charge, state - which is a different key from the matched-ion key and must not be confused
+   with it or reuse its code path.
+2. **Its own claim, and a guard.** `Claim` would need a member such as
+   `GAS_DEPENDENCE_WITHIN_A_STUDY`, and `assert_may_be_quoted_as` must refuse to let a
+   gas-dependence figure be quoted as a platform difference or as reproducibility, exactly as
+   it refuses the interlaboratory claim today.
+3. **Its own statistics.** The helium-to-nitrogen relationship is not a bias to be corrected
+   out; it is a conversion to be fitted, and it is strongly size-dependent, so a single ratio
+   would be wrong at both ends. A regression, not an offset.
+4. **It must never feed the harmonization model.** A gas relationship is not a platform
+   correction. Letting one into a stratum is precisely the forcing-of-incompatible-conditions
+   the brief forbids.
+5. **AND IT HAS THE SAME BLOCKER.** A gas relationship cannot be fitted without knowing
+   whether both values came from one instrument, which is the platform question again. The
+   nine papers gate this too.
 
 ### The bridge between sources is compound identity, and it is 30 compounds wide
 
@@ -1620,7 +1980,7 @@ of work:
   exceptions. SMILES to InChIKey is a deterministic computation, so every CCSbase
   compound has a structural identity available.
 - **The Bush Lab MicroSource sheet can be resolved too**, carrying a molecular formula
-  and a CAS number for each of its 1,441 compounds.
+  and a CAS number for each of its 1,440 rows, which are 1,424 distinct compounds.
 - **The steroid study cannot be resolved at all without a person.** It carries no
   structure, no SMILES, no CAS, no InChIKey. Its systematic names do fully specify the
   structures to a reader who knows steroid nomenclature -

@@ -1402,6 +1402,31 @@ MUTATIONS: tuple[Mutation, ...] = (
         find="    return math.ceil((held + 1) * (1 - alpha))",
         replace="    return math.ceil(held * (1 - alpha))",
     ),
+    # --- [Z] statistics.py: a calibration compared against its own reference set ---
+    Mutation(
+        label="[Z] a calibration is compared against its own reference set, measuring itself",
+        file="statistics.py",
+        find="def circularity_between(one, other) -> str | None:",
+        replace="def circularity_between(one, other) -> str | None:\n    return None",
+    ),
+    Mutation(
+        label="[Z] a circular pair is noted but still reaches a stratum",
+        file="statistics.py",
+        find="                    refused_circular.append(f\"{ion.key}: {circular}\")\n                    continue",
+        replace="                    refused_circular.append(f\"{ion.key}: {circular}\")",
+    ),
+    Mutation(
+        label="[Z] circularity is judged on the platform alone, so independent studies are refused too",
+        file="statistics.py",
+        find="        if not (lineage.doi == getattr(reference, \"doi\", None) or lineage.doi in locator):\n            continue",
+        replace="        if False:\n            continue",
+    ),
+    Mutation(
+        label="[Z] the refusal stops being counted, so it cannot be told from absent data",
+        file="statistics.py",
+        find="        pairs_refused_as_circular=tuple(dict.fromkeys(refused_circular)),",
+        replace="        pairs_refused_as_circular=(),",
+    ),
     # --- [P] robust: a slope a few ions cannot move ---------------------------
     Mutation(
         label="[P] the Passing-Bablok shift is dropped, so an inverted stratum gets the wrong median",

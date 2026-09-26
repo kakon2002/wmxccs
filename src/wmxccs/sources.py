@@ -398,12 +398,23 @@ BUSH_LAB_CCS = SourceLicence(
     title="(not recorded)",
     licence="No terms of use posted; the page asks only that users cite the appropriate publications",
     reuse_status=ReuseStatus.ACADEMIC_ONLY,
-    content="DOWNLOADED 19 September 2026 and counted from the file rather than reported: 213 KB, eight"
-    " sheets, roughly 6,500 rows. Native-Like Protein Cations 1,000; Native-Like Protein Cations and"
-    " complexes 989; Denatured Protein Cations 1,000; Polyalanine Cations 33; Anionic Homopolymers 1,000;"
-    " Other Peptides 1,000; Small Molecular Ions 24; MicroSource Collection 1,441. Retrieved from the"
-    " documented published-to-web xlsx URL, which needs no workaround. Most ions are reported to be measured"
-    " in BOTH helium and nitrogen by similar DTIMS methods, which has not yet been checked against the file.",
+    content="DOWNLOADED 19 September 2026. 213 KB, eight sheets, 1,804 DATA ROWS carrying 2,045 CCS"
+    " VALUES - a row can hold a helium and a nitrogen value, and the polymer sheets hold one column pair"
+    " per charge state, so values outnumber rows. Native-Like Protein Cations 72 rows / 119 values;"
+    " Native-Like Protein Cations and complexes 164 / 194; Denatured Protein Cations 27 / 45; Polyalanine"
+    " Cations 31 / 86; Anionic Homopolymers 35 / 92; Other Peptides 12 / 23; Small Molecular Ions 23 / 46;"
+    " MicroSource Collection 1,440 / 1,440. By gas: 409 helium, 1,636 nitrogen. By unit: 381 nm^2,"
+    " 1,664 A^2."
+    " CORRECTED 26 September 2026. This field previously read 'roughly 6,500 rows' with four sheets at"
+    " 1,000 each, and said it had been 'counted from the file rather than reported'. It had not: four of the"
+    " eight figures were a round 1,000 - a reader default or a pre-allocated range - and the other four"
+    " counted the header row. See LIMITATIONS 6."
+    " AND THE PLATFORM IS NOT IN THE FILE. The previous wording said the values were measured 'by similar"
+    " DTIMS methods, which has not yet been checked against the file'. It has now been checked: the workbook"
+    " states NO instrument, method or platform anywhere, on any sheet, in any cell. It states the gas, the"
+    " charge, the CCS and a per-row Ref naming one of nine papers, and nothing about how the value was"
+    " measured. So `ims_type` cannot be filled from this file at all, and no record can be built from it"
+    " until the nine papers are read.",
     evidence=(
         'The page asks only that users "cite the appropriate publication(s)". Read by Shawon Chakrabarty'
         " Kakon; reported again 19 September 2026.",
@@ -432,7 +443,8 @@ BUSH_LAB_CCS = SourceLicence(
         " charge: a row says z = 3 and never says what the three charges are. CONTEXT.md predicted exactly"
         " this for exactly this source and the [M+24?]24+ form was built for it in M0 - PREDICTION"
         " CONFIRMED - so roughly 3,000 protein rows arrive unmatchable. (4) The MicroSource Collection is"
-        " the clean part: 1,441 drug-like molecules with adduct, charge, nitrogen CCS, a per-row standard"
+        " the clean part: 1,440 CCS values over 1,424 distinct compounds, with adduct, charge, nitrogen CCS,"
+        " a per-row standard"
         " deviation, a formula, a CAS number and a reference. The most immediately usable table found in"
         " any source so far. (5) 41 cells in one sheet are corrupt, holding date serials far outside any"
         " valid range - 21955915 in C99, 9677161 in C108, and 39 more - which openpyxl refuses to read."
@@ -442,8 +454,22 @@ BUSH_LAB_CCS = SourceLicence(
         " different platforms and the difference is the entire subject of this repository. The per-row Ref"
         " column names the paper for each value, so it is answerable per row rather than per file - and it"
         " must be answered rather than assumed.",
-        "NOT INGESTED. The file is in hand and the adapter is not written; it is third in the stated order,"
-        " after the steroid study and CCSbase.",
+        "SETTLED, 26 September 2026, and it settles the OTHER way: NEITHER reading is supported by the file."
+        " The workbook names no platform, so it cannot be read as DTIMS and it cannot be read as TWIMS. The"
+        " database page's 'primarily traveling-wave' is a sentence about the collection, not a per-row fact,"
+        " and 'primarily' is not a value any row can carry. Nine papers are cited across the eight sheets -"
+        " Bush 2010, Bush 2012, Salbo 2012, Campuzano 2012, Allen 2012, Allen 2013, Allen 2016,"
+        " Forsythe 2015, Hines 2017 - and each states its own platform. That is the bounded task: nine"
+        " papers, and every value carries the Ref that says which one applies to it.",
+        "CONVERTED BUT NOT INGESTED, 26 September 2026. tools/ingest_bushlab.py reads all eight sheets and"
+        " handles every structural trap in the file: the per-sheet unit read from the column header rather"
+        " than inferred from magnitude, with the native unit and value kept beside the converted one; the"
+        " two-row headers on three sheets; the merged banner that distinguishes two identically labelled"
+        " helium columns as cations and anions; the charge-state column groups on the polymer sheets; and"
+        " the unstated charge carrier on every protein, peptide and polymer row. It writes the flat"
+        " conversion to data/seed/as_delivered/ for diffing and REFUSES to write a seed file while the"
+        " platform is unresolved, because a seed row needs an ims_type and inventing one is the one thing"
+        " this repository must not do. Supply a per-paper platform map with a citation and it writes.",
         "THE ONE RESERVATION ON THIS ENTRY, recorded because it is the only one of the three that rests on"
         " inference rather than on stated terms. A source posting NO terms defaults to all rights reserved,"
         " which is how AllCCS2 was treated and why AllCCS2 is excluded. This entry reads the citation"

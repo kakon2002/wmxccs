@@ -694,6 +694,9 @@ class ComparisonReport:
     ions_skipped_for_replicates: tuple[str, ...] = ()
     synthetic: bool = False
     unusable_sets_skipped: tuple[str, ...] = ()
+    # Pairs refused because one member's calibration traces to the other member. Kept on the
+    # report because a refusal nobody can count is indistinguishable from an absence of data.
+    pairs_refused_as_circular: tuple[str, ...] = ()
     # Why there is no comparison, where there is none. A report that says only
     # "nothing here" leaves a reader unable to tell a corpus that is too small
     # from one that can never work however much of it arrives, and those call for
@@ -748,6 +751,80 @@ class ComparisonReport:
         return "\n".join(lines)
 
 
+CIRCULAR_PAIR = (
+    "refused as circular: the {calibrated} value was calibrated against reference values that"
+    " {origin}, which is what the {reference} value in this pair is. Comparing them measures how"
+    " well the calibration reproduces its own reference set, not how the two platforms differ."
+    " {detail}"
+)
+
+
+def circularity_between(one, other) -> str | None:
+    """Why this pair must not be compared, or None if it may be.
+
+    THE RISK IS NOT HYPOTHETICAL AND THE SCHEMA WAS BUILT FOR IT. A TWIMS cross section is
+    calibrated against reference values, those reference values were usually measured by
+    DTIMS, and if the comparison then puts that TWIMS value against the same DTIMS values it
+    calibrated from, the agreement reported is an artefact of the calibration. It is not a
+    weak comparison, it is a different measurement entirely: it measures the calibration.
+
+    `CalibrationReference` has recorded the lineage since M0 - the reference set by name, the
+    publication its values came from, and the platform they were measured on - and until
+    26 September 2026 NOTHING READ IT at comparison time. The circularity was detectable and
+    undetected, which is the failure class LIMITATIONS 4.5 collects. This is the detection.
+
+    A PAIR IS REFUSED, NOT FLAGGED. A flag on a figure is read by whoever is looking for it;
+    the Bush Lab MicroSource records are the case in hand, and their reference values are
+    their own laboratory's nitrogen DTIMS measurements, so a Bush Lab DTIMS record arriving
+    later must not quietly form a stratum with them.
+
+    WHAT THIS CATCHES is provable circularity: the reference values were published in the
+    very paper being compared against, matched by DOI, on the platform the lineage names.
+    WHAT IT DOES NOT CATCH is a same-laboratory chain across two different papers, where
+    whether the values are independent is a judgement about the two papers rather than a fact
+    in either record. That is stated here rather than implied by silence, because a guard that
+    reads broader than it is, is the thing this repository keeps finding.
+    """
+    for calibrated, reference, who in ((one, other, "first"), (other, one, "second")):
+        lineage = getattr(calibrated, "calibration_reference", None)
+        if lineage is None:
+            continue
+        if lineage.platform is None or lineage.platform != reference.ims_type:
+            continue
+        if lineage.method is not None and lineage.method != reference.dtims_method:
+            continue
+        # THE TEST IS THE DOI, and only the DOI. An earlier draft of this also tried to
+        # match on the reference-set NAME, which was both broken - it compared a string to
+        # a CalibrationReference object, so it could never fire - and wrong in principle:
+        # two records naming one calibrant share a calibrant, which is not circularity.
+        # Circularity is that THIS record's reference values were published in THAT record's
+        # paper, and the DOI is the only thing in either record that can establish it.
+        if not lineage.doi:
+            continue
+        # THE PUBLICATION IS MATCHED IN TWO PLACES, and the second is not sloppiness. Where a
+        # value was obtained from a compiler rather than from its publisher - a database whose
+        # terms were read, citing a paper whose licence was not - the licence gate correctly
+        # refuses a reuse claim attached to the paper's DOI, so `doi` is left null and the
+        # publication is named in `source_locator` instead. That is the decision recorded for
+        # CCSbase in LIMITATIONS 7E and it is how the Bush Lab records are seeded. A
+        # circularity test that looked only at `doi` would therefore never fire on exactly the
+        # records it was written for.
+        locator = getattr(reference, "source_locator", None) or ""
+        if not (lineage.doi == getattr(reference, "doi", None) or lineage.doi in locator):
+            continue
+        return CIRCULAR_PAIR.format(
+            calibrated=calibrated.ims_type,
+            reference=reference.ims_type,
+            origin=f"were published in doi:{lineage.doi}",
+            detail=(
+                f"Reference set {lineage.reference_set!r}, measured on"
+                f" {lineage.platform}{'/' + str(lineage.method) if lineage.method else ''}."
+                f" The {who} record of the pair is the calibrated one."
+            ),
+        )
+    return None
+
+
 def compare_platforms(matching: MatchingReport) -> ComparisonReport:
     """Every cross-platform comparison the matched ions support.
 
@@ -760,6 +837,7 @@ def compare_platforms(matching: MatchingReport) -> ComparisonReport:
     considered = 0
     skipped_replicates: list[str] = []
     unusable: list[str] = []
+    refused_circular: list[str] = []
     synthetic = bool(matching.synthetic_groups)
 
     # stratum key -> points
@@ -776,6 +854,15 @@ def compare_platforms(matching: MatchingReport) -> ComparisonReport:
         for index, one in enumerate(names):
             for other in names[index + 1 :]:
                 reference_platform, other_platform = choose_reference(one, other, by_platform)
+                # REFUSED BEFORE A STRATUM EXISTS, so a circular pair cannot reach a fit even
+                # as one point among many. Counted on the report rather than dropped: the
+                # gate here raises, it does not thin the corpus quietly.
+                circular = circularity_between(
+                    by_platform[reference_platform], by_platform[other_platform]
+                )
+                if circular:
+                    refused_circular.append(f"{ion.key}: {circular}")
+                    continue
                 reference_group = str(by_platform[reference_platform].calibration_group)
                 other_group = str(by_platform[other_platform].calibration_group)
                 point = _paired_points(ion, reference_group, other_group)
@@ -827,6 +914,7 @@ def compare_platforms(matching: MatchingReport) -> ComparisonReport:
         pairs=pairs,
         ions_considered=considered,
         ions_skipped_for_replicates=tuple(dict.fromkeys(skipped_replicates)),
+        pairs_refused_as_circular=tuple(dict.fromkeys(refused_circular)),
         synthetic=synthetic,
         unusable_sets_skipped=tuple(dict.fromkeys(unusable)),
         no_comparison_reason=reason,
