@@ -1,5 +1,14 @@
 # wmxccs and wmxglycan
 
+> **Two things at two maturities, and the second does not predict cross sections.** `src/wmxccs`
+> is a CCS harmonization pipeline with a model fitted on 142 cross-platform matched ions, at
+> `0.8.0`. `src/wmxglycan` ranks candidate glycan structures on evidence and has **no fitted model
+> of any kind** — there is no glycan CCS model and V1 will not have one — at `0.1.0`. Every cross
+> section the glycan layer reports is a measured value or an explicit statement that none is held.
+>
+> **New here? Read [docs/READ_THIS_FIRST.md](docs/READ_THIS_FIRST.md).** It is the seven things a
+> reader gets wrong in the first hour, and four of them have been mistaken for bugs already.
+
 **One repository, two packages, two services, one dashboard.** They share no code and meet
 through an explicit schema.
 
@@ -14,14 +23,23 @@ with a corrected one; both are returned.
 evidence that attests them. **It does not predict a cross section** - there is no glycan CCS
 model and V1 will not have one - so every cross section it reports is a measured value.
 
-The two packages **never import each other, in either direction**. `tools/glycan_service.py` is
-the only file that imports both, and `tests/test_glycan_boundary.py` enforces the wall rather
-than describing it.
+The two packages **never import each other, in either direction**, and
+`tests/test_glycan_boundary.py` enforces that rather than describing it.
+
+**CORRECTED 27 September 2026.** This said `tools/glycan_service.py` was the only file importing
+both. It is not, and never was after the adapter landed: `glycan_service.py` imports `wmxglycan`
+and the adapter, and nothing from `wmxccs`. The one production file that imports both packages is
+**`tools/glycan_ccs_evidence.py`**, which is in neither package — that is what keeps the wall up,
+because the traffic is carried from outside rather than by either side reaching across. Tests that
+check the relationship load both too, necessarily, and
+`test_exactly_one_production_file_imports_both_packages` counts the crossings outside the suite so
+that a second road cannot be added quietly.
 
 Start here, then:
 
 | | |
 |---|---|
+| **`docs/READ_THIS_FIRST.md`** | **the seven things a reader gets wrong in the first hour. Start here** |
 | `CLAUDE.md` | the hard constraints, and the process rules |
 | `LIMITATIONS.md` | what the CCS core does not do and does not know |
 | `docs/GLYCAN_LIMITATIONS.md` | the same for the glycan layer, including what the dashboard refuses to show |
@@ -289,10 +307,10 @@ what the result may and may not be called. It asserts nothing; the assertions ar
 Run these from the repository root. Substitute `.venv/bin/python` on macOS and Linux.
 
 ```
-.venv/Scripts/python -m pytest -q                  # 4105 tests (2317 wmxccs, 1777 wmxglycan, 11 repository-level)
+.venv/Scripts/python -m pytest -q                  # 4162 tests (2317 wmxccs, 1834 wmxglycan, 11 repository-level)
                                                    # 6 of those skip without node; nothing else skips
-.venv/Scripts/python -m tools.mutation --check     # 339 anchors, about a second
-.venv/Scripts/python -m tools.mutation             # the full sweep: 339 mutations, several hours
+.venv/Scripts/python -m tools.mutation --check     # 349 anchors, about a second
+.venv/Scripts/python -m tools.mutation             # the full sweep: 349 mutations, several hours
 ```
 
 **The counts in that block are derived-checked, not maintained.** `tests/test_repository_counts.py`

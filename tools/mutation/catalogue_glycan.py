@@ -122,8 +122,13 @@ GLYCAN_MUTATIONS: tuple[Mutation, ...] = (
         label="[N] completeness is claimed whenever the corpus happens to miss nothing",
         file="ranking.py",
         package=GLYCAN,
-        find='        constant, and `completeness` carries the distinction that actually varies.\n        """\n        return True',
-        replace='        constant, and `completeness` carries the distinction that actually varies.\n        """\n        return self.not_enumerated > 0',
+        # RE-ANCHORED 27 September 2026. The property returned a bare `True`; it now reads
+        # CORPUS_CAN_ESTABLISH_COMPLETENESS so that this fact and the reachability published by
+        # `decision_reachability()` come from one place. The INTENT is unchanged - claim
+        # completeness whenever the corpus happens to miss nothing - and the anchor moved with the
+        # code rather than being deleted, because a mutation that stops applying is a failure here.
+        find="        return not CORPUS_CAN_ESTABLISH_COMPLETENESS",
+        replace="        return self.not_enumerated > 0",
     ),
     Mutation(
         label="[N] a candidate set that breaks a curated rule is ranked rather than refused",
@@ -473,5 +478,81 @@ GLYCAN_MUTATIONS: tuple[Mutation, ...] = (
         package=GLYCAN,
         find="            if is_order_constraint(rule) and any(",
         replace="            if is_order_constraint(rule) and True or any(",
+    ),
+    # --- [R] the four claims moved out of documents and into the product, 27 September 2026 -----
+    #
+    # Each of these is a fact a reader would otherwise have to be told by a document: the shares
+    # do not close, two decisions are unreachable, and no measured cross section reaches any
+    # candidate. A fact served by the API is only as good as the arithmetic behind it, so each is
+    # broken here and a test has to notice.
+    Mutation(
+        label="[R] the shares accounting claims to close when it does not",
+        file="api.py",
+        package=GLYCAN,
+        find="    return abs(total + result.share_not_enumerated + result.share_not_proposed - 1.0) < 1e-9",
+        replace="    return True",
+    ),
+    Mutation(
+        label="[R] the candidate share sum silently drops a band",
+        file="api.py",
+        package=GLYCAN,
+        find="    return float(sum(shares)) if shares else None",
+        replace="    return float(sum(shares[1:])) if shares else None",
+    ),
+    Mutation(
+        label="[R] the mass off the candidates is reported as the mass on them",
+        file="api.py",
+        package=GLYCAN,
+        find="    return None if total is None else 1.0 - total",
+        replace="    return None if total is None else total",
+    ),
+    Mutation(
+        label="[R] the explanation of why the shares fall short is dropped from the response",
+        file="api.py",
+        package=GLYCAN,
+        find="            why_the_shares_do_not_sum_to_one=SHARES_DO_NOT_SUM_TO_ONE,",
+        replace='            why_the_shares_do_not_sum_to_one="",',
+    ),
+    Mutation(
+        label="[R] AI_ONLY is published as reachable today",
+        file="ranking.py",
+        package=GLYCAN,
+        find="            reachable_today=not ai_only_blockers,",
+        replace="            reachable_today=True,",
+    ),
+    Mutation(
+        label="[R] an unreachable decision is published with nothing that blocks it",
+        file="ranking.py",
+        package=GLYCAN,
+        find="            blocked_by=ai_only_blockers,",
+        replace="            blocked_by=(),",
+    ),
+    Mutation(
+        label="[R] IM_VALIDATION_RECOMMENDED is blocked by the model gate rather than completeness",
+        file="ranking.py",
+        package=GLYCAN,
+        find="    recommended_blockers = (no_completeness,) if not completeness else ()",
+        replace="    recommended_blockers = (no_model,) if not validated else ()",
+    ),
+    Mutation(
+        label="[R] the served reachability goes back to a hand-written list",
+        file="api.py",
+        package=GLYCAN,
+        find="            decision_reachable_today=tuple(\n                one.decision.value for one in decision_reachability() if one.reachable_today\n            ),",
+        replace="            decision_reachable_today=(Decision.IM_VALIDATION_REQUIRED.value,),",
+    ),
+    Mutation(
+        label="[R] the routes out of an unreachable decision are dropped from the response",
+        file="api.py",
+        package=GLYCAN,
+        find="                one.decision.value: one.what_would_reach_it or \"\"",
+        replace='                one.decision.value: ""',
+    ),
+    Mutation(
+        label="[R] the service claims to hold a measured cross section for a candidate",
+        file="prediction.py",
+        package=GLYCAN,
+        find="    holds_a_measured_cross_section_for_any_candidate: bool = False",
+        replace="    holds_a_measured_cross_section_for_any_candidate: bool = True",
     ),
 )

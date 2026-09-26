@@ -273,11 +273,29 @@ function confidenceCard(p){
     + kv("Also reported under", c.priors.join(", "))
     + kv("Calibration", c.calibration)
     + "</dl>"
-    + '<div class="section-label">Evidence mass that is not on any candidate shown</div><div class="metric-grid">'
+    + '<div class="section-label">Where the evidence mass sits. These three add to 100%</div><div class="metric-grid">'
+    + metric("On the candidates shown", pct(c.candidate_shares_sum) || "not defined")
     + metric("On reference structures not enumerated", pct(c.mass_on_reference_structures_not_enumerated) || "not defined")
     + metric("On a structure nobody proposed", pct(c.mass_on_a_structure_nobody_proposed) || "not defined")
-    + metric("On unattested classes", pct(c.mass_on_unattested_classes) || "not defined")
-    + '</div><p class="footer-note">' + esc(c.what_would_calibrate_it) + "</p></div>";
+    + "</div>"
+    // THE ANSWER WHERE THE READER IS LOOKING. Somebody who adds the per-class shares up gets
+    // about 69% for G2F, and the explanation has to be on this card rather than in a document
+    // they would have to know to open.
+    + '<div class="status"><b>Added up the candidate shares and got '
+    + esc(pct(c.candidate_shares_sum) || "less than 100%")
+    + ' rather than 100%? That is correct, and a version of this that summed to 100% would be the bug.</b><br>'
+    + esc(c.why_the_shares_do_not_sum_to_one) + "</div>"
+    + (c.shares_account_to_one === false
+        ? '<div class="status bad"><b>The accounting does not close.</b> The three shares above should'
+          + " sum to 100% and do not, so treat every number on this card as suspect and report it."
+          + " This message is served by the API, not computed here.</div>"
+        : "")
+    + '<div class="section-label">And inside the mass on candidates shown</div><div class="metric-grid">'
+    + metric("On classes nothing attests", pct(c.mass_on_unattested_classes) || "not defined")
+    + '</div><p class="footer-note"><b>This last figure is part of the first one, not a fourth share.</b>'
+    + " It counts candidates that ARE listed but which no reference structure attests, so adding it"
+    + " to the three above would exceed 100%.</p>"
+    + '<p class="footer-note">' + esc(c.what_would_calibrate_it) + "</p></div>";
   return html;
 }
 
@@ -512,6 +530,16 @@ async function loadModel(){
       + '<div class="card"><h2>Decision values</h2>'
       + '<div class="section-label">Declared by the spec</div><div class="chips">' + m.decision_values.map(v => '<span class="chip">' + esc(v) + "</span>").join("") + "</div>"
       + '<div class="section-label">Reachable today</div><div class="chips">' + m.decision_reachable_today.map(v => '<span class="pill bad">' + esc(v) + "</span>").join("") + "</div>"
+      // The two that never appear are what make the field look like a stub, so the page names
+      // them and says what would reach each one rather than leaving a reader to infer a defect.
+      + (m.decision_unreachable_today && Object.keys(m.decision_unreachable_today).length
+          ? '<div class="section-label">Unreachable today, and what would reach it</div><dl class="kv">'
+            + Object.keys(m.decision_unreachable_today).map(v => kv(v, m.decision_unreachable_today[v])).join("")
+            + "</dl><p class=\"footer-note\">These are not unimplemented branches. Both are live code that "
+            + "<code>tests/test_glycan_ranking.py</code> reaches by patching the gates named above, and the list "
+            + "is derived from those gates rather than written by hand &mdash; so a gate that opens changes this "
+            + "page.</p>"
+          : "")
       + '<div class="status" style="margin-top:12px"><b>One reachable value is the true state, not a broken field.</b><br>Two rules fire on every possible input: no validated model exists, and the completeness of a candidate set cannot be established from a corpus that records depositions rather than existence.</div></div>'
       + stampCard(m.stamp) + "</div></div>";
   } catch (error) {

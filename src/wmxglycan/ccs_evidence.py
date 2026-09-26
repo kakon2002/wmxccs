@@ -107,7 +107,26 @@ UNCERTAINTY_TYPE_UNKNOWN = (
 
 
 class CCSEvidenceState(StrEnum):
-    """What is known about a cross section for this composition and ion."""
+    """What is known about a cross section for this composition and ion.
+
+    **`MEASURED_REFERENCE` IS UNREACHABLE IN THIS RELEASE. Not thin, not rare - unreachable, for
+    every candidate set the platform can produce.** Say it that way round, because "24 glycan CCS
+    records clear the licence gate" reads like 24 usable values and it is zero:
+
+      - all 24 cleared glycan records are milk oligosaccharides and **not one of them records a
+        composition**, so nothing can key a reference to a candidate set. `0 of 541 cleared
+        record(s) carry a composition` is COUNTED by the adapter's `reachable_states()`, not
+        asserted here, and a test fails the moment that count changes;
+      - the 89 Struwe 2015 records that ARE N-glycans are held on a drift gas and an uncertainty
+        type genuinely absent from the source. Reading another paper for the gas does not release
+        them, and the gate is not being loosened to reach a number.
+
+    So every path that would attach a measured cross section to a candidate is dead today, and the
+    states a real deployment actually returns are `HELD_NOT_RELEASABLE`, `NONE_IN_CORPUS_SEARCHED`
+    and `LOOKUP_FAILED`. What would reach `MEASURED_REFERENCE`: a cleared record that carries a
+    composition. What would make it DISCRIMINATE between candidates is a further and much larger
+    step - a measurement that resolves to one structure rather than to a composition and an ion.
+    """
 
     MEASURED_REFERENCE = "measured_reference"
     HELD_NOT_RELEASABLE = "held_not_releasable"

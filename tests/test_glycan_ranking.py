@@ -1066,18 +1066,35 @@ def test_opening_only_the_model_gate_leaves_ai_only_shut(monkeypatch):
 
 
 def test_the_ai_only_literal_appears_in_exactly_one_returning_branch():
+    """Exactly one place DECIDES AI_ONLY, so there is one branch a test can reach and patch.
+
+    SHARPENED 27 September 2026. This walked every node under every `return` and counted any
+    mention of AI_ONLY, which caught `decision_reachability()` - a function that returns a
+    DESCRIPTION of AI_ONLY's reachability rather than the decision itself, where the name appears
+    as a keyword argument to a constructor. Broadening the allowance to two would have weakened the
+    guard permanently, so what it counts is narrowed to what it was always about instead: AI_ONLY
+    appearing as the returned value, or as an element of a returned tuple, rather than anywhere
+    inside a nested call. `return Decision.AI_ONLY, rules` counts; `return (Thing(decision=...),)`
+    does not, and a second real decision site still fails this.
+    """
     source = pathlib.Path(ranking.__file__).read_text(encoding="utf-8")
     tree = ast.parse(source)
-    returns = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Return)
-        and any(
-            isinstance(inner, ast.Attribute) and inner.attr == "AI_ONLY"
-            for inner in ast.walk(node)
+
+    def decided_here(node: ast.Return) -> bool:
+        value = node.value
+        if value is None:
+            return False
+        returned = value.elts if isinstance(value, ast.Tuple) else [value]
+        return any(
+            isinstance(one, ast.Attribute) and one.attr == "AI_ONLY" for one in returned
         )
-    ]
-    assert len(returns) == 1, "AI_ONLY must be returned from exactly one place"
+
+    returns = [node for node in ast.walk(tree) if isinstance(node, ast.Return) and decided_here(node)]
+    assert len(returns) == 1, "AI_ONLY must be DECIDED in exactly one place"
+
+    # The floor: the narrowing above must not have made this count nothing at all, which would
+    # leave the assertion passing on a module that never mentions AI_ONLY.
+    assert "AI_ONLY" in source
     decide = inspect.getsource(ranking._decide)
     assert "a_validated_model_exists()" in decide
 

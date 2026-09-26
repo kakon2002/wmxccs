@@ -562,10 +562,21 @@ def test_the_rendered_page_carries_the_provenance(rendered):
 
 def test_the_rendered_page_reports_every_reserved_mass(rendered):
     # So the number cannot be read as closed over the candidates shown.
+    #
+    # RE-LABELLED 27 September 2026. The three reserved masses used to sit under one heading,
+    # "Evidence mass that is not on any candidate shown", and the third of them - the unattested
+    # mass - is NOT that: those candidates are shown, they are just attested by nothing. The card
+    # now states the three-way accounting that adds to 100% and keeps the subset separate, which is
+    # the whole of item 3 in docs/READ_THIS_FIRST.md.
     for label in (
+        "On the candidates shown",
         "On reference structures not enumerated",
         "On a structure nobody proposed",
-        "On unattested classes",
+        "On classes nothing attests",
     ):
         assert label in rendered, label
     assert "This is not a probability." in rendered
+    # The reader who adds the candidate shares up finds the answer on this card.
+    assert "rather than 100%? That is correct" in rendered
+    assert "not a fourth share" in rendered
+    assert "These three add to 100%" in rendered

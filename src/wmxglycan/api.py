@@ -81,7 +81,14 @@ from .prediction import (
     ValidationResponse,
 )
 from .prediction import MeasurementIn
-from .ranking import Calibration, Decision, RankedSet, decide, rank
+from .ranking import (
+    Calibration,
+    Decision,
+    RankedSet,
+    decide,
+    decision_reachability,
+    rank,
+)
 from .store import AlreadyFrozen, Store, StoredPrediction, new_id, now
 
 DEFAULT_DATABASE = Path(__file__).resolve().parents[2] / "data" / "glycan_service.sqlite3"
@@ -104,6 +111,52 @@ NOTHING_ATTACHED = (
     "no experimental measurements have been attached to prediction {prediction_id!r}, so there is"
     " nothing to compare. POST to /v1/predictions/{prediction_id}/validation first"
 )
+
+# Served beside the number, because a reader who adds the candidate shares up needs the answer
+# where they are looking rather than in a document they would have to know to open.
+SHARES_DO_NOT_SUM_TO_ONE = (
+    "They cannot, and a version of this that did would be the bug. The shares are over a"
+    " HYPOTHESIS SPACE, not over the candidate list: it holds every candidate shown, plus the"
+    " reference structures of this composition that the enumerator did not propose, plus one"
+    " catch-all for a structure neither proposed here nor deposited anywhere. Only the first group"
+    " is returned to you, so `candidate_shares_sum` is below 1 by exactly the mass sitting on the"
+    " other two - and those three DO account to 1, which `shares_account_to_one` reports as a"
+    " checked identity. The catch-all is never zero, so this can never close. An earlier version"
+    " reported shares that summed to exactly 1.0 for a composition with one deposited structure,"
+    " which asserted the answer was in the set on the strength of that one deposition."
+    " `mass_on_unattested_classes` is NOT a fourth term: it is already inside"
+    " `candidate_shares_sum` and counts candidates that are shown but attested by nothing."
+)
+
+
+def _band_shares(result: RankedSet) -> tuple[float, ...]:
+    return tuple(
+        band.band_total_share for band in result.bands if band.band_total_share is not None
+    )
+
+
+def _candidate_shares_sum(result: RankedSet) -> float | None:
+    """Every share served over the candidates, added up, so nobody has to add them up."""
+    shares = _band_shares(result)
+    return float(sum(shares)) if shares else None
+
+
+def _mass_off_the_candidates(result: RankedSet) -> float | None:
+    total = _candidate_shares_sum(result)
+    return None if total is None else 1.0 - total
+
+
+def _shares_account_to_one(result: RankedSet) -> bool | None:
+    """The identity, CHECKED against this result rather than asserted about the design.
+
+    A promise in a docstring would stay true-looking after the arithmetic stopped holding. This
+    returns False in that case, and a test asserts it is True for every composition it ranks - so
+    a change that breaks the accounting is a failing test rather than a wrong number in a field.
+    """
+    total = _candidate_shares_sum(result)
+    if total is None or result.share_not_enumerated is None or result.share_not_proposed is None:
+        return None
+    return abs(total + result.share_not_enumerated + result.share_not_proposed - 1.0) < 1e-9
 
 
 # --- rendering a ranked set into the served shapes -------------------------------------------------
@@ -193,9 +246,13 @@ def _render(
             calibration=result.calibration,
             what_would_calibrate_it=result.what_would_calibrate_it,
             what_the_number_means=result.share_means,
+            candidate_shares_sum=_candidate_shares_sum(result),
+            mass_not_on_any_candidate=_mass_off_the_candidates(result),
             mass_on_reference_structures_not_enumerated=result.share_not_enumerated,
             mass_on_a_structure_nobody_proposed=result.share_not_proposed,
             mass_on_unattested_classes=result.share_on_unattested_classes,
+            shares_account_to_one=_shares_account_to_one(result),
+            why_the_shares_do_not_sum_to_one=SHARES_DO_NOT_SUM_TO_ONE,
             mass_under_priors={
                 name: dict(masses) for name, masses in result.mass_under_priors.items()
             },
@@ -751,9 +808,18 @@ def create_app(
                 " set and nothing in it can construct one"
             ),
             decision_values=tuple(value.value for value in Decision),
-            # DERIVED FROM THE RULES, not listed: whatever the decision function can actually
-            # reach today. Currently one value, and the docs say why at length.
-            decision_reachable_today=(Decision.IM_VALIDATION_REQUIRED.value,),
+            # ACTUALLY DERIVED NOW. This said "DERIVED FROM THE RULES, not listed" above a
+            # hand-written one-element tuple, which is the shape LIMITATIONS 4.5 collects: a
+            # comment asserting a property the code next to it does not have. `ranking`
+            # reads the two gates and answers, so a gate that opens cannot leave this behind.
+            decision_reachable_today=tuple(
+                one.decision.value for one in decision_reachability() if one.reachable_today
+            ),
+            decision_unreachable_today={
+                one.decision.value: one.what_would_reach_it or ""
+                for one in decision_reachability()
+                if not one.reachable_today
+            },
             domain=DomainOut(
                 residues_supported=tuple(residue.value for residue in Residue),
                 biosynthetic_rules=len(enumerator.constraints),

@@ -5,11 +5,16 @@ and isomer layer ported beside it. The rule is that they talk through an explici
 schema and never by reaching into each other's internals, and the only way that
 rule survives contact with a deadline is if breaking it turns the suite red.
 
-RIGHT NOW NOTHING CROSSES AT ALL, and that is worth stating rather than implying:
-there is no boundary schema yet, because there is no traffic yet to carry. What
-these tests protect is the precondition for one - that neither package can start
-importing the other by accident, so that when the schema arrives it is the only
-road between them and not a convenience beside three shortcuts.
+TRAFFIC CROSSES NOW, AND THE ROAD IS COUNTED. This docstring said "RIGHT NOW
+NOTHING CROSSES AT ALL ... there is no boundary schema yet" until 27 September
+2026, which was true when it was written and stopped being true when the schema
+landed. `wmxglycan.ccs_evidence` declares what the glycan layer needs from
+whatever holds cross sections, and `tools/glycan_ccs_evidence.py` is the adapter
+that supplies it. The adapter is in NEITHER package, which is what keeps the wall
+up: the traffic is carried from outside rather than by either side reaching
+across. `test_exactly_one_production_file_imports_both_packages` counts the
+crossings, so a second road cannot be added quietly - three README-era sentences
+about "the only file that imports both" were already naming the wrong file.
 
 The consequence, which is the point of the rule: this package carries its own
 IMSType, DriftGas, Polarity and CCSMeasurement, so the repository holds two
@@ -169,3 +174,56 @@ def test_the_glycan_layer_is_not_on_the_ccs_service_dependency_list():
         assert package in named(declared), f"{package} should be declared under an extra"
     # And the extra is the one the prose names, so the install instruction is real.
     assert named(extras["glycan"]) == {"networkx", "glycowork", "scikit-learn"}
+
+
+def test_exactly_one_production_file_imports_both_packages():
+    """The crossing is COUNTED, so a second road cannot appear quietly.
+
+    WHY THIS EXISTS. "X is the only file that imports both" was written in prose in three places
+    and named the WRONG FILE in one of them - README claimed `tools/glycan_service.py`, which
+    imports `wmxglycan` and the adapter and nothing from `wmxccs`, and that sentence survived the
+    arrival of the real adapter. A claim about what the code does, maintained by hand beside the
+    code: LIMITATIONS 4.5 collects that shape.
+
+    THE RULE IS ABOUT PRODUCTION CODE, and the first version of this test got that wrong too. It
+    asserted a hand-written list of two paths and immediately failed on a THIRD legitimate
+    crossing - `tests/test_repository_counts.py`, which loads both packages to compare their
+    version strings. Tests that check the relationship between the two packages have to load both;
+    forbidding that would forbid testing the wall. So what is counted is the crossings OUTSIDE the
+    test suite, which is the claim README and docs/READ_THIS_FIRST.md actually make, and the
+    allowance for tests is a rule rather than a list that needs maintaining.
+    """
+    repository = SRC.parent
+    listing = subprocess.run(
+        ["git", "ls-files", "*.py"],
+        cwd=repository, capture_output=True, text=True, check=True,
+    ).stdout.split()
+    # A listing that came back empty would make this vacuously green, which is the failure this
+    # file is about.
+    assert len(listing) > 50, f"git ls-files returned {len(listing)} python files"
+
+    crossings = []
+    for relative in listing:
+        path = repository / relative
+        if not path.is_file():
+            continue
+        if {"wmxccs", "wmxglycan"} <= _imported_names(path):
+            crossings.append(relative.replace("\\", "/"))
+
+    # THE WALL: nothing inside either package, in either direction. The parametrised tests above
+    # say the same thing per module; this says it once over the whole repository, so a module added
+    # to a package after those lists were built is still covered.
+    inside = [one for one in crossings if one.startswith("src/")]
+    assert inside == [], f"a file INSIDE a package imports both: {inside}"
+
+    # THE ROAD: exactly one crossing that is not a test, and it is the adapter.
+    production = [one for one in crossings if not one.startswith("tests/")]
+    assert production == ["tools/glycan_ccs_evidence.py"], (
+        f"the production files importing BOTH packages are {production}. There must be exactly"
+        " one and it must be the adapter, which is in NEITHER package - that is what keeps the"
+        " wall up, because the traffic is carried from outside rather than by either side"
+        " reaching across. A second crossing belongs beside the adapter, and the prose in"
+        " README.md, CLAUDE.md and docs/READ_THIS_FIRST.md has to move with it."
+    )
+    # And at least one test loads both, or the relationship between them is untested.
+    assert [one for one in crossings if one.startswith("tests/")], crossings

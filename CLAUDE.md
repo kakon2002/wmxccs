@@ -36,10 +36,15 @@ and stays separate... nothing glycan-specific comes across." The brief of
   They meet through an explicit schema, and as of 26 September 2026 that schema exists and
   carries traffic: `wmxglycan.ccs_evidence` declares what the glycan layer needs from whatever
   holds cross sections — a `CCSEvidence` model and a `CCSEvidenceLookup` Protocol — and
-  **`tools/glycan_ccs_evidence.py` is the adapter, the only file in the repository that imports
-  both packages.** It is in neither package, which is what keeps the wall up: the traffic is
-  carried from outside rather than by either side reaching across. If a second crossing is ever
-  needed it belongs beside that adapter and not inside a package.
+  **`tools/glycan_ccs_evidence.py` is the adapter, and the only PRODUCTION file that imports both
+  packages.** It is in neither package, which is what keeps the wall up: the traffic is carried
+  from outside rather than by either side reaching across. If a second crossing is ever needed it
+  belongs beside that adapter and not inside a package.
+
+  "The only file in the repository" is what this said until 27 September 2026, and it was wrong:
+  tests that check the relationship between the two packages load both, and have to.
+  `test_exactly_one_production_file_imports_both_packages` counts the crossings outside the suite
+  so that none of these three sentences has to be maintained by hand again.
 - **The CCS core does not change because the glycan layer exists.** It is the
   owner's P0 item. `networkx`, `glycowork` and `scikit-learn` are declared under
   the `glycan` extra, so a CCS-only install is what it always was, and the model

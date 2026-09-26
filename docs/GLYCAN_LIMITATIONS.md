@@ -66,8 +66,34 @@ a number without an uncertainty type.** The uncertainty is genuinely absent from
 so reading Hofmann 2014 for the drift gas would unblock the gas half and leave the
 uncertainty half exactly where it is. **The gate is not loosened to reach a number.**
 
-The consequence for the ranker is stated in § 3 below: CCS is evidence where we hold it and a
-stated absence where we do not, never a prediction.
+### Say the consequence plainly: `MEASURED_REFERENCE` is UNREACHABLE, not thin
+
+Put the two halves above together and the result is stronger than either, so it is worth one
+sentence with no hedging in it: **the measured-reference path is unreachable for every candidate
+set this platform can produce in this release.** Not rare, not thin, not "sparse coverage" —
+unreachable, without exception.
+
+"24 cleared glycan records" reads like 24 usable values. The usable number is **zero**: 24 with no
+composition to key them by, and 89 that have one but are held. So every response carries a stated
+ABSENCE of CCS evidence, and the states a real deployment returns are `HELD_NOT_RELEASABLE`,
+`NONE_IN_CORPUS_SEARCHED` and `LOOKUP_FAILED`.
+
+**It is counted, not claimed.** The adapter's `reachable_states()` reports
+`NOT REACHABLE ... 0 of 541 cleared record(s) carry a composition`, derived by counting the corpus,
+and `test_the_unreachability_claim_fails_the_moment_a_cleared_record_carries_a_composition` fails
+the moment that count changes. The same fact is stated at `CCSEvidenceState` in
+`src/wmxglycan/ccs_evidence.py` and served in the API's `domain` block as
+`holds_a_measured_cross_section_for_any_candidate: false`.
+
+**And there is a second step behind the first.** A cleared record carrying a composition would
+make the state reachable, and would still not separate candidates: a value keyed on composition and
+ion is shared by every isomer of that composition. Discriminating between candidates needs a
+measurement that resolves to one STRUCTURE, which is a different and much larger ask. The decision
+rule `no cross section is held for this structure` reads the evidence LEVEL for exactly this
+reason, and `EvidenceLevel.STRUCTURE` is what it is looking for.
+
+The consequence for the ranker is in § 3 below: CCS is evidence where we hold it and a stated
+absence where we do not, never a prediction.
 
 ## 3. What the ranker can and cannot rank on
 

@@ -1,7 +1,20 @@
 # Handover
 
+> **Before anything else: this repository holds TWO packages at TWO maturities, and the glycan one
+> does not predict cross sections.** `src/wmxccs` is the CCS harmonization pipeline, `0.8.0`, with
+> a model fitted on 142 cross-platform matched ions. `src/wmxglycan` ranks candidate glycan
+> structures on the evidence that attests them, `0.1.0`, with **no fitted model of any kind** —
+> there is no glycan CCS model and V1 will not have one. Nothing in the CCS sections below carries
+> across that wall.
+>
+> **[READ_THIS_FIRST.md](READ_THIS_FIRST.md) is the seven things a reader gets wrong in the first
+> hour.** Read it before this document. Four of the seven have been mistaken for bugs already, and
+> two of them would change a number you reported to somebody.
+
 For an engineer picking up `wmxccs` cold. Written 21 September 2026 against `v0.6.0-mvp`;
-figures and tag reference corrected 23 September 2026 for `v0.6.2-mvp`.
+figures and tag reference corrected 23 September 2026 for `v0.6.2-mvp`. The banner above and the
+document it points at were added 27 September 2026 for `v0.8.0-mvp`, when the repository stopped
+holding one thing.
 
 This is an orientation document. It does not repeat `LIMITATIONS.md`, which is the long
 and authoritative account of what this platform does not do and does not know. What this

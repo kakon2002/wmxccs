@@ -205,7 +205,31 @@ ONLY_ONE_CANDIDATE = (
 
 
 class Decision(StrEnum):
-    """What the platform says should happen next. The spec's three values."""
+    """What the platform says should happen next. The spec's three values.
+
+    **TWO OF THESE THREE ARE UNREACHABLE TODAY, AND THAT IS NOT A BUG IN THIS ENUM.** Read this
+    before concluding the decision field is a stub: `IM_VALIDATION_REQUIRED` is the only value any
+    input can produce, because two of the published rules in `decide()` fire on EVERY input.
+
+        AI_ONLY                    UNREACHABLE. Two independent gates, and both would have to
+                                   change: no model here has been validated against known truth
+                                   (`a_validated_model_exists()`), and the completeness of a
+                                   candidate set cannot be established from a corpus of
+                                   depositions (`CORPUS_CAN_ESTABLISH_COMPLETENESS`).
+        IM_VALIDATION_RECOMMENDED  UNREACHABLE. Blocked by the completeness gate alone.
+        IM_VALIDATION_REQUIRED     The value served for every request in this release.
+
+    **What would reach them** is in `decision_reachability()` below, which DERIVES the answer by
+    reading the same two gates `decide()` reads instead of restating it in prose. So the day either
+    gate changes, the reachability this module publishes changes with it - and the sentence above
+    cannot quietly become false, because `tests/test_glycan_ranking.py` patches both gates and
+    asserts the other two values then appear. That is also how the branches are shown to be LIVE
+    CODE rather than an enum member nothing references.
+
+    Do not "fix" this by relaxing a threshold. A platform with no validated CCS model asking for
+    instrument validation on every answer is the correct output, and it is what the specification
+    means by identifying predictions that require experimental validation.
+    """
 
     AI_ONLY = "AI_ONLY"
     IM_VALIDATION_RECOMMENDED = "IM_VALIDATION_RECOMMENDED"
@@ -242,17 +266,107 @@ class SetCompleteness(StrEnum):
     NOT_ESTABLISHABLE = "not_establishable"
 
 
-# THE ONE GATE THAT MAKES AI_ONLY UNREACHABLE. A named module-level fact rather than a condition
-# buried in a branch, so that a test can patch it and prove the branch is LIVE CODE - "AI_ONLY
-# never appears" is equally satisfied by dead code, a misspelled comparison or an enum member
-# nothing references, and this project has met that shape repeatedly (LIMITATIONS 4.5 counts
-# them; the count is kept in one place on purpose).
+# THE FIRST OF THE TWO GATES THAT MAKE AI_ONLY UNREACHABLE. A named module-level fact rather than
+# a condition buried in a branch, so that a test can patch it and prove the branch is LIVE CODE -
+# "AI_ONLY never appears" is equally satisfied by dead code, a misspelled comparison or an enum
+# member nothing references, and this project has met that shape repeatedly (LIMITATIONS 4.5
+# counts them; the count is kept in one place on purpose).
 VALIDATED_MODEL: object | None = None
+
+# THE SECOND GATE, and the one that also blocks IM_VALIDATION_RECOMMENDED. Named here for the same
+# reason as the first: `Coverage.truth_may_not_be_in_the_candidate_set` READS THIS rather than
+# returning a bare True, so the fact lives in one place and patching it moves both that property
+# and `decision_reachability()` together. A corpus records what has been deposited; nothing in it
+# can show that a candidate set misses nothing. See SetCompleteness, which has no COMPLETE member
+# for the same reason.
+CORPUS_CAN_ESTABLISH_COMPLETENESS = False
 
 
 def a_validated_model_exists() -> bool:
     """False, and it has never been anything else. See VALIDATED_MODEL."""
     return VALIDATED_MODEL is not None
+
+
+@dataclass(frozen=True)
+class DecisionReachability:
+    """Whether one `Decision` value can be produced today, and what would change that."""
+
+    decision: Decision
+    reachable_today: bool
+    blocked_by: tuple[str, ...]
+    what_would_reach_it: str | None
+
+
+def decision_reachability() -> tuple[DecisionReachability, ...]:
+    """Which of the three decisions any input can produce, DERIVED from the two gates.
+
+    WHY DERIVED. The served list of reachable values was a hand-written tuple in `api.py` until
+    27 September 2026, which is the shape LIMITATIONS 4.5 collects: a statement about what the
+    code can do, maintained by hand next to the code that does it. This reads the same two
+    predicates `decide()` reads, so a gate that opens cannot leave a published claim behind.
+
+    THE LOGIC, which is just `decide()` read backwards. Every published rule maps to
+    IM_VALIDATION_REQUIRED and `decide()` returns it the moment ANY rule fires. Two rules fire on
+    every input while the gates hold: "the candidate set may not contain the answer" (the
+    completeness gate) and "no validated model exists". So while the completeness gate holds,
+    nothing else is reachable at all; if it opened, a single-class set with structure-level
+    evidence would reach IM_VALIDATION_RECOMMENDED, and AI_ONLY additionally needs a validated
+    model.
+    """
+    validated = a_validated_model_exists()
+    completeness = CORPUS_CAN_ESTABLISH_COMPLETENESS
+
+    no_model = (
+        "no model here has been validated against independently known structures"
+        " (ranking.VALIDATED_MODEL is None)"
+    )
+    no_completeness = (
+        "the completeness of a candidate set is not establishable from a corpus of depositions"
+        " (ranking.CORPUS_CAN_ESTABLISH_COMPLETENESS is False)"
+    )
+
+    ai_only_blockers = tuple(
+        reason
+        for reason, holds in ((no_model, not validated), (no_completeness, not completeness))
+        if holds
+    )
+    recommended_blockers = (no_completeness,) if not completeness else ()
+
+    return (
+        DecisionReachability(
+            decision=Decision.AI_ONLY,
+            reachable_today=not ai_only_blockers,
+            blocked_by=ai_only_blockers,
+            what_would_reach_it=(
+                None
+                if not ai_only_blockers
+                else (
+                    "a model validated against structures known by another method, AND a way to"
+                    " establish that a candidate set is complete. Both, not either: each blocks"
+                    " this value on its own"
+                )
+            ),
+        ),
+        DecisionReachability(
+            decision=Decision.IM_VALIDATION_RECOMMENDED,
+            reachable_today=not recommended_blockers,
+            blocked_by=recommended_blockers,
+            what_would_reach_it=(
+                None
+                if not recommended_blockers
+                else (
+                    "a source that establishes completeness rather than recording depositions."
+                    " A validated model is NOT required for this value, only for AI_ONLY"
+                )
+            ),
+        ),
+        DecisionReachability(
+            decision=Decision.IM_VALIDATION_REQUIRED,
+            reachable_today=True,
+            blocked_by=(),
+            what_would_reach_it=None,
+        ),
+    )
 
 
 # --- the pieces of a result -----------------------------------------------------------------------
@@ -384,8 +498,12 @@ class Coverage:
 
         Completeness is not a thing this corpus can establish, so the honest value is a
         constant, and `completeness` carries the distinction that actually varies.
+
+        IT READS `CORPUS_CAN_ESTABLISH_COMPLETENESS` rather than returning a bare True, so this
+        fact and the reachability `decision_reachability()` publishes come from one place. A bare
+        True here and a sentence about unreachability elsewhere is two copies of one claim.
         """
-        return True
+        return not CORPUS_CAN_ESTABLISH_COMPLETENESS
 
     def summary(self) -> str:
         if self.state is CoverageState.UNEVALUABLE:

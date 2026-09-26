@@ -187,9 +187,49 @@ class ConfidenceOut(BaseModel):
     calibration: Calibration
     what_would_calibrate_it: str
     what_the_number_means: str
-    mass_on_reference_structures_not_enumerated: float | None = None
-    mass_on_a_structure_nobody_proposed: float | None = None
-    mass_on_unattested_classes: float | None = None
+
+    # --- THE SHARES DO NOT SUM TO 1, AND THE ANSWER IS HERE RATHER THAN IN A DOCUMENT ------------
+    # Somebody who adds up the per-class shares gets about 0.69 for Hex5HexNAc4Fuc1 and has to be
+    # told why WHERE THEY ARE LOOKING. The three fields that DO account to 1 are named as such, the
+    # sum is served so nobody has to compute it, and the one field that is a SUBSET rather than a
+    # fourth term says so in its own description - adding that one too is the obvious next mistake.
+    candidate_shares_sum: float | None = Field(
+        default=None,
+        description="Every share served over the candidates shown, added up. It is LESS THAN 1 by"
+        " design and `mass_not_on_any_candidate` is the difference.",
+    )
+    mass_not_on_any_candidate: float | None = Field(
+        default=None,
+        description="1 - candidate_shares_sum. Evidence mass on hypotheses that are not among the"
+        " candidates at all, which is why a candidate set can never be treated as exhaustive.",
+    )
+    mass_on_reference_structures_not_enumerated: float | None = Field(
+        default=None,
+        description="Part of `mass_not_on_any_candidate`: structures the reference corpus holds"
+        " for this composition that the enumerator did not propose.",
+    )
+    mass_on_a_structure_nobody_proposed: float | None = Field(
+        default=None,
+        description="Part of `mass_not_on_any_candidate`: the catch-all hypothesis, a structure"
+        " neither proposed here nor deposited anywhere. It is never zero, which is what stops the"
+        " shares summing to 1.",
+    )
+    mass_on_unattested_classes: float | None = Field(
+        default=None,
+        description="A SUBSET OF `candidate_shares_sum`, NOT a fourth term: mass on candidates"
+        " that ARE shown but which no reference structure attests. Do not add this to the three"
+        " that account to 1 - it is already inside `candidate_shares_sum`.",
+    )
+    shares_account_to_one: bool | None = Field(
+        default=None,
+        description="Whether candidate_shares_sum + mass_on_reference_structures_not_enumerated +"
+        " mass_on_a_structure_nobody_proposed == 1, to within floating point. Served as a checked"
+        " identity rather than a promise; a consumer can verify the accounting from the response.",
+    )
+    why_the_shares_do_not_sum_to_one: str = Field(
+        default="",
+        description="In one paragraph, for a reader who has just added up the candidate shares.",
+    )
     mass_under_priors: Mapping[str, Mapping[str, float | None]] = Field(default_factory=dict)
 
 
@@ -538,6 +578,19 @@ class DomainOut(BaseModel):
         "No. This platform ranks candidate structures on evidence. There is no glycan CCS model"
         " and V1 will not have one, so every cross section in a response is a MEASURED value"
     )
+    holds_a_measured_cross_section_for_any_candidate: bool = False
+    measured_reference_is_unreachable_note: str = (
+        "AND IT HOLDS NONE. Stated plainly because the previous field only rules out PREDICTED"
+        " values: the measured-reference path is UNREACHABLE for every candidate set in this"
+        " release, not merely thin. All 24 glycan cross sections that clear the licence gate are"
+        " milk oligosaccharides recording no composition, so none of them can be keyed to a"
+        " candidate set, and the 89 Struwe 2015 N-glycan values are held on a drift gas and an"
+        " uncertainty type absent from the source. Every response therefore carries a STATED"
+        " ABSENCE of CCS evidence rather than a value, and that absence is the honest output"
+        " rather than a gap in the wiring. What would change it: a cleared record carrying a"
+        " composition. What would make such a value SEPARATE candidates is a further step - a"
+        " measurement resolving to one structure rather than to a composition and an ion"
+    )
     known_coverage_limit: str = (
         "the enumerator misses between a third and four fifths of the fully-resolved reference"
         " structures of a given composition - 17 of 34 for Hex5HexNAc4Fuc1, 22 of 28 for"
@@ -561,6 +614,16 @@ class CurrentModelResponse(BaseModel):
     calibration: Calibration = Calibration.NEVER_CALIBRATED
     what_would_calibrate_it: str
     decision_values: tuple[str, ...] = ()
-    decision_reachable_today: tuple[str, ...] = ()
+    decision_reachable_today: tuple[str, ...] = Field(
+        default=(),
+        description="Which of `decision_values` any input can actually produce. Derived from the"
+        " gates in `ranking.decision_reachability()`, not listed by hand.",
+    )
+    decision_unreachable_today: Mapping[str, str] = Field(
+        default_factory=dict,
+        description="The values nothing can reach today, each against what WOULD reach it. Served"
+        " so a consumer who finds two enum values that never appear is told why here rather than"
+        " concluding the field is a stub.",
+    )
     domain: DomainOut
     predictions_frozen: int = 0
