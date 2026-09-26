@@ -286,7 +286,7 @@ by hand should copy.
 
 ### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
 
-Eleven separate instances in this repository so far, in eleven different shapes. They
+Twelve separate instances in this repository so far, in twelve different shapes. They
 are collected here rather than filed apart, because the shape is the point: in every
 one, the suite was green, the coverage looked complete, and a behaviour nobody was
 actually protecting could have been deleted without a single test going red.
@@ -573,6 +573,50 @@ The fix is in two parts, and the second is the one that generalises:
 - **ask what a guard is asymmetric about.** `extra="forbid"`, a minimum without a maximum, a
   validator on one spelling of a field and not the other: each of these has caught something
   here, and each has a blind direction that reads as covered.
+
+**Twelve: THE CLASS TRAVELS WITH THE CODE. A hand-written module list, ported in from another
+repository, failed on the straight copy.** CLOSED 26 September 2026, during the glycan port.
+It is the FOURTH occurrence of the hand-maintained-list shape, after Ten and Eleven, and the
+first that was not written here.
+
+`test_training.py` in `Project2` guarded something worth guarding: that importing the package
+loads no estimator library, so an accidental fit anywhere in the suite turns the suite red. It
+did it by importing every module in a list called `PACKAGE_MODULES` - eleven names, written
+out by hand. The glycan port copied fourteen test files verbatim and ran them against the
+copy, and exactly one test failed:
+
+```
+FAILED test_training.py::test_no_estimator_library_is_imported_by_the_package
+  ModuleNotFoundError: No module named 'wmxglycan.api'
+```
+
+`api.py` is deliberately not ported, so a guard about estimator libraries failed for a reason
+with nothing to do with estimator libraries.
+
+**Why this is an instance and not a porting inconvenience.** The failure was loud here only
+because a module went MISSING. The dangerous direction is the other one, and it is silent: the
+day anyone ADDS a module to that package and does not think about this list, the guard stops
+covering it, the suite stays green, and an estimator import in the new module goes unnoticed.
+That is the same asymmetry as instance Eleven, in a different mechanism - a hand-written list
+of what a guard covers can only ever be checked against the world by someone looking at both,
+and the person who adds a module is not looking at a test about estimators.
+
+The list is now derived from the package directory. **And the derivation needed its own floor,
+which is the part worth carrying forward:** a glob that returns nothing would import nothing,
+leave the guard green, and be the identical defect one level up - so
+`test_the_derived_module_list_actually_covers_the_package` asserts the derived list has at
+least fifteen entries and names the six modules the port was commissioned for. Replacing a
+hand-written list with a derived one moves the failure mode rather than removing it, unless
+something asserts the derivation is not empty.
+
+- **a guard's coverage is data, and data goes stale.** Wherever a test enumerates what it
+  protects - modules, fields, call sites, rules - derive the enumeration from the thing itself
+  and then assert the derivation is non-empty. Two of the four occurrences of this shape were
+  found by accident and one was found by a port.
+- **the failure class is not a property of this codebase's habits.** It arrived intact from a
+  separate repository written to the same standards. Expect it in anything ported in, and look
+  for it deliberately rather than hoping a copied suite surfaces it - this one surfaced only
+  because a module was absent, which was luck.
 
 ### 4.6 An unstated drift gas keyed records together; an unstated carrier did not
 

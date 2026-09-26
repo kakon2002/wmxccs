@@ -14,11 +14,37 @@ It never overwrites an original measurement with a corrected one. Both are retur
 Deadline: deployable version by 25 September 2026, 27 September at the latest.
 Daily report to the owner every evening.
 
-## What this is not
+## Two packages, and the wall between them
 
-Not the glycan platform. That repo (`Project2`, package `wmxglycan`) is a separate
-project and stays separate. Code is ported from it where noted in CONTEXT.md,
-never imported from it, and nothing glycan-specific comes across.
+`src/wmxccs` is the CCS core described above. `src/wmxglycan` is the glycan and
+isomer layer, ported beside it on 26 September 2026 on the owner's brief. One
+repository, two packages, and they share no code.
+
+**This section said the opposite until 26 September 2026** and the old wording is
+worth keeping, because it was correct for every milestone up to v0.7.0: "Not the
+glycan platform. That repo (`Project2`, package `wmxglycan`) is a separate project
+and stays separate... nothing glycan-specific comes across." The brief of
+26 September supersedes it. What survives from it, unchanged and load-bearing:
+
+- **`Project2` is still not a dependency.** Code was COPIED AND ADAPTED from it,
+  never imported. It is not on this repository's path and a checkout elsewhere
+  will not have it. Every ported file is listed in `docs/GLYCAN_PORT.md` against
+  the digest of the file it came from.
+- **The two packages never import each other.** Not in either direction. They meet
+  through an explicit schema and nowhere else. This is enforced by
+  `tests/test_glycan_boundary.py`, not by this paragraph.
+- **The CCS core does not change because the glycan layer exists.** It is the
+  owner's P0 item. `networkx`, `glycowork` and `scikit-learn` are declared under
+  the `glycan` extra, so a CCS-only install is what it always was, and the model
+  fingerprint `064eb9fba603/0d69f799f6f1` is the evidence: record it before
+  touching anything and confirm it at every stop. If it moves, something was
+  touched that should not have been.
+
+The glycan layer holds its own `IMSType`, `DriftGas`, `Polarity` and
+`CCSMeasurement`. That is deliberate duplication, not an oversight: one shared
+enum would make every change to the CCS core a silent change to the glycan
+layer's accepted inputs, where two definitions with a schema between them turn
+the same disagreement into a validation error somebody can read.
 
 ## Hard constraints
 

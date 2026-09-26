@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "wmxccs"
 dynamic = ["version"]
-description = "Cross-platform CCS harmonization: measurements from DTIMS, TWIMS, TIMS and cIMS held apart, paired by matched ion, and harmonized without overwriting the originals."
+description = "Cross-platform CCS harmonization, and a glycan and isomer layer beside it: two packages in one repository that share no code and meet through a schema."
 requires-python = ">=3.11"
 dependencies = [
     # The record models, the licence gate and the loader are all pydantic; nothing
@@ -17,11 +17,28 @@ dependencies = [
     "fastapi>=0.115",
 ]
 
-# Deliberately absent, and worth saying why, because the module these were ported
-# from declared all four. networkx, glycowork and the 44-column featuriser served
-# the glycan graph layer, which does not come across.
+# CORRECTED 26 September 2026, and the original wording is kept below it because being
+# wrong about this once is the useful part of the record.
 #
-# SCIKIT-LEARN WAS PREDICTED HERE AND IS NOT NEEDED. The note this replaces said it
+# IT SAID: "networkx, glycowork and the 44-column featuriser served the glycan graph
+# layer, which does not come across." That was true of every milestone up to v0.7.0 and
+# is now false. The owner's brief of 26 September 2026 requires a deployable glycan and
+# isomer layer on top of this service, so the graph layer, the enumerator and the
+# 44-column featuriser HAVE come across, as the second package `wmxglycan` under src.
+#
+# WHAT HAS NOT CHANGED, and it is the P0 item: none of this is a dependency of wmxccs.
+# networkx, glycowork and scikit-learn are declared under the `glycan` extra, so
+# `pip install .` still installs a pure-Python CCS service with pydantic and fastapi and
+# nothing else, and `pip install .[glycan]` is what the glycan layer costs. There is a
+# test on it - tests/test_glycan_boundary.py - because a dependency quietly promoted into
+# the base list is precisely the kind of drift a comment cannot catch.
+#
+# SCIKIT-LEARN WAS PREDICTED HERE AND IS STILL NOT NEEDED BY wmxccs. It returns to this
+# file under the `glycan` extra, for the glycan layer's own fit, which refuses to run - so
+# it is declared and never imported at runtime today. The paragraph below is about the CCS
+# harmonization model and stands unchanged.
+#
+# The note this replaces said it
 # "returns as a dependency of the harmonization model in M4, declared then rather
 # than now". M4 arrived on 19 September 2026 and needed nothing: Passing-Bablok is a
 # median of pairwise slopes, jackknife+ is a loop of refits, and the rank interval
@@ -52,6 +69,22 @@ serve = [
 # deployment serves the converted CSV in data/seed and never touches an .xlsx.
 ingest = [
     "openpyxl>=3.1",
+]
+# The glycan and isomer layer, package `wmxglycan`. AN EXTRA AND NOT A DEPENDENCY, so that
+# a CCS-only deployment is byte-for-byte the install it was before this layer existed.
+glycan = [
+    "networkx>=3.2",
+    # Pinned exactly, not ranged, because the 50,461-structure SugarBase release and the
+    # curated enzyme and constraint tables ship INSIDE this package. The version is part
+    # of the dataset version string the licence record quotes, so a range here would let
+    # the data under a cited figure change without the citation changing. MIT licensed,
+    # Copyright (c) 2021 Daniel Bojar, read from the distribution.
+    "glycowork==1.10.0",
+    # Declared although glycowork already pulls it in: a transitive edge is a fact about
+    # someone else's dependency graph, not a commitment to us. Imported lazily, inside the
+    # fit, BELOW every guard - and no current data path reaches it, because no glycan model
+    # has ever been trained and training.py refuses rather than pretending.
+    "scikit-learn>=1.5",
 ]
 
 [project.scripts]
