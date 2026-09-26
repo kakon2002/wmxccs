@@ -144,9 +144,9 @@ what the result may and may not be called. It asserts nothing; the assertions ar
 Run these from the repository root. Substitute `.venv/bin/python` on macOS and Linux.
 
 ```
-.venv/Scripts/python -m pytest -q                    # the suite: 3842 tests (2317 wmxccs, 1525 wmxglycan)
+.venv/Scripts/python -m pytest -q                    # the suite: 4088 tests (2317 wmxccs, 1771 wmxglycan)
 .venv/Scripts/python -m tools.mutation --check       # anchors only, about a second
-.venv/Scripts/python -m tools.mutation               # the full sweep: 317 mutations (282 wmxccs, 35 wmxglycan)
+.venv/Scripts/python -m tools.mutation               # the full sweep: 339 mutations (282 wmxccs, 57 wmxglycan)
 ```
 
 The sweep breaks each guard in the package one at a time and requires a test to notice. A

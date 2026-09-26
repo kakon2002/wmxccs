@@ -12,6 +12,14 @@ mlruns/
 # Nothing here is ever part of the repository.
 .mutcheck/
 
+# The glycan service's SQLite file. RUNTIME STATE, not a reviewable artefact: it holds
+# predictions frozen by whoever ran the service, and committing it would put one machine's
+# working data into every checkout. The schema is in src/wmxglycan/store.py, which IS under
+# version control, and the file is recreated on first use.
+data/*.sqlite3
+data/*.sqlite3-journal
+data/*.sqlite3-wal
+
 # data/seed is deliberately NOT ignored. It holds the curated transcriptions and
 # the converted seed files, and both are reviewable artefacts: the whole point of
 # data/raw being ignored is that the delivered file lives in data/seed instead,

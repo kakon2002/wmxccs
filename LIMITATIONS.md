@@ -756,6 +756,33 @@ relocates every path the package derives from `__file__`, and anything the packa
 way silently disappears. Any guard written against a resource located relative to the package
 rather than to the repository is a guard that does not exist during a sweep.
 
+### 4.9 A SWEEP OVER A DIRTY TREE MEASURES TWO TREES. IT NOW REFUSES.
+
+CLOSED 27 September 2026, and the way it was found is the point: **a sweep was launched and
+then the tree it was measuring was edited, by me, while it ran.**
+
+The shadow copies `src/` ONCE at the start. It reads `tests/` LIVE FROM DISK on every mutation.
+So a sweep launched before `src/wmxglycan/static/dashboard.html` existed shadowed a package
+without it, and the dashboard tests written into `tests/` during the run then failed for every
+remaining mutation - because the page was missing from the copy, not because the mutation was
+noticed.
+
+**The runner would have reported 56 of 56 KILLED.** Every kill after the edit would have been a
+kill by a missing file, and the report would have read as a clean sweep. That is the exact shape
+of section 4.5: a result that covers less than it claims.
+
+It was caught by reasoning about what the shadow contains rather than by anything failing, which
+is not a defence to rely on twice. So `main()` now refuses to sweep a working tree with
+uncommitted changes, listing them, with `--dirty` as a deliberate override and the statement
+that a figure measured that way is not a sweep result. The check reads `git status --porcelain`
+rather than walking the tree, so whatever the repository ignores is ignored here too - the
+service's own SQLite file, for one, which importing the package creates.
+
+**This is the same lesson as the process rule in CLAUDE.md, arriving at a different door.** That
+rule came from a review agent writing to an uncommitted tree; this came from a measurement
+reading one. Both are cases of a tree moving while something was drawing conclusions from it,
+and in both the fix is: settle the tree first.
+
 ## 4A. Defects found during M0 and fixed
 
 Recorded because each was a real hole, and because the test that found it is the
@@ -2451,7 +2478,7 @@ person, and merged deliberately - which is a product, not a feature.
 The tests assert the constraints in CLAUDE.md, not only the happy path, and the
 mutation catalogue is what demonstrates that they bite. But:
 
-- the wmxccs catalogue holds 282 mutations against that package's modules, and is closed at that number; tools/mutation/catalogue_glycan.py holds 35 more against src/wmxglycan, and runner.all_mutations() joins the two so a sweep covers 317. It began smaller than
+- the wmxccs catalogue holds 282 mutations against that package's modules, and is closed at that number; tools/mutation/catalogue_glycan.py holds 57 more against src/wmxglycan, and runner.all_mutations() joins the two so a sweep covers 339. It began smaller than
   the glycan platform's 154 because 46 of those anchored into modules that do not come
   across and 26 into modules not in this milestone; it has since passed it. The floor in
   the catalogue test goes up, never quietly down;

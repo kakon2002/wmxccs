@@ -301,6 +301,171 @@ GLYCAN_MUTATIONS: tuple[Mutation, ...] = (
         find="        if state is not CCSEvidenceState.MEASURED_REFERENCE and self.reference is not None:",
         replace="        if False:",
     ),
+    # --- [S] store.py: frozen means frozen, and appending never merges --------------------------
+    Mutation(
+        label="[S] a second write to a frozen prediction is merged instead of refused",
+        file="store.py",
+        package=GLYCAN,
+        find="            raise AlreadyFrozen(ALREADY_FROZEN.format(prediction_id=standing)) from clash",
+        replace="            return row",
+    ),
+    Mutation(
+        label="[S] the payload-moved guard stops noticing that a prediction was touched",
+        file="store.py",
+        package=GLYCAN,
+        find="        if after.payload_digest != before.payload_digest:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[S] a validation forgets which prediction digest it was attached to",
+        file="store.py",
+        package=GLYCAN,
+        find="            predicted_digest=before.payload_digest,",
+        replace='            predicted_digest="",',
+    ),
+    Mutation(
+        label="[S] foreign keys stay off, so a validation may reference a prediction that is gone",
+        file="store.py",
+        package=GLYCAN,
+        find='        self._db.execute("PRAGMA foreign_keys = ON")',
+        replace='        self._db.execute("PRAGMA foreign_keys = OFF")',
+    ),
+    Mutation(
+        label="[S] a run filter is interpolated into the query instead of parameterised",
+        file="store.py",
+        package=GLYCAN,
+        find='                where.append(f"{column} = ?")\n                values.append(value)',
+        replace='                where.append(f"{column} = \'{value}\'")',
+    ),
+    Mutation(
+        label="[S] the run total is the size of the page rather than of the result",
+        file="store.py",
+        package=GLYCAN,
+        find="        return len(self.runs(limit=1_000_000, offset=0, **filters))",
+        replace="        return len(self.runs(limit=50, offset=0, **filters))",
+    ),
+    # --- [G] fingerprint.py: what identifies a pipeline -----------------------------------------
+    Mutation(
+        label="[G] the corpus digest ignores the structures, so two corpora look identical",
+        file="fingerprint.py",
+        package=GLYCAN,
+        find="            keys_digest=_digest(sorted(index.rows)),",
+        replace='            keys_digest="",',
+    ),
+    Mutation(
+        label="[G] the prior policy is left out of the pipeline identity",
+        file="fingerprint.py",
+        package=GLYCAN,
+        find='        "prior_pseudocount": PRIOR_PSEUDOCOUNT,',
+        replace='        "prior_pseudocount": 0,',
+    ),
+    Mutation(
+        label="[G] the feature columns are left out of the pipeline identity",
+        file="fingerprint.py",
+        package=GLYCAN,
+        find='        "features": list(FEATURE_NAMES),',
+        replace='        "features": [],',
+    ),
+    Mutation(
+        label="[G] the curated rules are left out of the pipeline identity",
+        file="fingerprint.py",
+        package=GLYCAN,
+        find="            for rule in enumerator.constraints\n        ),",
+        replace="            for rule in ()\n        ),",
+    ),
+    # --- [A] api.py: the endpoints ---------------------------------------------------------------
+    Mutation(
+        label="[A] a repeated client reference creates a second prediction instead of 409",
+        file="api.py",
+        package=GLYCAN,
+        find="            if standing is not None:",
+        replace="            if False:",
+    ),
+    Mutation(
+        label="[A] a candidate's attestation is read off its class, so partly attested reads as all",
+        file="api.py",
+        package=GLYCAN,
+        find="                attested=index.attests(key),",
+        replace="                attested=result.classes[class_of[key]].attested_structures > 0,",
+    ),
+    Mutation(
+        label="[A] the attach response claims the prediction was unchanged without checking",
+        file="api.py",
+        package=GLYCAN,
+        find="            prediction_unchanged=before == after.payload_digest,",
+        replace="            prediction_unchanged=True,",
+    ),
+    Mutation(
+        label="[A] a single measurement is reported as a spread of zero",
+        file="api.py",
+        package=GLYCAN,
+        find="        if len(group) < 2:",
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[A] reading a prediction recomputes it instead of serving the frozen bytes",
+        file="api.py",
+        package=GLYCAN,
+        find="        return _response_from(row, request.app.state.fingerprint)\n\n    # --- 3. attach",
+        replace=(
+            "        return _response_from(\n"
+            "            dataclasses.replace(\n"
+            "                row, payload=row.payload.replace('\"candidates_total\":', '\"x\":', 1)\n"
+            "            ),\n"
+            "            request.app.state.fingerprint,\n"
+            "        )\n\n    # --- 3. attach"
+        ),
+    ),
+    Mutation(
+        label="[A] a failing evidence lookup is reported as an absence rather than a failure",
+        file="api.py",
+        package=GLYCAN,
+        find="                state=CCSEvidenceState.LOOKUP_FAILED,",
+        replace="                state=CCSEvidenceState.NOT_CONSULTED,",
+    ),
+    Mutation(
+        label="[A] the decision is not re-derived from the evidence that was frozen with it",
+        file="api.py",
+        package=GLYCAN,
+        find="        result = _with_evidence(result, evidence)",
+        replace="        result = dataclasses.replace(result, ccs_evidence=evidence)",
+    ),
+    Mutation(
+        label="[A] a held reference value reaches the comparison response",
+        file="api.py",
+        package=GLYCAN,
+        find="        if evidence.state is CCSEvidenceState.MEASURED_REFERENCE and evidence.reference is not None",
+        replace="        if evidence.reference is not None",
+    ),
+    Mutation(
+        label="[A] a missing dashboard is served as an empty page rather than an error",
+        file="api.py",
+        package=GLYCAN,
+        find="        if not DASHBOARD.is_file():  # pragma: no cover - only if the package data is missing",
+        replace="        if False:",
+    ),
+    # --- [P] prediction.py: what a caller may attach ---------------------------------------------
+    Mutation(
+        label="[P] a measurement with no uncertainty type is accepted",
+        file="prediction.py",
+        package=GLYCAN,
+        find='        if self.uncertainty_type.strip().casefold() in {"", "unknown", "none", "n/a"}:',
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[P] a measurement against an unstated gas is accepted",
+        file="prediction.py",
+        package=GLYCAN,
+        find='        if self.drift_gas.strip().casefold() in {"", "unstated", "unknown", "n/a"}:',
+        replace="        if False:",
+    ),
+    Mutation(
+        label="[P] a request for charge zero is accepted as an ion",
+        file="prediction.py",
+        package=GLYCAN,
+        find='            raise ValueError("charge 0 is not an ion; give a signed charge such as 1 or -1")',
+        replace="            pass",
+    ),
     # --- [O] enumeration.py: the one line this repository changed -------------------------------
     Mutation(
         label="[O] an ordering caveat is published for a candidate that lacks the context it names",

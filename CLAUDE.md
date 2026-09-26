@@ -53,6 +53,25 @@ enum would make every change to the CCS core a silent change to the glycan
 layer's accepted inputs, where two definitions with a schema between them turn
 the same disagreement into a validation error somebody can read.
 
+## Process rules
+
+These are about how work is done here, not about what the code does. They exist because each
+one was learned the expensive way.
+
+1. **Never run a write-capable review agent against an uncommitted tree.** Commit first,
+   review after, and if a reviewer writes to the tree, revert it from git.
+
+   Set 26 September 2026, after a review agent wrote a probe value
+   (`RuleAccounting(rules_in_scheme=999, rules_violated=7)`) into `src/wmxglycan/ranking.py` to
+   reproduce a finding and left it there. **The untracked file is what hid it:** the file was
+   new and unstaged, so `git diff` showed nothing and the obvious check was blind. It was
+   caught by a mutation anchor failing to match, ten minutes later.
+
+   An anchor mismatch is luck, not a defence. Committing first makes any reviewer write show
+   up in a diff and makes `git checkout --` the whole remedy. The rule is about the tree's
+   state, not about trusting the agents: a reviewer that can write needs a baseline it cannot
+   erase.
+
 ## Hard constraints
 
 These are not style. Breaking any of them makes the output unusable.

@@ -98,6 +98,11 @@ version = { attr = "wmxccs.__version__" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# The glycan dashboard is one self-contained HTML file served by wmxglycan.api at "/". It has to
+# travel with the package, or an installed deployment serves six working endpoints and no page.
+[tool.setuptools.package-data]
+wmxglycan = ["static/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"

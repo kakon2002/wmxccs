@@ -20,7 +20,7 @@ from tools.mutation.catalogue_glycan import GLYCAN_MUTATIONS
 from tools.mutation.runner import GLYCAN_SRC, PACKAGE_SOURCES, SRC, SRC_ROOT, all_mutations
 
 # A floor, not a target. It goes up as guards arrive and never quietly down.
-GLYCAN_FLOOR = 35
+GLYCAN_FLOOR = 57
 CCS_CATALOGUE = 282
 
 
@@ -108,14 +108,29 @@ def written_here() -> set[str]:
     return {name for name in on_disk if f"| `{name}` |" not in ported}
 
 
+PORTED_MODULES = 15  # the port record's digest table. A fact, not a target.
+
+
 def test_the_port_record_and_the_package_agree_on_what_was_written_here():
-    # The floor under the derivation. An empty set would make the coverage test below vacuous,
-    # which is the same defect one level up - exactly what happened when PACKAGE_MODULES was
-    # replaced by a glob without one.
+    """The floor under the derivation, as a PARTITION rather than a list of names.
+
+    An empty `written_here()` would make the coverage test below vacuous, which is the same
+    defect one level up - exactly what happened when PACKAGE_MODULES was replaced by a glob
+    without a floor. An earlier version of this test hand-wrote the three modules that existed
+    at the time, which meant adding a module made THIS test fail rather than the coverage test
+    it exists to protect, and the natural repair was to extend the hand-written list: instance
+    Twelve again, one level up again.
+
+    So what is asserted is the shape: every module is in exactly one half, the ported half is
+    the size the port record says, and neither half is empty.
+    """
     mine = written_here()
-    assert mine == {"ranking.py", "attestation.py", "ccs_evidence.py"}, sorted(mine)
-    ported = {path.name for path in GLYCAN_SRC.glob("*.py")} - mine - {"__init__.py"}
-    assert len(ported) == 15, sorted(ported)
+    on_disk = {path.name for path in GLYCAN_SRC.glob("*.py")} - {"__init__.py"}
+    ported = on_disk - mine
+    assert mine, "the derivation returned nothing, so the coverage test would be vacuous"
+    assert ported, "no module reads as ported, so the port record is not being read at all"
+    assert mine | ported == on_disk and not (mine & ported), "the two halves must partition"
+    assert len(ported) == PORTED_MODULES, sorted(ported)
 
 
 def test_every_module_the_ranker_introduced_has_at_least_one_mutation():

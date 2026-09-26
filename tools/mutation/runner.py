@@ -92,6 +92,13 @@ USAGE = """Run the mutation catalogue against the test suite.
     python -m tools.mutation --check         anchors only, about a second
     python -m tools.mutation --list          what is in the catalogue
     python -m tools.mutation "[S] " conform  only mutations whose label contains one of these
+    python -m tools.mutation --dirty         sweep anyway over uncommitted changes
+
+A SWEEP IS REFUSED OVER A DIRTY WORKING TREE. The shadow copies src/ once at the
+start and reads tests/ live from disk, so an edit made mid-run changes the suite
+between one mutation and the next, and every later kill may be a kill by that edit
+rather than by the guard the mutation targets. `--dirty` overrides it; a figure
+measured that way is not a sweep result.
 
 The repository is never written: mutations are applied to a copy that shadows
 the installed packages - BOTH wmxccs and wmxglycan, on every run, so a filtered
@@ -99,7 +106,23 @@ run measures the same code a full sweep does. Exit status is zero only when ever
 mutation selected identified exactly one site, changed the file, and did what it
 was expected to do."""
 
-KNOWN_FLAGS = ("--check", "--list", "--help")
+KNOWN_FLAGS = ("--check", "--list", "--help", "--dirty")
+
+DIRTY_TREE = (
+    "the working tree has uncommitted changes, so a sweep would not measure one tree.\n\n"
+    "  {listing}\n\n"
+    "THE SHADOW COPIES src/ AT THE START AND READS tests/ LIVE FROM DISK. So an edit made"
+    " while a sweep runs changes the suite between one mutation and the next, and every"
+    " mutation after the edit is judged against a different suite than the baseline was.\n\n"
+    "This was not hypothetical. On 27 September 2026 a sweep was launched, src/wmxglycan was"
+    " shadowed without a file that had not been written yet, and the tests added to the tree"
+    " during the run then failed for every remaining mutation - which the runner would have"
+    " reported as 56 of 56 KILLED. Every kill after the edit would have been a kill by a"
+    " missing file rather than by the guard the mutation targets, and the report would have"
+    " looked like a clean sweep.\n\n"
+    "Commit first, then sweep. `--dirty` overrides this deliberately; a figure measured that"
+    " way must not be quoted as a sweep result."
+)
 
 
 class ShadowFailed(RuntimeError):
@@ -271,6 +294,28 @@ def verified_shadow(src: Path, into: Path) -> Path:
 
 
 # --- running the suite ----------------------------------------------------------------
+
+
+def uncommitted_changes() -> list[str]:
+    """Paths git reports as changed, or an empty list. An empty list also means "no git here".
+
+    Read through `git status --porcelain` rather than by walking the tree, so that whatever the
+    repository already ignores is ignored here too - the service's own SQLite file, for one,
+    which a sweep creates by importing the package and which must not be read as a dirty tree.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):  # pragma: no cover - no git on the machine
+        return []
+    if result.returncode != 0:  # pragma: no cover - not a repository
+        return []
+    return [line for line in result.stdout.splitlines() if line.strip()]
 
 
 def pytest_command() -> list[str]:
@@ -489,6 +534,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(_detail(Outcome(mutation=mutation, anchor=anchor).problem))
         print(f"\n{len(chosen) - problems} of {len(chosen)} anchors identify exactly one site")
         return 1 if problems else 0
+
+    # A SWEEP MEASURES A TREE, so refuse to measure one that is moving. See DIRTY_TREE: a
+    # sweep launched over a dirty tree once reported every mutation as killed by a file that
+    # had not been written when the shadow was taken.
+    if "--dirty" not in argv:
+        dirty = uncommitted_changes()
+        if dirty:
+            listing = "\n  ".join(dirty[:12])
+            if len(dirty) > 12:
+                listing += f"\n  ... and {len(dirty) - 12} more"
+            print(DIRTY_TREE.format(listing=listing))
+            return 1
 
     # The baseline runs through the shadow too, so a broken shadow or a copy
     # that cannot import fails in half a minute rather than after the first

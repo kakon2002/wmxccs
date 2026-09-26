@@ -226,6 +226,13 @@ its reason written into the property.
 sentence ships in the response as `share_means`, not only here, because the consumer reads the
 response.
 
+**RULING, 27 September 2026: the number is never labelled a probability, and that is settled.**
+The owner's reading of the spec is that it asks for a probability-LIKE confidence rather than a
+probability, so the served field is `evidence_share` and no field anywhere in the API is named
+`probability`, `p_correct` or `likelihood`. A test walks the response models and fails on any
+such name. The declared POLICY prior and all four standard alternatives travel in every
+response that carries the number, so a consumer can see the lever without reading this file.
+
 **THE PRIOR IS A CHOSEN CONSTANT AND IS PUBLISHED AS ONE.** An earlier draft of this section
 claimed there was "no free parameter" and that the uniform Dirichlet prior was *forced* by the
 enumerator having already applied every rule it has. **That was wrong, and it was the most
@@ -378,14 +385,34 @@ table — with a floor under the derivation.
 unattested-class mass was `None` where the honest value is a measured `0.0`. No test had
 rendered a refused set. A method nothing calls is a method nothing protects.
 
-### The decision field has exactly ONE reachable value, and that is stated rather than softened
+### The decision field is CONSTANT at IM_VALIDATION_REQUIRED. This is not a broken field.
 
-The brief asked for three and expected "almost everything" to land on `IM_VALIDATION_REQUIRED`.
-The measured answer is stronger: **everything does**, for two reasons that hold for every
-possible input — no validated model exists, and the completeness of a candidate set is not
-establishable. `AI_ONLY` and `IM_VALIDATION_RECOMMENDED` are both unreachable through `rank()`.
-Nothing was tuned to make some cases look better; what would move it is a validated model and a
-cross section that resolves to one structure, and this repository has neither.
+**RULING, 27 September 2026: it stays constant, and this section exists so that nobody later
+reads a single-valued field as a defect and "fixes" it.** Everything landing on
+`IM_VALIDATION_REQUIRED` is the true state of a platform with no CCS model, and it is exactly
+what the spec means by identifying predictions that require experimental validation. A field
+that said otherwise for some inputs would be the defect.
+
+The brief asked for three values and expected "almost everything" to land on REQUIRED. The
+measured answer is stronger: **everything does**, for two independent reasons that hold for
+every possible input.
+
+| value | reachable? | what is holding it shut |
+|---|---|---|
+| `AI_ONLY` | no | `no validated model exists` fires on every input — nothing here has been validated against known truth. AND `the candidate set may not contain the answer` fires on every input, because completeness is not establishable from a corpus of depositions. **Two independent gates**, and `tests/test_glycan_ranking.py` opens both to prove the branch is live code rather than an enum member nothing references. |
+| `IM_VALIDATION_RECOMMENDED` | no | the same two rules. Any firing rule yields REQUIRED. |
+| `IM_VALIDATION_REQUIRED` | yes, always | |
+
+**IF YOU ARE READING THIS BECAUSE THE FIELD LOOKS BROKEN, IT IS NOT.** What would move it:
+
+1. a model validated against compositions whose true structure is independently known; and
+2. a cross section that resolves to ONE structure rather than to a composition and an ion —
+   a composition-level measurement is shared by every isomer and cannot confirm one of them.
+
+This repository has neither, and the fields that would carry them exist and are refused rather
+than absent. **Nothing was tuned to make some cases look better**, which was an explicit
+instruction; the rules are published per response with `applies_to` on each, so a caller can
+read why each one fires instead of trusting this table.
 
 ### Deferred, with the reason
 
@@ -438,6 +465,122 @@ modification time and content and was intact.
 it is reviewing needs the tree committed first, so that any edit it makes shows up in a diff.
 Reviewing uncommitted work with write-capable agents means the only record of what changed is
 the file itself.
+
+## 4C. The six endpoints, and what each of them cannot do
+
+Built 27 September 2026. Real services over a SQLite store that survives a restart, not a
+demonstration UI.
+
+| endpoint | what it does | what it cannot do |
+|---|---|---|
+| `POST /v1/predictions` | ranks the candidates for a composition and ion, freezes the answer, returns 201 | it cannot predict a cross section, and it does not try |
+| `GET /v1/predictions/{id}` | the frozen prediction, served from the stored bytes | it never recomputes, so a corpus that has moved cannot alter a past answer |
+| `POST /v1/predictions/{id}/validation` | appends experimental measurements, returns 201 | it cannot touch the prediction; the response carries its digest read before and after |
+| `GET /v1/predictions/{id}/comparison` | delta CCS, interval coverage, status | no delta against a PREDICTION exists; see below |
+| `GET /v1/runs` | history, filterable by kind, composition, prediction and time | |
+| `GET /v1/models/current` | pipeline fingerprint, data snapshot, applicability domain | it reports no fitted CCS model, because there is none |
+
+### Immutability is enforced by the schema, not by the caller
+
+`store.py` contains **no UPDATE statement and no DELETE**, and a test asserts that by reading
+the module. A second write to a frozen prediction raises `AlreadyFrozen` and writes nothing; a
+second create under the same `client_reference` answers **409 and names the prediction that
+stands**, so a caller fetches it rather than guessing. Attaching is append-only, and the attach
+response carries `prediction_digest_before` and `prediction_digest_after` read from storage, so
+"the prediction was not touched" is a measurement in the reply rather than a promise in a
+docstring. All of it still holds after a restart, which is the only version of immutability
+worth having.
+
+### The comparison endpoint: three axes, and only one of them works today
+
+Collapsing them into a single status would have lost the one that does work.
+
+| axis | state today | why |
+|---|---|---|
+| against the **prediction** | `no_predicted_value`, always | there is no predicted cross section, so a delta is not unmeasured - it is undefined. An interval coverage figure would describe an interval that was never produced. |
+| against a **reference** the platform holds | `no_reference_in_corpus` for the fucosylated compositions; `reference_held_not_releasable` for `Hex5HexNAc2`, where 8 records exist and are blocked | the delta arithmetic is live and is exercised by a synthetic releasable reference, because every path against the real corpus is an unevaluable one and an unexercised arithmetic path is an unguarded one |
+| among the **caller's own** measurements | **computed, always** | it needs no model and no reference. It is the caller's own reproducibility, grouped by adduct, charge, platform AND drift gas - hard constraint 4, so values against different gases are never spread against each other |
+
+`agreement_limit_percent` is **2.0 and declared POLICY**, chosen rather than measured, in the
+same idiom as the CCS core's limits-of-agreement threshold. It is published in every comparison
+response so the limit a verdict rests on travels with the verdict.
+
+### The pipeline fingerprint, and the one thing it deliberately does not catch
+
+There is no fitted model, so `GET /v1/models/current` reports the fingerprint of a
+**deterministic pipeline**: `ac288c6b0f83/95e925999909` at the time of writing, over the curated
+rules, the enzyme table, the placement vocabulary, the 44 feature columns, the prior policy, and
+a digest of the 3,640 canonical keys in the corpus.
+
+**It does not digest module source, and the cost of that is stated rather than hidden: a logic
+change that touches no table, no corpus and no policy constant will not move it.** A fingerprint
+that moved on a comment would train its readers to ignore it, and the CCS core's has held across
+five releases precisely because it digests inputs rather than code. The mutation catalogue is
+what guards logic; this digest guards the inputs.
+
+## 4D. The dashboard, and the two places it refuses to look finished
+
+Wired 27 September 2026 from the static prototype: six pages, the prototype's layout and design
+tokens kept, and every number on it now from a response. It is served by the service itself at
+`/`, so it is same-origin - no CORS to configure, no build step, no second process that could
+drift out of step with the API it is a client of. One self-contained file, as the prototype was.
+
+### The candidate list: bands are ordered, nothing inside one is
+
+This is where false certainty would have entered. The prototype rendered `#1 Candidate
+GLY-ISO-001` with a score of `0.54`. For `Hex5HexNAc4Fuc1` that shape would number 167
+candidates, of which **152 sit in a class the platform's own 24 structure columns cannot
+separate** - an arbitrary order presented as a ranking.
+
+So no candidate is numbered anywhere. Rendered from a real response and checked by executing the
+page's own JavaScript:
+
+| what the page emits | count |
+|---|---|
+| positions given to anything | **3** - "Band 1 of 3", "Band 2 of 3", "Band 3 of 3" |
+| tied groups shown, each with its size | **46**, sizes 10 / 8 / 6 / 5 / 4 / 3 / 2 |
+| candidates inside those groups | **152**, listed unordered |
+| "alone in its class" badges | **15**, the singleton classes |
+| candidates numbered | **0** |
+
+Each tied group says, in the page: *"N candidates sharing this position"*, *"tied · not
+separable"*, and *"The platform cannot tell you which of them it is, and this dashboard will not
+guess."* A refused set - Man5 - is headed **THIS SET IS NOT ORDERED** and still lists its
+candidates: what is withheld is an order, not an answer.
+
+### The comparison: an unevaluable axis shows its reason, never a blank
+
+A dash in a delta column reads as "about zero" to anyone skimming, so there are none. All three
+axes render with their own state and the service's own reason text:
+
+- **Axis 1, against the AI prediction** - `undefined`, always, with the full reason. Not empty.
+- **Axis 2, against a reference** - a real delta where one is releasable; otherwise
+  *"No delta, and not because it is zero:"* followed by the evidence state's own sentence.
+- **Axis 3, the caller's own measurements against each other** - computed, always.
+
+Interval coverage is never rendered as YES or NO. The prototype showed `Interval coverage: YES`;
+there is no interval, so that was false. It now shows `not evaluable` and why.
+
+### What the page does NOT pretend to send
+
+The prototype's prediction form offered drift gas, instrument, antibody class, glycosylation
+site, retention time and MS/MS evidence. The service takes composition, adduct and charge and
+nothing else. A field that looks submitted and is not is the same class of false certainty as a
+fake rank, so they are kept in the layout under the heading **"Not sent, and not silently
+dropped"**, with the note that drift gas, instrument and calibrant *are* real on the validation
+page, where they describe a measurement.
+
+### Two guards on the client that a browser-less test can still hold
+
+- **Every field the JavaScript reads off a response is a real field of a real response model**,
+  derived from the pydantic models on one side and from the shipped script on the other, with
+  snake_case as the discriminator (the API's fields are snake_case; the browser's own APIs are
+  camelCase). 79 field reads, 0 unknown. A mistyped field renders `undefined` in a browser and
+  fails nothing, which is the worst available silence. A floor test proves the check would
+  notice a typo.
+- **The page's own rendering functions are executed over real responses** via node, cut out of
+  `dashboard.html` rather than re-implemented, so what is checked is what ships. That is how the
+  figures in the table above were obtained.
 
 ## 5. Mutation coverage: both packages are shadowed, and the ported modules are deliberately bare
 

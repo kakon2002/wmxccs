@@ -73,9 +73,15 @@ Then, from the repository root:
 
 ```
 .venv/Scripts/python tools/demo_end_to_end.py    # one ion through every stage
-.venv/Scripts/python -m pytest -q                # 3842 tests (2317 wmxccs, 1525 wmxglycan)
+.venv/Scripts/python -m pytest -q                # 4088 tests (2317 wmxccs, 1771 wmxglycan)
 .venv/Scripts/python -m tools.mutation --check   # anchors only, about a second
-.venv/Scripts/python -m tools.mutation           # the full sweep, 317 mutations, ~6 h (the suite is slower now)
+.venv/Scripts/python -m tools.mutation           # the full sweep, 339 mutations, ~7 h. REFUSES a dirty tree; commit first
+
+# the two services
+.venv/Scripts/python -m uvicorn wmxccs.api:app --port 8000          # the CCS core
+.venv/Scripts/python -m uvicorn tools.glycan_service:app --port 8010  # the glycan service, WIRED
+#   then open http://127.0.0.1:8010/ for the six-page dashboard, served by the service itself
+.venv/Scripts/python tools/glycan_service.py                        # what is wired, serves nothing
 ```
 
 **Deploy from a checkout, not from a built wheel.** The seed CSVs are deliberately not

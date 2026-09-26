@@ -883,6 +883,27 @@ def _ccs_evidence(
         )
 
 
+def decide(
+    *,
+    classes: Mapping[str, IndistinguishableClass],
+    bands: Sequence[Band],
+    coverage: Coverage,
+    evidence: CCSEvidence,
+    refused: bool,
+) -> tuple[Decision, tuple[DecisionRule, ...]]:
+    """Public: the decision and the published rules behind it.
+
+    Exists because the service layer looks the CCS evidence up ONCE, freezes it into the
+    prediction body, and must re-derive the decision from the evidence it froze - one of the
+    published rules reads that evidence, so keeping the earlier decision would serve rules that
+    disagree with the evidence printed beside them. Reaching into a private for that would make
+    the service depend on something this module never promised to keep.
+    """
+    return _decide(
+        classes=classes, bands=bands, coverage=coverage, evidence=evidence, refused=refused
+    )
+
+
 def _decide(
     *,
     classes: Mapping[str, IndistinguishableClass],

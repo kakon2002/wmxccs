@@ -1,0 +1,531 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wellmatix Glycan-Isomer AI</title>
+<style>
+/* The prototype's design system, unchanged. Everything below the marked block is additive and
+   uses the same variables, because this is wiring and not a redesign. */
+:root{--ink:#153c55;--blue:#2a6f97;--sky:#eaf3f7;--line:#d9e4ea;--bg:#f6f9fb;--good:#247a52;--warn:#a86b16;--bad:#a33b3b;--muted:#667985}*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:var(--bg);color:#18313f}.top{height:64px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 28px;position:sticky;top:0;z-index:5}.brand{font-weight:800;color:var(--ink);font-size:20px;letter-spacing:.3px}.brand span{color:var(--blue)}.tag{margin-left:14px;font-size:12px;padding:5px 9px;background:var(--sky);border-radius:20px;color:var(--blue)}.shell{display:grid;grid-template-columns:230px 1fr;min-height:calc(100vh - 64px)}aside{background:#123449;color:#dce8ee;padding:24px 14px}aside .small{font-size:11px;color:#9fb6c3;text-transform:uppercase;margin:0 10px 10px}.nav{padding:11px 12px;border-radius:8px;margin:4px 0;cursor:pointer}.nav.active,.nav:hover{background:#1d506d;color:#fff}.main{padding:28px;max-width:1420px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:20px}.hero h1{margin:0;color:var(--ink);font-size:27px}.hero p{margin:7px 0;color:var(--muted)}.badge{font-size:12px;padding:7px 10px;border-radius:20px;background:#fff4d8;color:#8b5d00;border:1px solid #f1d99d}.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}.card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:20px;box-shadow:0 3px 12px rgba(20,60,85,.04);margin-bottom:18px}.card h2{font-size:17px;color:var(--ink);margin:0 0 14px}.section-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin:17px 0 8px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{margin-bottom:12px}.field label{display:block;font-size:12px;font-weight:700;color:#3e5663;margin-bottom:6px}.field input,.field select,.field textarea{width:100%;padding:10px 11px;border:1px solid #cfdce3;border-radius:8px;background:#fff;font-size:13px;color:#203945}.field textarea{min-height:78px;resize:vertical}.help{font-size:11px;color:#7c8f99;margin-top:4px}.btns{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}.btn{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:#fff}.secondary{background:#edf4f7;color:var(--ink)}.outline{background:#fff;border:1px solid #b9ccd6;color:var(--ink)}.metric-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.metric{border:1px solid var(--line);border-radius:10px;padding:13px;background:#fbfdfe}.metric b{display:block;font-size:19px;color:var(--ink);margin-top:5px}.metric small{color:var(--muted)}.candidate{border:1px solid var(--line);border-radius:10px;padding:13px;margin:10px 0}.cand-head{display:flex;justify-content:space-between;align-items:center}.rank{font-weight:800;color:var(--ink)}.score{font-weight:800;color:var(--blue)}.bar{height:7px;background:#e8eff3;border-radius:10px;overflow:hidden;margin:9px 0}.bar i{display:block;height:100%;background:#2a6f97}.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{font-size:10px;background:#eef4f7;color:#506b79;padding:4px 7px;border-radius:10px}.status{padding:12px;border-radius:10px;background:#fff7e8;border-left:4px solid #d89b33;font-size:13px}.status.good{background:#eef8f2;border-left-color:var(--good)}.status.bad{background:#fff0f0;border-left-color:var(--bad)}.compare{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center}.big{font-size:28px;font-weight:800;color:var(--ink)}.arrow{font-size:25px;color:#8aa0ad}.hidden{display:none}.footer-note{font-size:11px;color:#758993;padding:8px 2px}.tabs{display:flex;gap:8px;margin-bottom:15px}.tab{padding:8px 11px;border-radius:7px;background:#edf3f6;font-size:12px;cursor:pointer}.tab.on{background:var(--ink);color:white}@media(max-width:900px){.shell{grid-template-columns:1fr}aside{display:none}.grid{grid-template-columns:1fr}.main{padding:18px}.row,.metric-grid{grid-template-columns:1fr}.compare{grid-template-columns:1fr}.arrow{display:none}}
+
+/* ---- ADDED FOR WIRING. Same variables, same idiom. Nothing above this line changed. ---- */
+/* A band is the prototype's .candidate box: bands ARE ordered, so they keep that treatment. */
+.band{border:1px solid var(--line);border-radius:10px;padding:13px;margin:10px 0;background:#fbfdfe}
+.band.top{border-color:#b7d2e2}
+/* A class inside a band. Deliberately NOT numbered and never ordered. */
+.klass{border:1px solid var(--line);border-left:3px solid #cfdce3;border-radius:8px;padding:10px 12px;margin:8px 0;background:#fff}
+.klass.tied{border-left-color:var(--warn);background:#fffdf7}
+.pill{font-size:10px;font-weight:700;letter-spacing:.4px;padding:4px 8px;border-radius:20px;text-transform:uppercase;white-space:nowrap}
+.pill.good{background:#eef8f2;color:var(--good);border:1px solid #bfe0cd}
+.pill.warn{background:#fff7e8;color:var(--warn);border:1px solid #f1d99d}
+.pill.bad{background:#fff0f0;color:var(--bad);border:1px solid #e9bcbc}
+.pill.muted{background:#eef4f7;color:#506b79;border:1px solid var(--line)}
+.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;color:#2c4a5b;word-break:break-all;line-height:1.55}
+.unordered{list-style:none;padding:0;margin:8px 0 0}
+.unordered li{padding:6px 9px;border-radius:6px;background:#f4f8fa;margin:5px 0;border-left:2px solid #d9e4ea}
+.unordered li:before{content:"•  ";color:#9fb6c3;font-weight:700}
+.axis{border:1px solid var(--line);border-radius:10px;padding:14px;margin:10px 0;background:#fff}
+.axis-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.axis-head b{color:var(--ink);font-size:14px}
+.axis .why{font-size:12px;color:#5c7382;line-height:1.6;margin:6px 0 0}
+.kv{display:grid;grid-template-columns:200px 1fr;gap:6px 14px;font-size:12px}
+.kv dt{color:var(--muted);font-weight:700}
+.kv dd{margin:0;color:#23414f;word-break:break-all}
+.loading{font-size:13px;color:var(--muted);padding:10px 0}
+.err{padding:12px;border-radius:10px;background:#fff0f0;border-left:4px solid var(--bad);font-size:13px;color:#6d2a2a;white-space:pre-wrap}
+table.runs{width:100%;border-collapse:collapse;font-size:13px}
+table.runs th{text-align:left;color:#657b87;font-weight:700;padding-bottom:6px}
+table.runs td{padding:10px 8px 10px 0;border-top:1px solid var(--line);vertical-align:top}
+table.runs tr.clickable{cursor:pointer}
+table.runs tr.clickable:hover td{background:#f4f9fb}
+.filterbar{display:grid;grid-template-columns:repeat(4,1fr) auto;gap:10px;align-items:end;margin-bottom:14px}
+@media(max-width:900px){.kv{grid-template-columns:1fr}.filterbar{grid-template-columns:1fr}}
+</style></head><body><div class="top"><div class="brand">WELLMATIX <span>Glycan-Isomer AI</span></div><div class="tag">Evidence-ranked • IM validation required</div><div class="tag" id="topStamp" style="margin-left:auto;background:#f2f6f8;color:#5c7382">connecting…</div></div><div class="shell"><aside><div class="small">Workspace</div><div class="nav active" data-view="predict">New Prediction</div><div class="nav" data-view="results">Prediction Result</div><div class="nav" data-view="validate">Experimental Validation</div><div class="nav" data-view="comparison">Comparison</div><div class="nav" data-view="history">Run History</div><div class="nav" data-view="monitor">Model Monitor</div><div class="small" style="margin-top:25px">Current pipeline</div><div style="padding:0 10px;font-size:12px;color:#d2e0e7" id="sideModel">loading…</div></aside><main class="main">
+
+<div id="offline" class="hidden" style="margin-bottom:18px"><div class="err"><b>This page is open from the filesystem, so it has no service to talk to.</b><br>Serve it from the glycan API instead, which hosts this dashboard at <span class="mono">/</span>:<br><span class="mono">.venv/Scripts/python -m uvicorn tools.glycan_service:app --port 8010</span><br>then open <span class="mono">http://127.0.0.1:8010/</span></div></div>
+
+<!-- ============================ 1. NEW PREDICTION ============================ -->
+<section id="predict"><div class="hero"><div><h1>New Glycan / Isomer Prediction</h1><p>Enumerate the plausible structures for a composition and band them by the evidence that attests them.</p></div><div class="badge">NO CCS PREDICTION • EVIDENCE-RANKED</div></div><div class="grid"><div><div class="card"><h2>1. Input</h2><div class="tabs"><div class="tab on">Composition</div><div class="tab" title="Not built. The service ranks enumerated candidates for a composition; it has no endpoint that scores a structure you supply.">Known structure</div></div><div class="row"><div class="field"><label>Glycan composition *</label><input id="composition" value="Hex5HexNAc4Fuc1"><div class="help">Residues in any order; <span class="mono">dHex</span> reads as <span class="mono">Fuc</span>. A string that does not parse completely is refused rather than partly read.</div></div><div class="field"><label>Run mode</label><select id="runMode"><option>Generate + rank isomers</option></select><div class="help">The one mode the service implements. "Score supplied structure" is not built.</div></div></div><div class="section-label">Ion / analytical context</div><div class="row"><div class="field"><label>Charge *</label><input id="charge" value="2"></div><div class="field"><label>Adduct *</label><select id="adduct"><option>[M+2H]2+</option><option>[M+H]+</option><option>[M+Na]+</option><option>[M-H]-</option></select></div></div><div class="section-label">Optional</div><div class="row"><div class="field"><label>Your reference for this run</label><input id="clientRef" placeholder="e.g. WMX-DEMO-001"><div class="help">Sent as <span class="mono">client_reference</span>. Re-using one is refused with 409: a frozen prediction is never overwritten.</div></div><div class="field"><label>&nbsp;</label><div class="help" style="margin-top:12px">The service takes <b>composition, adduct and charge</b> and nothing else. A prediction is a function of those, which is why it can be frozen the moment it is made.</div></div></div><div class="card" style="background:#fbfdfe;box-shadow:none;margin:6px 0 0"><div class="section-label" style="margin-top:0">Not sent, and not silently dropped</div><div class="chips"><span class="chip">drift gas</span><span class="chip">instrument / method</span><span class="chip">antibody class</span><span class="chip">glycosylation site</span><span class="chip">retention time</span><span class="chip">MS/MS evidence</span></div><p class="footer-note" style="padding:6px 0 0">The prototype offered these on this page. None of them changes which structures are enumerated or how they are banded, so the service does not accept them here and this dashboard does not pretend to send them. Drift gas, instrument and calibrant <b>are</b> real on the Experimental Validation page, where they describe a measurement.</p></div><div class="btns"><button class="btn primary" id="runBtn">Run AI Prediction</button><button class="btn secondary" id="exampleBtn">Load Example</button><button class="btn outline" id="resetBtn">Reset</button></div><div id="predictErr" class="hidden" style="margin-top:12px"></div></div></div>
+<div><div class="card"><h2>Input readiness</h2><div class="metric-grid"><div class="metric"><small>Required fields</small><b id="readyFields">3 / 3</b></div><div class="metric"><small>Your reference</small><b>Optional</b></div><div class="metric"><small>Experimental CCS</small><b>Not used</b></div></div><div class="status" style="margin-top:12px">A prediction is frozen the moment it is created. Experimental CCS is attached <b>afterwards</b>, as a separate record, and never merged into it.</div></div><div class="card"><h2>What the service returns</h2><div class="chips"><span class="chip">candidate structures</span><span class="chip">indistinguishable classes</span><span class="chip">evidence bands</span><span class="chip">confidence share + its prior</span><span class="chip">coverage of the candidate set</span><span class="chip">decision + every rule</span><span class="chip">pipeline fingerprint</span></div><p class="footer-note">No predicted CCS and no uncertainty interval: there is no glycan CCS model, so the service does not produce either. Cross sections appear only as measured values.</p></div></div></div></section>
+
+<!-- ============================ 2. PREDICTION RESULT ============================ -->
+<section id="results" class="hidden"><div class="hero"><div><h1>Prediction Result</h1><p id="resultSub">—</p></div><div class="badge" id="resultBadge">FROZEN</div></div>
+<div id="resultBody"><div class="loading">Run a prediction to see a result.</div></div></section>
+
+<!-- ============================ 3. EXPERIMENTAL VALIDATION ============================ -->
+<section id="validate" class="hidden"><div class="hero"><div><h1>Experimental Validation</h1><p>Attach Ion Mobility measurements to a frozen prediction. The prediction is not touched.</p></div><div class="badge">APPEND ONLY</div></div><div class="grid"><div><div class="card"><h2>3. Enter measured data</h2><div class="row"><div class="field"><label>Frozen prediction ID *</label><input id="valPid" placeholder="pred_…"><div class="help">Created on the New Prediction page, or picked from Run History.</div></div><div class="field"><label>Measured CCS (Å²) *</label><input id="valCcs" value="245.3"></div></div><div class="row"><div class="field"><label>Uncertainty *</label><input id="valUnc" value="0.4"></div><div class="field"><label>Uncertainty type *</label><select id="valUncType"><option>SD</option><option>2SD</option><option>SEM</option><option>CI95</option></select><div class="help">Required. A number without a type is refused.</div></div></div><div class="row"><div class="field"><label>Adduct *</label><select id="valAdduct"><option>[M+2H]2+</option><option>[M+H]+</option><option>[M+Na]+</option><option>[M-H]-</option></select></div><div class="field"><label>Charge *</label><input id="valCharge" value="2"></div></div><div class="row"><div class="field"><label>Platform *</label><select id="valIms"><option>TWIMS</option><option>DTIMS</option><option>TIMS</option><option>cyclic</option></select></div><div class="field"><label>Drift gas *</label><select id="valGas"><option>N2</option><option>He</option></select><div class="help">Required. Values against different gases are never compared with each other.</div></div></div><div class="row"><div class="field"><label>Instrument</label><input id="valInstrument" placeholder="e.g. Synapt G2-Si"></div><div class="field"><label>Calibrant</label><input id="valCalibrant" placeholder="e.g. dextran"></div></div><div class="row"><div class="field"><label>Source *</label><input id="valSource" value="wellmatix run"><div class="help">Who measured it, or which run it came from.</div></div><div class="field"><label>Replicates</label><input id="valReplicates" placeholder="Optional"></div></div><div class="field"><label>Notes</label><textarea id="valNote" placeholder="Calibration, QC, arrival-time features, manual assignment."></textarea></div><div class="btns"><button class="btn primary" id="attachBtn">Attach Measurement</button><button class="btn outline" id="addAnotherBtn" title="Attach a second measurement to the same prediction; they are appended, never merged.">Attach another</button></div><div id="valErr" class="hidden" style="margin-top:12px"></div></div></div>
+<div><div class="card"><h2>Frozen prediction</h2><div id="valFrozen"><div class="loading">Enter a prediction ID to load it.</div></div></div><div class="card"><h2>Attached so far</h2><div id="valAttached"><div class="loading">Nothing attached yet.</div></div></div></div></div></section>
+
+<!-- ============================ 4. COMPARISON ============================ -->
+<section id="comparison" class="hidden"><div class="hero"><div><h1>Comparison</h1><p>Three axes, each carrying the reason it is what it is.</p></div><div class="badge" id="compBadge">—</div></div>
+<div id="compBody"><div class="loading">Attach a measurement to a frozen prediction, then compare.</div></div></section>
+
+<!-- ============================ 5. RUN HISTORY ============================ -->
+<section id="history" class="hidden"><div class="hero"><div><h1>Run History</h1><p>Prediction and validation audit trail, from the service.</p></div></div><div class="card"><div class="filterbar"><div class="field" style="margin:0"><label>Kind</label><select id="fKind"><option value="">Any</option><option value="prediction.created">prediction.created</option><option value="validation.attached">validation.attached</option></select></div><div class="field" style="margin:0"><label>Composition</label><input id="fComposition" placeholder="e.g. Hex5HexNAc2"></div><div class="field" style="margin:0"><label>Prediction ID</label><input id="fPid" placeholder="pred_…"></div><div class="field" style="margin:0"><label>Page size</label><select id="fLimit"><option>25</option><option>50</option><option>100</option></select></div><button class="btn primary" id="searchBtn">Search</button></div><div id="historyBody"><div class="loading">Loading…</div></div></div></section>
+
+<!-- ============================ 6. MODEL MONITOR ============================ -->
+<section id="monitor" class="hidden"><div class="hero"><div><h1>Model Monitor</h1><p>What is serving, what it was built from, and what it will answer for.</p></div></div>
+<div id="monitorBody"><div class="loading">Loading…</div></div></section>
+
+<div class="footer-note">Wellmatix • This dashboard is a client of the glycan service. Every number on it comes from a response, and every response carries the pipeline fingerprint and the data snapshot it was made against.</div></main></div>
+<script>
+"use strict";
+/* ------------------------------------------------------------------------------------------
+   A REAL CLIENT. Six pages, six endpoints, no values baked into the page.
+
+   THE ONE RULE THAT SHAPES THE CANDIDATE VIEW: a list numbered 1..167 would present an
+   arbitrary order as a ranking, and 152 of the 167 Hex5HexNAc4Fuc1 candidates sit in a class
+   the platform's own features cannot separate. So candidates are NEVER numbered. Bands are
+   ordered and say so; classes inside a band are an unordered set and say so; candidates inside
+   a class are an unordered set, labelled with how many share that position.
+
+   THE SECOND RULE: an axis that cannot be evaluated shows its REASON, never a blank or a dash.
+   A "—" in a delta column reads as "about zero" to anyone skimming.
+   ------------------------------------------------------------------------------------------ */
+const API = "";                                    // same origin: the service hosts this page
+const SECTIONS = ["predict","results","validate","comparison","history","monitor"];
+const state = {prediction:null, comparison:null, stamp:null};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = v => v == null ? null : (v * 100).toFixed(2) + "%";
+const num = (v, d=1) => v == null ? null : Number(v).toFixed(d);
+
+function show(view){
+  document.querySelectorAll(".nav").forEach(n => n.classList.toggle("active", n.dataset.view === view));
+  SECTIONS.forEach(s => $(s).classList.toggle("hidden", s !== view));
+  window.scrollTo({top:0, behavior:"smooth"});
+  if (view === "history") loadRuns();
+  if (view === "monitor") loadModel();
+}
+document.querySelectorAll(".nav").forEach(n => n.onclick = () => show(n.dataset.view));
+
+async function call(path, options){
+  const response = await fetch(API + path, Object.assign({headers:{"Content-Type":"application/json"}}, options));
+  let body = null;
+  try { body = await response.json(); } catch (e) { body = null; }
+  if (!response.ok){
+    const detail = body && body.detail;
+    const text = typeof detail === "string" ? detail
+      : detail && detail.detail ? detail.detail
+      : detail ? JSON.stringify(detail, null, 2)
+      : response.statusText;
+    const error = new Error(text);
+    error.status = response.status;
+    error.body = body;
+    throw error;
+  }
+  return body;
+}
+
+function fail(where, error){
+  const box = $(where);
+  box.classList.remove("hidden");
+  box.innerHTML = '<div class="err"><b>' + esc(error.status ? "HTTP " + error.status : "Request failed") + "</b>\n" + esc(error.message) + "</div>";
+}
+function clearFail(where){ $(where).classList.add("hidden"); $(where).innerHTML = ""; }
+
+/* --- the stamp, on every page that shows a response ----------------------------------------- */
+function stampCard(stamp){
+  if (!stamp) return "";
+  return '<div class="card"><h2>Provenance</h2><dl class="kv">'
+    + kv("Pipeline fingerprint", stamp.fingerprint)
+    + kv("parameters", stamp.fingerprint_parameters)
+    + kv("corpus", stamp.fingerprint_corpus)
+    + kv("Data snapshot", stamp.data_snapshot)
+    + kv("Reference dataset", stamp.dataset)
+    + kv("Licence", stamp.dataset_licence + " · " + stamp.dataset_attribution)
+    + kv("Structures indexed", stamp.structures_indexed + " resolved, " + stamp.distinct_structures + " distinct, " + stamp.compositions_in_corpus + " compositions")
+    + kv("Package", stamp.package + " " + stamp.version)
+    + '</dl><p class="footer-note">A past prediction is reconstructible from these. The fingerprint digests the curated tables, the placement vocabulary, the feature columns, the prior policy and the corpus keys &mdash; not the source text, so a logic change that touches none of those will not move it.</p></div>';
+}
+const kv = (k, v) => "<dt>" + esc(k) + "</dt><dd class=\"mono\">" + esc(v) + "</dd>";
+
+/* ============================== 1 + 2. PREDICT AND RESULT ============================== */
+$("exampleBtn").onclick = () => { $("composition").value = "Hex5HexNAc4Fuc1"; $("charge").value = "2"; $("adduct").value = "[M+2H]2+"; };
+$("resetBtn").onclick = () => { $("composition").value = ""; $("charge").value = ""; $("clientRef").value = ""; clearFail("predictErr"); };
+
+$("runBtn").onclick = async () => {
+  clearFail("predictErr");
+  const body = {composition: $("composition").value.trim(), adduct: $("adduct").value, charge: parseInt($("charge").value, 10)};
+  const ref = $("clientRef").value.trim();
+  if (ref) body.client_reference = ref;
+  $("runBtn").disabled = true; $("runBtn").textContent = "Running…";
+  try {
+    state.prediction = await call("/v1/predictions", {method:"POST", body: JSON.stringify(body)});
+    renderPrediction(state.prediction);
+    show("results");
+  } catch (error) {
+    fail("predictErr", error);
+    if (error.status === 409 && error.body && error.body.detail && error.body.detail.prediction_id){
+      const id = error.body.detail.prediction_id;
+      $("predictErr").innerHTML += '<div class="status" style="margin-top:10px">A prediction is already frozen under that reference and was <b>not</b> modified. <button class="btn outline" id="openExisting">Open ' + esc(id) + "</button></div>";
+      $("openExisting").onclick = async () => { state.prediction = await call("/v1/predictions/" + encodeURIComponent(id)); renderPrediction(state.prediction); show("results"); };
+    }
+  } finally { $("runBtn").disabled = false; $("runBtn").textContent = "Run AI Prediction"; }
+};
+
+function renderPrediction(p){
+  $("resultSub").textContent = p.composition + " · " + p.adduct + " · charge " + p.charge + " · frozen " + p.created_at;
+  $("resultBadge").textContent = p.is_a_ranking ? "FROZEN · BANDED" : "FROZEN · NOT ORDERED";
+  $("resultBadge").style.background = p.is_a_ranking ? "#eef8f2" : "#fff7e8";
+  $("resultBadge").style.color = p.is_a_ranking ? "#186b45" : "#8b5d00";
+  $("resultBody").innerHTML =
+    '<div class="grid"><div>' + candidatesCard(p) + rulesCard(p) + "</div><div>"
+    + shapeCard(p) + decisionCard(p) + confidenceCard(p) + coverageCard(p) + evidenceCard(p) + stampCard(p.stamp)
+    + "</div></div>";
+  $("useForValidation").onclick = () => { $("valPid").value = p.prediction_id; show("validate"); loadFrozen(); };
+  $("exportJson").onclick = () => {
+    const blob = new Blob([JSON.stringify(p, null, 2)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = p.prediction_id + ".json"; a.click();
+    URL.revokeObjectURL(a.href);
+  };
+}
+
+/* THE CANDIDATE VIEW. Bands are ordered; nothing inside a band is. */
+function candidatesCard(p){
+  if (!p.candidates_total){
+    return '<div class="card"><h2>2. Candidate structures</h2><div class="status bad"><b>No candidate could be built.</b><br>' + esc(p.refusal || "") + "</div></div>";
+  }
+  const byId = {};
+  p.classes.forEach(c => byId[c.class_id] = c);
+  const total = p.bands.length;
+  let html = '<div class="card"><h2>2. Candidate structures</h2>';
+
+  html += '<div class="status' + (p.is_a_ranking ? "" : " bad") + '">';
+  if (!p.is_a_ranking){
+    html += "<b>THIS SET IS NOT ORDERED.</b><br>" + esc(p.refusal);
+  } else {
+    html += "<b>" + p.tied_candidates + " of " + p.candidates_total + " candidates cannot be ordered at all.</b><br>"
+      + "They share an indistinguishable class with at least one other candidate: every one of the 24 structure "
+      + "feature columns this platform computes is identical, so it has no basis on which to put one before another. "
+      + "The largest such group holds " + p.largest_indistinguishable_class + ".";
+  }
+  html += "</div>";
+
+  html += '<p class="footer-note">Bands are ordered by evidence. <b>Nothing inside a band is ordered</b>, and candidates are deliberately not numbered: a list running 1 to ' + p.candidates_total + " would present an arbitrary order as a ranking.</p>";
+
+  p.bands.forEach(band => {
+    const share = band.share_per_class == null ? "not defined" : pct(band.share_per_class);
+    html += '<div class="band' + (band.rank === 1 ? " top" : "") + '">'
+      + '<div class="cand-head"><span class="rank">Band ' + band.rank + " of " + total + "</span>"
+      + '<span class="score">' + esc(share) + ' <span style="font-weight:400;color:#7c8f99;font-size:11px">per class</span></span></div>'
+      + '<div class="bar"><i style="width:' + Math.max(1, Math.min(100, (band.band_total_share || 0) * 100)).toFixed(1) + '%"></i></div>'
+      + '<div class="chips"><span class="chip">' + band.attested_structures + " distinct attesting structure" + (band.attested_structures === 1 ? "" : "s") + "</span>"
+      + '<span class="chip">' + band.classes.length + " class" + (band.classes.length === 1 ? "" : "es") + "</span>"
+      + '<span class="chip">' + band.candidates + " candidate" + (band.candidates === 1 ? "" : "s") + "</span>"
+      + '<span class="chip">band holds ' + esc(pct(band.band_total_share) || "n/a") + " of the evidence mass</span></div>";
+
+    if (band.classes.length > 1){
+      html += '<p class="footer-note" style="padding:8px 0 0">These ' + band.classes.length + " classes hold equal evidence. They are shown unordered because nothing separates them.</p>";
+    }
+    band.classes.forEach(id => {
+      const c = byId[id];
+      if (!c) return;
+      const n = c.members.length;
+      html += '<div class="klass' + (c.is_a_tie ? " tied" : "") + '">'
+        + '<div class="axis-head"><b>' + (c.is_a_tie ? n + " candidates sharing this position" : "1 candidate") + "</b>"
+        + (c.is_a_tie ? '<span class="pill warn">tied · not separable</span>' : '<span class="pill muted">alone in its class</span>')
+        + "</div>";
+      if (c.is_a_tie){
+        html += '<p class="why">All ' + n + " have identical values in every structure feature column. The platform cannot tell you which of them it is, and this dashboard will not guess.</p>";
+      }
+      if (c.attested_structures > 0){
+        html += '<div class="chips" style="margin:6px 0"><span class="chip">attested by ' + c.attested_structures + " distinct reference structure" + (c.attested_structures === 1 ? "" : "s") + "</span>"
+          + (c.attesting_accessions.length ? '<span class="chip">' + c.attesting_accessions.slice(0, 4).map(esc).join(", ") + (c.attesting_accessions.length > 4 ? " +" + (c.attesting_accessions.length - 4) : "") + "</span>" : '<span class="chip">no accession on the attesting record(s)</span>')
+          + (c.reference_rows > c.attested_structures ? '<span class="chip">' + c.reference_rows + " reference rows: the source spells one structure more than once</span>" : "")
+          + "</div>";
+      } else {
+        html += '<div class="chips" style="margin:6px 0"><span class="chip">no reference structure attests this</span></div>';
+      }
+      html += '<ul class="unordered">' + c.members.map(key => {
+        const cand = p.candidates.find(x => x.canonical_key === key);
+        return "<li><span class=\"mono\">" + esc(cand ? cand.iupac_condensed : key) + "</span></li>";
+      }).join("") + "</ul></div>";
+    });
+    html += "</div>";
+  });
+
+  html += '<p class="footer-note">A band position is a statement about evidence, not about structure identity. No exact-isomer claim is made anywhere on this page.</p>'
+    + '<div class="btns"><button class="btn primary" id="useForValidation">Use for validation &rarr;</button><button class="btn outline" id="exportJson">Export JSON</button></div></div>';
+  return html;
+}
+
+function shapeCard(p){
+  return '<div class="card"><h2>Shape of the answer</h2><div class="metric-grid">'
+    + metric("Candidates", p.candidates_total)
+    + metric("Distinguishable classes", p.classes_total)
+    + metric("Bands", p.bands.length)
+    + "</div><div class=\"metric-grid\" style=\"margin-top:10px\">"
+    + metric("Cannot be ordered", p.tied_candidates + " / " + p.candidates_total)
+    + metric("Largest tied group", p.largest_indistinguishable_class)
+    + metric("Trees built", p.enumerator_built)
+    + "</div>"
+    + (p.enumerator_truncated ? '<div class="status bad" style="margin-top:12px"><b>TRUNCATED.</b> The enumerator hit its budget and stopped, so every figure here describes a fragment of the candidate space.</div>' : "")
+    + (p.weaknesses && p.weaknesses.length ? '<div class="section-label">Weaknesses the service reports</div><ul class="unordered">' + p.weaknesses.map(w => "<li>" + esc(w) + "</li>").join("") + "</ul>" : "")
+    + "</div>";
+}
+const metric = (label, value) => '<div class="metric"><small>' + esc(label) + "</small><b>" + esc(value) + "</b></div>";
+
+function confidenceCard(p){
+  const c = p.confidence;
+  let html = '<div class="card"><h2>Confidence</h2>'
+    + '<div class="status"><b>This is not a probability.</b><br>' + esc(c.what_the_number_means) + "</div>"
+    + '<div class="section-label">The prior it was computed under</div><dl class="kv">'
+    + kv("Policy prior", c.prior + " (pseudocount " + c.prior_pseudocount + ")")
+    + kv("Also reported under", c.priors.join(", "))
+    + kv("Calibration", c.calibration)
+    + "</dl>"
+    + '<div class="section-label">Evidence mass that is not on any candidate shown</div><div class="metric-grid">'
+    + metric("On reference structures not enumerated", pct(c.mass_on_reference_structures_not_enumerated) || "not defined")
+    + metric("On a structure nobody proposed", pct(c.mass_on_a_structure_nobody_proposed) || "not defined")
+    + metric("On unattested classes", pct(c.mass_on_unattested_classes) || "not defined")
+    + '</div><p class="footer-note">' + esc(c.what_would_calibrate_it) + "</p></div>";
+  return html;
+}
+
+function coverageCard(p){
+  const c = p.coverage;
+  return '<div class="card"><h2>Can the answer even be in this set?</h2>'
+    + '<div class="axis-head"><b>Completeness</b><span class="pill ' + (c.completeness === "incomplete" ? "bad" : "warn") + '">' + esc(c.completeness.replace(/_/g, " ")) + "</span></div>"
+    + '<p class="why">' + esc(c.summary) + "</p>"
+    + '<div class="metric-grid" style="margin-top:10px">'
+    + metric("Reference structures", c.reference_structures)
+    + metric("Among the candidates", c.attested_by_a_candidate)
+    + metric("NOT enumerated", c.not_enumerated)
+    + '</div><p class="footer-note">There is no COMPLETE state. A corpus records what has been deposited, not what exists, so completeness is never established &mdash; only incompleteness is ever proved.</p></div>';
+}
+
+function decisionCard(p){
+  const d = p.decision;
+  const fired = d.rules.filter(r => r.fires);
+  return '<div class="card"><h2>Decision</h2>'
+    + '<div class="axis-head"><b>' + esc(d.decision.replace(/_/g, " ")) + '</b><span class="pill bad">' + fired.length + " of " + d.rules.length + " rules fire</span></div>"
+    + (d.constant_today ? '<div class="status" style="margin-top:10px"><b>This field is currently constant, and that is the answer rather than a defect.</b><br>' + esc(d.why_it_is_constant) + "</div>" : "")
+    + '<div class="section-label">Every rule, and what it applies to</div>'
+    + d.rules.map(r => '<div class="axis"><div class="axis-head"><b>' + esc(r.name) + '</b><span class="pill ' + (r.fires ? "bad" : "good") + '">' + (r.fires ? "fires" : "does not fire") + '</span></div><p class="why"><b>Applies to:</b> ' + esc(r.applies_to) + "</p><p class=\"why\">" + esc(r.because) + "</p></div>").join("")
+    + "</div>";
+}
+
+function evidenceCard(p){
+  const e = p.ccs_evidence || {};
+  const tone = e.state === "measured_reference" ? "good" : e.state === "lookup_failed" ? "bad" : "warn";
+  let html = '<div class="card"><h2>Cross-section evidence</h2>'
+    + '<div class="axis-head"><b>' + esc(String(e.state || "unknown").replace(/_/g, " ")) + '</b><span class="pill ' + tone + '">' + esc(e.level || "") + " level</span></div>"
+    + '<p class="why">' + esc(e.summary || "") + "</p>";
+  if (e.held){
+    html += '<div class="section-label">Held, and why</div><ul class="unordered">' + e.held.blockers.map(b => "<li>" + esc(b) + "</li>").join("") + "</ul>"
+      + '<p class="why"><b>' + e.held.records + " record(s) exist for this ion and none of their values is shown.</b> "
+      + (e.held.any_blocker_resolves_alone ? "One blocker cleared alone would release them." : "No single blocker cleared alone would release them.") + "</p>";
+  }
+  html += '<p class="footer-note">Composition- and ion-level evidence is shared by every candidate, so it cannot separate them &mdash; and this platform never attaches it to one structure.</p></div>';
+  return html;
+}
+
+function rulesCard(p){
+  const r = p.rules;
+  return '<div class="card"><h2>Biosynthetic rules</h2><div class="metric-grid">'
+    + metric("Rules in the scheme", r.rules_in_scheme)
+    + metric("Violated", r.rules_violated)
+    + metric("Bearing on a candidate", r.rules_applicable_range.length ? r.rules_applicable_range.join(", ") : "none")
+    + '</div><p class="why" style="margin-top:10px">' + esc(r.summary) + "</p>"
+    + '<p class="footer-note">' + (r.verified_by_running_the_check ? "The violation count was measured by running the rule check over every candidate, not inferred from the enumerator having rejected violators." : "The rule check was not run for this result.")
+    + " The count of rules that bear on a candidate varies and is deliberately not a score: it is largely a count of how branched a candidate is, and no curated rule says a more branched structure is more likely.</p></div>";
+}
+
+/* ============================== 3. VALIDATION ============================== */
+$("valPid").onchange = loadFrozen;
+async function loadFrozen(){
+  const id = $("valPid").value.trim();
+  if (!id){ $("valFrozen").innerHTML = '<div class="loading">Enter a prediction ID to load it.</div>'; return; }
+  $("valFrozen").innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const p = await call("/v1/predictions/" + encodeURIComponent(id));
+    state.prediction = p;
+    $("valFrozen").innerHTML = '<div class="metric-grid">'
+      + metric("Composition", p.composition) + metric("Ion", p.adduct + " / " + p.charge) + metric("Classes", p.classes_total)
+      + "</div><div class=\"metric-grid\" style=\"margin-top:10px\">"
+      + metric("Candidates", p.candidates_total) + metric("Bands", p.bands.length) + metric("Decision", p.decision.decision.replace(/_/g, " "))
+      + '</div><p class="footer-note">Frozen ' + esc(p.created_at) + '. <b>No predicted CCS:</b> there is nothing here to compare a measurement against, and the Comparison page says so rather than showing a blank.</p>';
+    loadAttached(id);
+  } catch (error) { $("valFrozen").innerHTML = '<div class="err">' + esc(error.message) + "</div>"; }
+}
+
+async function loadAttached(id){
+  try {
+    const c = await call("/v1/predictions/" + encodeURIComponent(id) + "/comparison");
+    $("valAttached").innerHTML = '<div class="metric-grid">' + metric("Validations", c.validations) + metric("Measurements", c.measurements) + metric("Status", c.status.replace(/_/g, " ")) + "</div>"
+      + '<p class="footer-note">Appended, never merged. The prediction above is byte-identical to the moment it was frozen.</p>';
+  } catch (error) { $("valAttached").innerHTML = '<div class="loading">Nothing attached yet.</div>'; }
+}
+
+async function attach(){
+  clearFail("valErr");
+  const id = $("valPid").value.trim();
+  if (!id){ fail("valErr", new Error("Enter the frozen prediction ID to attach to.")); return; }
+  const m = {
+    ccs: parseFloat($("valCcs").value), uncertainty: parseFloat($("valUnc").value),
+    uncertainty_type: $("valUncType").value, adduct: $("valAdduct").value,
+    charge: parseInt($("valCharge").value, 10), ims_type: $("valIms").value,
+    drift_gas: $("valGas").value, source: $("valSource").value.trim()
+  };
+  if ($("valInstrument").value.trim()) m.instrument = $("valInstrument").value.trim();
+  if ($("valCalibrant").value.trim()) m.calibrant = $("valCalibrant").value.trim();
+  if ($("valReplicates").value.trim()) m.replicates = parseInt($("valReplicates").value, 10);
+  const body = {measurements:[m]};
+  if ($("valNote").value.trim()) body.note = $("valNote").value.trim();
+  $("attachBtn").disabled = true;
+  try {
+    const attached = await call("/v1/predictions/" + encodeURIComponent(id) + "/validation", {method:"POST", body: JSON.stringify(body)});
+    $("valErr").classList.remove("hidden");
+    $("valErr").innerHTML = '<div class="status good"><b>Attached.</b> ' + attached.measurements_attached + " measurement(s); this prediction now has " + attached.validations_on_this_prediction + " validation record(s).<br>"
+      + "The prediction's stored digest before the write was <span class=\"mono\">" + esc(attached.prediction_digest_before.slice(0, 16)) + "</span> and after it is <span class=\"mono\">" + esc(attached.prediction_digest_after.slice(0, 16)) + "</span> &mdash; "
+      + (attached.prediction_unchanged ? "<b>unchanged</b>, read from storage rather than asserted." : "<b>CHANGED, which should be impossible.</b>") + "</div>";
+    loadAttached(id);
+    await loadComparison(id);
+  } catch (error) { fail("valErr", error); }
+  finally { $("attachBtn").disabled = false; }
+}
+$("attachBtn").onclick = async () => { await attach(); show("comparison"); };
+$("addAnotherBtn").onclick = attach;
+
+/* ============================== 4. COMPARISON ============================== */
+async function loadComparison(id){
+  $("compBody").innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const c = await call("/v1/predictions/" + encodeURIComponent(id) + "/comparison");
+    state.comparison = c;
+    renderComparison(c);
+  } catch (error) {
+    $("compBadge").textContent = "NOTHING ATTACHED";
+    $("compBody").innerHTML = '<div class="card"><div class="err">' + esc(error.message) + "</div></div>";
+  }
+}
+
+function renderComparison(c){
+  $("compBadge").textContent = c.status.replace(/_/g, " ").toUpperCase();
+  const compared = c.per_measurement.filter(m => m.against_reference === "compared");
+
+  /* AXIS 1. Never a blank: the honest answer is that a delta against a prediction is undefined,
+     and the reason is shown in full. A dash here would read as "about zero". */
+  let html = '<div class="card"><h2>4. The three axes</h2>'
+    + '<div class="axis"><div class="axis-head"><b>Axis 1 &mdash; against the AI prediction</b><span class="pill bad">undefined</span></div>'
+    + '<p class="why">' + esc(c.against_prediction_because) + "</p></div>"
+
+  /* AXIS 2. Per measurement, each carrying its own state and reason. */
+    + '<div class="axis"><div class="axis-head"><b>Axis 2 &mdash; against a reference the platform holds</b><span class="pill ' + (compared.length ? "good" : "warn") + '">' + (compared.length ? compared.length + " of " + c.per_measurement.length + " compared" : "not evaluable") + "</span></div>"
+    + c.per_measurement.map(m => {
+        const head = '<div class="axis-head" style="margin-top:8px"><b class="mono">' + num(m.ccs) + " Å² &plusmn; " + num(m.uncertainty, 2) + " (" + esc(m.uncertainty_type) + ") &middot; " + esc(m.ims_type) + " in " + esc(m.drift_gas) + "</b>"
+          + '<span class="pill ' + (m.against_reference === "compared" ? "good" : "warn") + '">' + esc(m.against_reference.replace(/_/g, " ")) + "</span></div>";
+        if (m.against_reference === "compared"){
+          return head + '<div class="metric-grid" style="margin-top:8px">'
+            + metric("Reference", num(m.reference_ccs) + " Å²")
+            + metric("ΔCCS", (m.delta_ccs >= 0 ? "+" : "") + num(m.delta_ccs) + " Å²")
+            + metric("Relative", num(Math.abs(m.delta_percent), 2) + "%")
+            + "</div><p class=\"why\">" + (m.within_agreement_limit ? "Within" : "OUTSIDE") + " the " + c.agreement_limit_percent + "% agreement limit"
+            + (c.agreement_limit_is_policy ? " (POLICY, chosen rather than measured, and published with every comparison so the limit a verdict rests on travels with the verdict)." : ".") + "</p>";
+        }
+        /* THE REASON, NOT A BLANK. */
+        return head + '<p class="why"><b>No delta, and not because it is zero:</b> ' + esc(m.unevaluable_because || "no reason given") + "</p>";
+      }).join("")
+    + "</div>"
+
+  /* AXIS 3. The one that always works. */
+    + '<div class="axis"><div class="axis-head"><b>Axis 3 &mdash; your own measurements against each other</b><span class="pill ' + (c.among_attached.length ? "good" : "muted") + '">' + (c.among_attached.length ? c.among_attached.length + " group(s)" : "needs two measurements of one ion") + "</span></div>"
+    + (c.among_attached.length
+        ? c.among_attached.map(s => '<div style="margin-top:10px"><div class="chips"><span class="chip">' + esc(s.adduct) + "</span><span class=\"chip\">charge " + s.charge + "</span><span class=\"chip\">" + esc(s.ims_type) + "</span><span class=\"chip\">" + esc(s.drift_gas) + "</span><span class=\"chip\">" + s.measurements + " measurements</span></div>"
+            + '<div class="compare" style="margin-top:10px"><div><small>lowest</small><div class="big">' + num(s.lowest) + " Å²</div></div><div class=\"arrow\">&harr;</div><div><small>highest</small><div class=\"big\">" + num(s.highest) + " Å²</div></div></div>"
+            + '<div class="metric-grid" style="margin-top:10px">' + metric("Spread", num(s.spread) + " Å²") + metric("Relative", num(s.spread_percent, 2) + "%") + metric("Within limit", s.within_agreement_limit ? "YES" : "NO") + "</div></div>").join("")
+        : '<p class="why">This axis needs at least two measurements of the same ion on the same platform and the same drift gas. Values against different gases are never spread against each other &mdash; they are not interchangeable.</p>')
+    + "</div>"
+
+  /* Interval coverage: the reason, never a YES/NO. */
+    + '<div class="axis"><div class="axis-head"><b>Interval coverage</b><span class="pill bad">not evaluable</span></div>'
+    + '<p class="why">' + esc(c.interval_coverage_because) + "</p></div>"
+    + '<p class="footer-note">Three axes rather than one status, because collapsing them would lose the only one that works.</p></div>';
+
+  $("compBody").innerHTML = '<div class="grid"><div>' + html + "</div><div>"
+    + '<div class="card"><h2>What was compared</h2><div class="metric-grid">'
+    + metric("Composition", c.composition) + metric("Ion", c.adduct + " / " + c.charge) + metric("Validations", c.validations)
+    + "</div><div class=\"metric-grid\" style=\"margin-top:10px\">"
+    + metric("Measurements", c.measurements) + metric("Agreement limit", c.agreement_limit_percent + "%") + metric("Status", c.status.replace(/_/g, " "))
+    + "</div></div>" + stampCard(c.stamp) + "</div></div>";
+}
+
+/* ============================== 5. RUN HISTORY ============================== */
+$("searchBtn").onclick = () => loadRuns(0);
+async function loadRuns(offset){
+  offset = offset || 0;
+  const limit = parseInt($("fLimit").value, 10) || 25;
+  const params = new URLSearchParams({limit: String(limit), offset: String(offset)});
+  if ($("fKind").value) params.set("kind", $("fKind").value);
+  if ($("fComposition").value.trim()) params.set("composition", $("fComposition").value.trim());
+  if ($("fPid").value.trim()) params.set("prediction_id", $("fPid").value.trim());
+  $("historyBody").innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const r = await call("/v1/runs?" + params.toString());
+    if (!r.total){ $("historyBody").innerHTML = '<div class="status">No runs match.</div>'; return; }
+    let html = '<table class="runs"><tr><th>When</th><th>Kind</th><th>Composition</th><th>Detail</th><th>Fingerprint</th></tr>'
+      + r.runs.map(one => '<tr class="clickable" data-pid="' + esc(one.prediction_id || "") + '"><td class="mono">' + esc(one.created_at) + "</td><td>" + esc(one.kind) + "</td><td>" + esc(one.composition || "—") + "</td><td>" + esc(one.detail) + '</td><td class="mono">' + esc(one.fingerprint) + "</td></tr>").join("")
+      + "</table>";
+    html += '<p class="footer-note">Showing ' + r.returned + " of " + r.total + " matching run(s), offset " + r.offset + ". Click a row to open its prediction.</p>";
+    const pages = [];
+    if (r.offset > 0) pages.push('<button class="btn outline" data-offset="' + Math.max(0, r.offset - r.limit) + '">&larr; Previous</button>');
+    if (r.offset + r.returned < r.total) pages.push('<button class="btn outline" data-offset="' + (r.offset + r.limit) + '">Next &rarr;</button>');
+    if (pages.length) html += '<div class="btns">' + pages.join("") + "</div>";
+    $("historyBody").innerHTML = html;
+    $("historyBody").querySelectorAll("tr.clickable").forEach(row => row.onclick = async () => {
+      if (!row.dataset.pid) return;
+      state.prediction = await call("/v1/predictions/" + encodeURIComponent(row.dataset.pid));
+      renderPrediction(state.prediction); show("results");
+    });
+    $("historyBody").querySelectorAll("button[data-offset]").forEach(b => b.onclick = () => loadRuns(parseInt(b.dataset.offset, 10)));
+  } catch (error) { $("historyBody").innerHTML = '<div class="err">' + esc(error.message) + "</div>"; }
+}
+
+/* ============================== 6. MODEL MONITOR ============================== */
+async function loadModel(){
+  $("monitorBody").innerHTML = '<div class="loading">Loading…</div>';
+  try {
+    const m = await call("/v1/models/current");
+    state.stamp = m.stamp;
+    $("topStamp").textContent = m.stamp.fingerprint;
+    $("sideModel").innerHTML = "wmxglycan " + esc(m.stamp.version) + "<br>" + esc(m.stamp.fingerprint) + "<br>Domain: " + esc(m.domain.glycan_class);
+    const d = m.domain;
+    $("monitorBody").innerHTML = '<div class="metric-grid">'
+      + metric("Reference structures indexed", m.stamp.structures_indexed)
+      + metric("Distinct structures", m.stamp.distinct_structures)
+      + metric("Compositions in the corpus", m.stamp.compositions_in_corpus)
+      + "</div><div class=\"metric-grid\" style=\"margin-top:10px\">"
+      + metric("Predictions frozen", m.predictions_frozen)
+      + metric("CCS model fitted", m.ccs_model_fitted ? "yes" : "NO")
+      + metric("Calibration", m.calibration.replace(/_/g, " "))
+      + "</div>"
+      + '<div class="grid" style="margin-top:18px"><div>'
+      + '<div class="card"><h2>No fitted CCS model</h2><div class="status">' + esc(m.ccs_model_note) + "</div>"
+      + '<p class="footer-note">' + esc(m.what_would_calibrate_it) + "</p></div>"
+      + '<div class="card"><h2>Applicability domain</h2><dl class="kv">'
+      + kv("Glycan class", d.glycan_class) + kv("Residues", d.residues_supported.join(", "))
+      + kv("Curated rules", d.biosynthetic_rules) + kv("Predicts CCS", d.predicts_ccs ? "yes" : "no")
+      + "</dl><div class=\"section-label\">Builds on</div><p class=\"why\">" + esc(d.builds_on) + "</p>"
+      + '<div class="section-label">What the rules govern</div><p class="why">' + esc(d.rules_govern) + "</p>"
+      + '<div class="section-label">Species assumption</div><p class="why">' + esc(d.species_assumption) + "</p>"
+      + '<div class="section-label">Known coverage limit</div><div class="status bad">' + esc(d.known_coverage_limit) + "</div></div>"
+      + "</div><div>"
+      + '<div class="card"><h2>Decision values</h2>'
+      + '<div class="section-label">Declared by the spec</div><div class="chips">' + m.decision_values.map(v => '<span class="chip">' + esc(v) + "</span>").join("") + "</div>"
+      + '<div class="section-label">Reachable today</div><div class="chips">' + m.decision_reachable_today.map(v => '<span class="pill bad">' + esc(v) + "</span>").join("") + "</div>"
+      + '<div class="status" style="margin-top:12px"><b>One reachable value is the true state, not a broken field.</b><br>Two rules fire on every possible input: no validated model exists, and the completeness of a candidate set cannot be established from a corpus that records depositions rather than existence.</div></div>'
+      + stampCard(m.stamp) + "</div></div>";
+  } catch (error) {
+    $("monitorBody").innerHTML = '<div class="err">' + esc(error.message) + "</div>";
+    if (location.protocol === "file:") $("offline").classList.remove("hidden");
+  }
+}
+
+/* --- boot ---------------------------------------------------------------------------------- */
+if (location.protocol === "file:"){
+  $("offline").classList.remove("hidden");
+  $("topStamp").textContent = "no service";
+  $("sideModel").textContent = "not connected";
+} else {
+  loadModel();
+}
+</script></body></html>
