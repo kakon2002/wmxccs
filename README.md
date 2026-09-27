@@ -2,7 +2,7 @@
 
 > **Two things at two maturities, and the second does not predict cross sections.** `src/wmxccs`
 > is a CCS harmonization pipeline with a model fitted on 142 cross-platform matched ions, at
-> `0.8.0`. `src/wmxglycan` ranks candidate glycan structures on evidence and has **no fitted model
+> `0.8.1`. `src/wmxglycan` ranks candidate glycan structures on evidence and has **no fitted model
 > of any kind** — there is no glycan CCS model and V1 will not have one — at `0.1.0`. Every cross
 > section the glycan layer reports is a measured value or an explicit statement that none is held.
 >
@@ -131,7 +131,7 @@ gate, because a data gap and a permission problem are different failures and a r
 able to tell which one they are looking at.
 
 So the two packages sit at different maturities on purpose, and their version numbers say so:
-**wmxccs 0.8.0** with a model fitted on 142 matched ions, **wmxglycan 0.1.0** with none. A single
+**wmxccs 0.8.1** with a model fitted on 142 matched ions, **wmxglycan 0.1.0** with none. A single
 version across both would make the second look like the first.
 
 The consequence for anything the glycan service returns: it ranks on structural plausibility and
@@ -334,11 +334,25 @@ and reads `tests/` live, so an edit made mid-run changes the suite between one m
 next and every later kill may be a kill by that edit. `--dirty` overrides it; a figure measured
 that way is not a sweep result. This is not theoretical - see `LIMITATIONS.md` section 4.9.
 
-To rebuild the seed files from the transcriptions:
+To rebuild the seed files from the transcriptions. **The source directory is a required
+argument** - the script has no default and will not guess:
 
 ```
-.venv/Scripts/python tools/seed_struwe.py
+.venv/Scripts/python tools/seed_struwe.py data/seed/as_delivered
 ```
+
+`data/seed/as_delivered/` is committed and holds both raw transcriptions verbatim, so that command
+re-runs the conversion against the same input the current seed files were built from. Point it at
+another directory to convert a fresh transcription; it must contain both files under their delivered
+names, and the script says so if it does not. `WMXCCS_STRUWE_SOURCE_DIR` works instead of the
+argument.
+
+**Expect the re-run to rewrite every line, and check the values rather than the diff.** The
+committed seed files were written when `loader.COLUMNS` held 50 columns and it now holds 63, so a
+re-run emits 13 further columns and `git diff` reports the whole file changed. Every added column is
+empty and no value differs — verified on 27 September 2026, with the model fingerprint
+`064eb9fba603/0d69f799f6f1` unmoved across the regenerated files, which is the check that matters.
+The loader reads both widths, so the committed files are not stale; they are narrower.
 
 ## Layout
 

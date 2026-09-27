@@ -9,7 +9,7 @@ candidate N-glycan structures for a composition and bands them by the evidence t
 It has **no fitted model of any kind** and V1 will not have one. Every cross section it reports is
 a measured value or an explicit statement that none is held.
 
-Two packages, one repository, no shared code. They are at `0.8.0` and `0.1.0` and the difference
+Two packages, one repository, no shared code. They are at `0.8.1` and `0.1.0` and the difference
 between those numbers is the point.
 
 ---
@@ -21,6 +21,52 @@ mistaken for bugs already.
 
 Where a point is enforced rather than described, the enforcing file is named. Prefer it to this
 document: a paragraph can go stale and a test cannot.
+
+## What is built
+
+Before the seven: the glycan layer is not a scaffold waiting for a model. These exist, they are
+tested, and they are what the platform does.
+
+**The enumerator** (`enumeration.py`) takes a composition and returns every N-glycan structure that
+the curated biosynthetic rules permit on a complete Man3GlcNAc2 core. For `Hex5HexNAc4Fuc1` it
+builds 1,012 trees and returns 167 candidates. It reports what it rejected and why, and it refuses
+compositions it cannot build rather than returning a shorter list.
+
+**The class algebra** (`ranking.py`) groups candidates that no feature the platform computes can
+separate. A class is a `frozenset` of candidate keys and a band is a `frozenset` of class ids, so an
+order inside either is unrepresentable rather than merely undocumented. Bands are a tuple, because
+between bands there is a real ordering. The key is built from the None-bearing feature mapping, not
+from `as_row()`, because `as_row()` maps absent values to a NaN that compares equal to itself only
+by identity.
+
+**The attestation index** (`attestation.py`) reads SugarBase v12 through glycowork and indexes 4,001
+fully-resolved structures as 3,640 distinct ones, over 687 compositions. Resolvedness is derived
+from parsing each structure, not read off the record's own flags. It counts distinct structures and
+never rows, because 352 keys are spelled more than once in the source.
+
+**The store** (`store.py`) freezes a prediction on creation and appends to it afterwards. It
+contains no `UPDATE` and no `DELETE` statement, asserted by a test that reads the module, and no
+mutating HTTP verb is exposed anywhere. A second write to a frozen prediction returns 409 naming the
+record that stands. Attaching measurements returns the payload digest read before and after the
+write, so a caller does not have to take "nothing was merged" on trust.
+
+**The six endpoints** (`api.py`) create a prediction, read it back, attach measurements, compare,
+list the run history, and report the current model. Every response carries the pipeline fingerprint
+and the data snapshot it was made against, so a prediction read in a year can be checked against the
+pipeline that produced it.
+
+**The dashboard** (`static/dashboard.html`) is a client of those six endpoints, served by the same
+process at `/`. Six pages, no build step, no CDN. It shows bands, tied groups and how many candidates
+share each position, and it numbers no candidate anywhere.
+
+Behind them: a test suite, and a mutation harness that breaks each guard one at a time and requires a
+test to notice. Both counts are in `README.md` § Checking it, where they are derived rather than
+written down; this file states no live figure of its own, which is item 6.
+
+**The refusals are the deliverable, not an unfinished state.** A platform that says these four
+candidates are indistinguishable and will not guess between them is doing the job it was built for;
+the alternative is a ranked list whose order is arbitrary, which is the failure this project was
+built against. Read the seven below as the boundaries of a working thing, not as a list of gaps.
 
 ## 1. The two maturities, and the wall between them
 

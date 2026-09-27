@@ -1,7 +1,7 @@
 # Handover
 
 > **Before anything else: this repository holds TWO packages at TWO maturities, and the glycan one
-> does not predict cross sections.** `src/wmxccs` is the CCS harmonization pipeline, `0.8.0`, with
+> does not predict cross sections.** `src/wmxccs` is the CCS harmonization pipeline, `0.8.1`, with
 > a model fitted on 142 cross-platform matched ions. `src/wmxglycan` ranks candidate glycan
 > structures on the evidence that attests them, `0.1.0`, with **no fitted model of any kind** —
 > there is no glycan CCS model and V1 will not have one. Nothing in the CCS sections below carries
@@ -13,8 +13,9 @@
 
 For an engineer picking up `wmxccs` cold. Written 21 September 2026 against `v0.6.0-mvp`;
 figures and tag reference corrected 23 September 2026 for `v0.6.2-mvp`. The banner above and the
-document it points at were added 27 September 2026 for `v0.8.0-mvp`, when the repository stopped
-holding one thing.
+document it points at were written on 27 September 2026 and first ship in **`v0.8.1-mvp`** —
+`v0.8.0-mvp` predates them by five commits, which is why that tag was superseded rather than
+reused.
 
 This is an orientation document. It does not repeat `LIMITATIONS.md`, which is the long
 and authoritative account of what this platform does not do and does not know. What this
@@ -54,8 +55,16 @@ comparison between the instruments that study used — not a statement about how
 platform type varies between laboratories. That claim is not representable: `ComparisonScope`
 has no member for it, and `assert_may_be_quoted_as` raises for every stamp when asked.
 
-It is also **not the glycan platform.** That is a separate repository (`Project2`, package
-`wmxglycan`). Code was ported where `CONTEXT.md` notes it; nothing is imported from it.
+**CORRECTED 27 September 2026.** This paragraph said "It is also **not the glycan platform.** That
+is a separate repository (`Project2`, package `wmxglycan`)", which was true when it was written and
+contradicts the banner at the top of this file. `src/wmxglycan` is in THIS repository, ported beside
+the CCS core on 26 September 2026. What survives from the old wording, unchanged: **`Project2` is
+not a dependency.** Code was copied and adapted, never imported; it is not on this repository's
+path; and `docs/GLYCAN_PORT.md` lists every ported module against the digest of its source. The two
+packages never import each other, and `tests/test_glycan_boundary.py` enforces that.
+
+The sentence above this one is still true and is about the CCS core alone: it is not a
+reproducibility measurement.
 
 ---
 

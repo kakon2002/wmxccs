@@ -14,7 +14,15 @@
 #
 # The fingerprint does not read this string. It digests the corpus and the fitted parameters, so
 # it is the evidence that bumping a version changed no arithmetic.
-__version__ = "0.8.0"
+# 0.8.1 because v0.8.0-mvp DOES NOT CONTAIN docs/READ_THIS_FIRST.md. That document is the one
+# written for a reader arriving cold, and the tag a reader would be pointed at predates it by five
+# commits - so the tag named the wrong tree. Cutting v0.8.1-mvp fixes the pointer; this line keeps
+# the package agreeing with it.
+#
+# NOTHING THE SERVICE COMPUTES CHANGES. The model fingerprint 064eb9fba603/0d69f799f6f1 digests the
+# corpus and the fitted parameters and does not read this string, which is what makes it the
+# evidence that a version bump changed no arithmetic.
+__version__ = "0.8.1"
 
 # 0.7.0 because the CORPUS GREW: 1,437 Bush Lab MicroSource records arrived as a reference
 # library, which is more than a patch even though not one of them is trainable and the fitted

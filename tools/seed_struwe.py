@@ -38,12 +38,15 @@ WHAT IS DELIBERATELY NOT DERIVED
   abbreviation rather than of a paper, so calref_platform stays null on both
   files. Resolving it means reading Hofmann 2014, Anal. Chem. 86, 10789.
 
-Run: python tools/seed_struwe.py
+Run: python tools/seed_struwe.py <directory holding the two raw transcriptions>
+     or set WMXCCS_STRUWE_SOURCE_DIR. There is NO default; see SOURCE_DIR_UNSET below.
+     `data/seed/as_delivered` is a verbatim copy of both and re-runs the conversion.
 """
 
 from __future__ import annotations
 
 import csv
+import os
 import re
 import shutil
 import sys
@@ -56,7 +59,28 @@ from wmxccs.loader import COLUMNS  # noqa: E402
 from wmxccs.reuse import ReuseStatus  # noqa: E402
 from wmxccs.sources import SEED_STRUWE_2015, SEED_STRUWE_2016, licence_for  # noqa: E402
 
-SOURCE_DIR = Path(r"C:/Users/User/Project2/data/raw")
+# WHERE THE RAW TRANSCRIPTIONS LIVE. Required, from argv[1] or the environment, and there is no
+# default. This was a hardcoded path on one machine for five milestones while README pointed
+# readers at this script: for anyone else it failed with a missing-transcription error naming a
+# directory they had never heard of. A default would have kept that shape - it worked for one
+# person, and the failure was invisible to that person.
+SOURCE_DIR_ENV = "WMXCCS_STRUWE_SOURCE_DIR"
+SOURCE_DIR_UNSET = """no source directory given, and this script does not guess.
+
+  usage:  python tools/seed_struwe.py <directory>
+          or set {env}
+
+  The directory must hold both raw transcriptions, named exactly as delivered:
+
+    {file_2016}      <- the space before the extension is deliberate; see FILE_2016 below
+    {file_2015}
+
+  `data/seed/as_delivered/` in this repository holds both, copied verbatim when the seed files were
+  last built, so this re-runs the conversion against the same input and the result can be diffed
+  against what is committed:
+
+    python tools/seed_struwe.py data/seed/as_delivered
+"""
 SEED_DIR = REPO / "data" / "seed"
 AS_DELIVERED = SEED_DIR / "as_delivered"
 
@@ -223,19 +247,56 @@ def write(rows: list[dict[str, str]], path: Path) -> None:
         writer.writerows(rows)
 
 
-def main() -> int:
+def resolve_source_dir(argv: list[str] | None = None) -> Path:
+    """The source directory, from argv[1] or the environment. Raises if neither is set.
+
+    A SystemExit rather than a default, because the two failures are not equally visible: a wrong
+    directory fails loudly for everyone, and a default that happens to exist on one machine fails
+    loudly for everyone EXCEPT the person who set it.
+    """
+    argv = sys.argv[1:] if argv is None else argv
+    given = argv[0] if argv else os.environ.get(SOURCE_DIR_ENV, "").strip()
+    if not given:
+        raise SystemExit(
+            SOURCE_DIR_UNSET.format(
+                env=SOURCE_DIR_ENV, file_2016=FILE_2016, file_2015=FILE_2015
+            )
+        )
+    directory = Path(given).expanduser()
+    if not directory.is_dir():
+        raise SystemExit(f"not a directory: {directory}")
+    missing = [name for name in (FILE_2016, FILE_2015) if not (directory / name).is_file()]
+    if missing:
+        raise SystemExit(
+            f"{directory} is missing {len(missing)} of the two transcriptions: "
+            + ", ".join(repr(name) for name in missing)
+            + ". Both are required, under exactly those names, and"
+            " data/seed/as_delivered/ holds a verbatim copy of each"
+        )
+    return directory
+
+
+def main(argv: list[str] | None = None) -> int:
+    source_dir = resolve_source_dir(argv)
     SEED_DIR.mkdir(parents=True, exist_ok=True)
     AS_DELIVERED.mkdir(parents=True, exist_ok=True)
+    print(f"reading transcriptions from {source_dir}")
 
     for name, converter, out_name in (
         (FILE_2016, convert_2016, "struwe2016_chemcommun.csv"),
         (FILE_2015, convert_2015, "struwe2015_analyst.csv"),
     ):
-        source = SOURCE_DIR / name
+        source = source_dir / name
         if not source.exists():
             raise SystemExit(f"missing transcription: {source}")
         # Verbatim, filename and all, so the delivered transcription stays reviewable.
-        shutil.copy2(source, AS_DELIVERED / name)
+        #
+        # GUARDED AGAINST COPYING A FILE ONTO ITSELF. `data/seed/as_delivered` is the documented
+        # argument for a re-run, and it is also this destination, so the unguarded copy2 raised
+        # SameFileError on the command the error message recommends.
+        delivered = AS_DELIVERED / name
+        if not (delivered.exists() and source.resolve() == delivered.resolve()):
+            shutil.copy2(source, delivered)
 
         rows = _read(source)
         converted = converter(rows)
