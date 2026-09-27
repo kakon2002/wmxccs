@@ -62,6 +62,31 @@ from .glycan_graph import GlycanGraph
 from .licensing import ReuseStatus
 from .models import GlycanStructure
 
+# THE TREE BUDGET. A STATED SCOPE LIMIT, not a tuning knob, and named here because it was an
+# undisclosed default argument until 28 September 2026 - at which point a composition that exhausted
+# it was told "every one of the N arrangements broke a biosynthetic rule", which is a claim about
+# glycobiology and was false.
+#
+# RAISED FROM 5,000, and the reason is that 5,000 was suppressing answers rather than protecting
+# anything. Measured completion, trees built and wall clock:
+#
+#     Hex5HexNAc4Fuc1     1,012   0.4s  complete
+#     Hex6HexNAc5Fuc1    12,844   5.1s  complete  ->  1,729 candidates in 4 bands, RANKABLE
+#     Hex6HexNAc5NeuAc2  24,052   8.7s  complete  ->  4,620 candidates in 4 bands, RANKABLE
+#     Hex6HexNAc5NeuAc3  54,204  26.0s  complete  -> 11,672 candidates in 5 bands, RANKABLE
+#
+# At 5,000 the last three were refusals. They are ordinary human N-glycans and the platform can
+# answer for them, so the budget was the defect.
+#
+# AND NO BUDGET FIXES THE TAIL. Hex7HexNAc6NeuAc3 and Hex8HexNAc7NeuAc4 exhaust 60,000 as well
+# (28.9s and 37.9s, zero candidates), because the arrangement count grows combinatorially with the
+# antennae. So this is a scope limit that is reported, not a number that can be raised until the
+# problem goes away - which is why every response carries it and why exhaustion now says so.
+#
+# The cost is stated rather than hidden: a composition that cannot complete burns about thirty
+# seconds before refusing, where at 5,000 it burned two and said something untrue.
+DEFAULT_TREE_BUDGET = 60_000
+
 CANDIDATE_SOURCE = "enumerated by wmxglycan from a composition under mammalian biosynthetic constraints"
 
 # Which composition class a residue belongs to.
@@ -312,7 +337,9 @@ class Enumerator:
             )
         )
 
-    def enumerate(self, composition: Composition | str, limit: int = 5000) -> EnumerationResult:
+    def enumerate(
+        self, composition: Composition | str, limit: int = DEFAULT_TREE_BUDGET
+    ) -> EnumerationResult:
         """Every candidate for `composition`, deduplicated on canonical structure identity."""
         composition = composition if isinstance(composition, Composition) else Composition.parse(composition)
         if composition.hex < 3 or composition.hexnac < 2:
@@ -367,8 +394,28 @@ class Enumerator:
             reasons = tuple(n_glycan_implausibility_reasons(composition))
             if reasons:
                 refusal = "; ".join(reasons)
+            elif state["capped"]:
+                # THE BUDGET, NEVER THE RULES. This branch used to fall through to "every one of
+                # the N arrangements broke a biosynthetic rule", which asserts a fact about
+                # glycobiology on the strength of a search that stopped early. Measured:
+                # Hex6HexNAc5NeuAc2 gave that refusal at 5,000 trees and 4,620 candidates at
+                # 60,000. A budget exhaustion and a biological refusal are different findings and
+                # must never be reported as each other.
+                refusal = (
+                    f"the tree budget of {limit:,} arrangements was exhausted before any candidate"
+                    f" passed the curated rules. {rejected:,} of the {len(trees):,} arrangements"
+                    " examined broke a rule, and the rest of the space was NOT examined. THIS IS"
+                    " NOT A STATEMENT THAT NO CANDIDATE EXISTS: a larger budget may find some, and"
+                    " for some compositions it does. The arrangement count grows combinatorially"
+                    " with the antennae, so this is a stated scope limit rather than a number that"
+                    " can be raised until it goes away"
+                )
             elif rejected:
-                refusal = f"every one of the {rejected} arrangements broke a biosynthetic rule"
+                refusal = (
+                    f"every one of the {rejected} arrangements broke a biosynthetic rule, and the"
+                    " space was searched EXHAUSTIVELY - the tree budget was not reached, so this is"
+                    " a finding about the composition and not about the search"
+                )
             elif not trees:
                 refusal = "no arrangement of these residues fits the mammalian sites"
         return EnumerationResult(

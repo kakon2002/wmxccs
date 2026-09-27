@@ -439,3 +439,327 @@ def test_the_registers_are_honest_about_themselves():
     # And the classifier must be able to see a claim, or everything above is vacuous.
     assert _claim_paths({"x": "the curated rules govern branching order and nothing else"}) == {"x"}
     assert _claim_paths({"x": "short"}) == set()
+
+# --- 8. THE REGISTER, EXTENDED TO NUMERIC AND BOOLEAN CLAIMS ----------------------------------------
+#
+# THE NINTH DEFECT WAS TWO SCALARS, and the string register could not see it: a refused composition
+# served `enumerator_built: 0` and `enumerator_truncated: false` while 5,000 trees had been built and
+# the cap had fired, in the same response as a refusal blaming the curated rules. A guard that covers
+# strings and not numbers is how that walked past the guard written for the eight before it.
+
+
+def _scalars(node, path=""):
+    """Every int, float and bool a caller receives, with its json path."""
+    if isinstance(node, bool) or isinstance(node, (int, float)):
+        yield path, node
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            yield from _scalars(value, f"{path}.{key}" if path else key)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _scalars(value, f"{path}[{index}]")
+
+
+def _scalar_paths(body) -> set[str]:
+    return {re.sub(r"\[\d+\]", "", path) for path, _ in _scalars(body)}
+
+
+# Every scalar the platform serves, against the measurement that checks it. The value is the test
+# function name, so a reader can go straight to what establishes the number.
+VERIFIED_SCALARS = {
+    # what the enumerator did - THE NINTH DEFECT'S FIELDS
+    "enumerator_built": "test_the_enumerator_counts_are_the_real_ones_even_on_a_refusal",
+    "enumerator_rejected": "test_the_enumerator_counts_are_the_real_ones_even_on_a_refusal",
+    "enumerator_truncated": "test_truncation_is_reported_exactly_when_the_budget_was_hit",
+    # the shape of the answer
+    "candidates_total": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "classes_total": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "tied_candidates": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "largest_indistinguishable_class": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "is_a_ranking": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "bands.rank": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "bands.candidates": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "bands.attested_structures": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "classes.is_a_tie": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "classes.attested_structures": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "candidates.attested": "test_every_residue_the_domain_advertises_can_actually_be_placed",
+    # the rule accounting
+    "rules.rules_in_scheme": "test_the_served_rule_counts_are_the_enumerators_own",
+    "rules.rules_evaluated_by_the_check": "test_the_served_rule_counts_are_the_enumerators_own",
+    "rules.rules_reported_as_ordering_caveats": "test_the_served_rule_counts_are_the_enumerators_own",
+    "rules.rules_violated": "test_a_refused_composition_publishes_the_real_scheme_size_and_an_absent_violated_count",
+    "rules.verified_by_running_the_check": "test_a_refused_composition_publishes_the_real_scheme_size_and_an_absent_violated_count",
+    "rules.rules_applicable_range": "test_the_summary_says_how_many_candidates_carry_a_caveat_and_it_is_the_real_number",
+    "candidates.rules_applicable": "test_the_summary_says_how_many_candidates_carry_a_caveat_and_it_is_the_real_number",
+    "candidates.ordering_caveats": "test_the_summary_says_how_many_candidates_carry_a_caveat_and_it_is_the_real_number",
+    # the shares
+    "confidence.candidate_shares_sum": "test_the_served_shares_account_to_one_and_say_so",
+    "confidence.mass_not_on_any_candidate": "test_the_served_shares_account_to_one_and_say_so",
+    "confidence.mass_on_reference_structures_not_enumerated": "test_the_served_shares_account_to_one_and_say_so",
+    "confidence.mass_on_a_structure_nobody_proposed": "test_the_served_shares_account_to_one_and_say_so",
+    "confidence.shares_account_to_one": "test_the_served_shares_account_to_one_and_say_so",
+    "confidence.mass_on_unattested_classes": "test_the_unattested_mass_is_inside_the_candidate_sum_and_not_a_fourth_term",
+    "confidence.prior_pseudocount": "test_the_definition_of_the_share_names_the_denominator_the_code_uses",
+    "classes.evidence_share": "test_the_definition_of_the_share_names_the_denominator_the_code_uses",
+    "bands.share_per_class": "test_the_served_shares_account_to_one_and_say_so",
+    "bands.band_total_share": "test_the_served_shares_account_to_one_and_say_so",
+    # coverage, from the index
+    "coverage.reference_structures": "test_the_coverage_figures_the_domain_cites_are_the_measured_ones",
+    "coverage.not_enumerated": "test_the_coverage_figures_the_domain_cites_are_the_measured_ones",
+    "coverage.attested_by_a_candidate": "test_the_coverage_figures_the_domain_cites_are_the_measured_ones",
+    "coverage.truth_may_not_be_in_the_candidate_set": "test_the_completeness_fact_lives_in_one_place (test_glycan_read_this_first.py)",
+    # the domain
+    "domain.biosynthetic_rules": "test_a_refused_composition_publishes_the_real_scheme_size_and_an_absent_violated_count",
+    "domain.predicts_ccs": "test_the_api_says_it_holds_no_measured_cross_section_for_any_candidate (test_glycan_read_this_first.py)",
+    "domain.holds_a_measured_cross_section_for_any_candidate": "test_the_api_says_it_holds_no_measured_cross_section_for_any_candidate (test_glycan_read_this_first.py)",
+    # the decision
+    "decision.constant_today": "test_only_one_decision_is_reachable_and_the_other_two_say_what_would_reach_them (test_glycan_read_this_first.py)",
+    "decision.rules.fires": "test_what_the_decision_function_can_actually_return_under_every_gate_state (test_glycan_read_this_first.py)",
+    # the stamp, from the index
+    "stamp.structures_indexed": "test_the_stamp_counts_are_the_indexs_own",
+    "stamp.distinct_structures": "test_the_stamp_counts_are_the_indexs_own",
+    "stamp.compositions_in_corpus": "test_the_stamp_counts_are_the_indexs_own",
+    # the store
+    "frozen": "test_a_prediction_is_frozen_on_creation_and_the_flag_is_not_a_constant",
+    "predictions_frozen": "test_a_prediction_is_frozen_on_creation_and_the_flag_is_not_a_constant",
+    "classes.reference_rows": "test_the_served_shape_counts_are_derived_from_the_classes",
+    # what the platform holds and whether it discriminates
+    "ccs_model_fitted": "test_the_api_says_it_holds_no_measured_cross_section_for_any_candidate (test_glycan_read_this_first.py)",
+    "ccs_evidence.discriminates_between_candidates": "test_the_ranker_agrees_that_nothing_discriminates_between_candidates (test_glycan_read_this_first.py)",
+    "coverage.reference_rows": "test_the_coverage_figures_the_domain_cites_are_the_measured_ones",
+    "candidates.reference_rows": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "classes.members_order_is_not_meaningful": "test_the_served_shape_counts_are_derived_from_the_classes",
+    "bands.classes_order_is_not_meaningful": "test_the_served_shape_counts_are_derived_from_the_classes",
+}
+
+# Scalars whose value cannot be reduced to a measurement, each with the reason.
+# The caller's own input, echoed. Not a claim the platform makes about itself - but the echo being
+# UNCHANGED is a claim, and hard constraint 3 is exactly about that, so it is measured.
+ECHOED_INPUT = {
+    "charge": "test_the_request_is_echoed_back_unchanged",
+}
+
+UNASSERTED_SCALARS = {
+    "confidence.mass_under_priors": "the three alternative priors are arithmetic on the same"
+    " observations as the served one; the served prior's value IS measured, and reproducing all four"
+    " would re-implement _shares in the test rather than check it",
+    "classes.evidence_share_under_priors": "same reason as mass_under_priors: the served prior is"
+    " checked, the alternatives are the same formula at another concentration",
+    "bands.share_under_priors": "the band-level view of the same four-prior spread; the band's"
+    " served share under the policy prior IS measured, and the alternatives are that arithmetic at"
+    " another concentration",
+}
+
+
+def test_every_served_scalar_is_verified_or_declared(client, prediction):
+    """THE NINTH DEFECT'S GUARD. Two false scalars shipped past a register that walked only strings.
+
+    Same rule, extended: a served int, float or bool must either have a test that MEASURES it or be
+    listed as unverifiable with a reason. A new one in neither fails here.
+    """
+    bodies = [
+        prediction,
+        client.get("/v1/models/current").json(),
+        client.post(
+            "/v1/predictions", json={"composition": MAN5, "adduct": "[M-H]-", "charge": -1}
+        ).json(),
+    ]
+    paths = set()
+    for body in bodies:
+        paths |= _scalar_paths(body)
+    assert len(paths) > 30, f"the scalar walk found only {len(paths)} paths; it is broken"
+
+    # A REGISTER ENTRY COVERS A SUBTREE. `confidence.mass_under_priors` declares every leaf under
+    # it: the walker yields leaves, and naming each of the eight prior-by-quantity combinations
+    # separately would be a list to maintain rather than a decision to record.
+    classified = set(VERIFIED_SCALARS) | set(UNASSERTED_SCALARS) | set(ECHOED_INPUT)
+
+    def is_classified(one: str) -> bool:
+        parts = one.split(".")
+        return any(".".join(parts[: n + 1]) in classified for n in range(len(parts)))
+
+    unclassified = sorted(one for one in paths if not is_classified(one))
+    assert unclassified == [], (
+        "these served numbers and booleans assert something about what the platform did, and are"
+        f" neither measured by a test nor declared unverifiable: {unclassified}. Add a test that"
+        " MEASURES the value and list the path in VERIFIED_SCALARS, or list it in"
+        " UNASSERTED_SCALARS with the reason. The ninth defect was two scalars - enumerator_built"
+        " and enumerator_truncated - that no test measured."
+    )
+
+
+def test_the_scalar_register_names_tests_that_exist():
+    """A register pointing at a test that does not exist is a register that checks nothing."""
+    here = Path(__file__).read_text(encoding="utf-8")
+    sibling = (REPO / "tests" / "test_glycan_read_this_first.py").read_text(encoding="utf-8")
+    for served, where in VERIFIED_SCALARS.items():
+        name = where.split(" ")[0]
+        assert f"def {name}(" in here or f"def {name}(" in sibling, (
+            f"{served} is registered as verified by {name}, which does not exist"
+        )
+    for served, reason in UNASSERTED_SCALARS.items():
+        assert len(reason) > 30, f"{served} is declared unverifiable with no real reason"
+    for served, where in ECHOED_INPUT.items():
+        name = where.split(" ")[0]
+        assert f"def {name}(" in here, f"{served} is registered as echoed, verified by a missing {name}"
+    # The floor: the classifier must see a prefix match and must NOT see an unrelated path.
+    assert "confidence.mass_under_priors" in set(UNASSERTED_SCALARS)
+    assert "enumerator_built" in set(VERIFIED_SCALARS)
+
+
+# --- the measurements the scalar register points at -------------------------------------------------
+
+
+def test_the_request_is_echoed_back_unchanged(client):
+    """The caller's input comes back as sent. Hard constraint 3's shape, at the glycan layer.
+
+    `charge` is the only scalar in a response that is the caller's rather than the platform's, so it
+    is registered separately - but "echoed" is itself a claim, and an echo that quietly normalised a
+    value would be the thing the CCS core refuses to do with a measurement.
+    """
+    for adduct, charge in (("[M+H]+", 1), ("[M-H]-", -1), ("[M+2H]2+", 2)):
+        body = client.post(
+            "/v1/predictions",
+            json={"composition": MAN5, "adduct": adduct, "charge": charge},
+        ).json()
+        assert body["charge"] == charge, f"sent charge {charge}, got {body['charge']}"
+        assert body["adduct"] == adduct
+    # And a signed charge is not silently absolute-valued, which is the normalisation to fear.
+    negative = client.post(
+        "/v1/predictions", json={"composition": MAN5, "adduct": "[M-H]-", "charge": -1}
+    ).json()
+    assert negative["charge"] == -1
+
+
+def test_the_enumerator_counts_are_the_real_ones_even_on_a_refusal(client, shared):
+    """THE NINTH DEFECT. A refused composition served built=0 while 5,000 trees had been built."""
+    enumerator = shared["enumerator"]
+    # A composition that exhausts the budget and yields nothing: the case that was misreported.
+    exhausting = "Hex7HexNAc6NeuAc3"
+    direct = enumerator.enumerate(exhausting)
+    assert not direct.candidates and direct.capped, (
+        f"{exhausting} no longer exhausts the budget, so this test is not exercising the case"
+    )
+    body = client.post(
+        "/v1/predictions", json={"composition": exhausting, "adduct": "[M+H]+", "charge": 1}
+    ).json()
+    assert body["enumerator_built"] == direct.built > 0, (
+        f"served built={body['enumerator_built']} and the enumerator built {direct.built}"
+    )
+    assert body["enumerator_rejected"] == direct.rejected
+    assert body["candidates_total"] == 0
+
+    # AND THE REFUSAL MUST NAME THE BUDGET, NOT THE RULES.
+    refusal = body["refusal"] or ""
+    assert "tree budget" in refusal, refusal[:200]
+    assert "NOT A STATEMENT THAT NO CANDIDATE EXISTS" in refusal, refusal[:200]
+    assert "every one of the" not in refusal, (
+        "a budget exhaustion is being reported as every arrangement breaking a biosynthetic rule,"
+        f" which is a claim about glycobiology: {refusal[:200]}"
+    )
+
+
+def test_truncation_is_reported_exactly_when_the_budget_was_hit(client, shared):
+    """`enumerator_truncated` must track the cap in both directions, on both paths."""
+    enumerator = shared["enumerator"]
+    cases = {
+        G2F: False,                 # completes well inside the budget
+        "Hex7HexNAc6NeuAc3": True,  # exhausts it and yields nothing
+    }
+    for composition, expected in cases.items():
+        direct = enumerator.enumerate(composition)
+        assert direct.capped is expected, (
+            f"{composition}: capped={direct.capped}, expected {expected}; the budget or the space"
+            " changed and this test needs new witnesses"
+        )
+        body = client.post(
+            "/v1/predictions",
+            json={"composition": composition, "adduct": "[M+H]+", "charge": 1},
+        ).json()
+        assert body["enumerator_truncated"] is expected, (
+            f"{composition}: served truncated={body['enumerator_truncated']}, measured {expected}"
+        )
+    # Both values occur, or the assertion above would hold for a constant.
+    assert set(cases.values()) == {True, False}
+
+    # AND THE BUDGET MUST STILL BE BIG ENOUGH FOR WHAT IT WAS RAISED FOR. The default was 5,000
+    # until 28 September 2026, at which point three ordinary tri-antennary compositions were
+    # refused - with a refusal blaming the curated rules - where a larger budget returns a ranked
+    # answer. Lowering it again would bring that back silently, so the witness is pinned here.
+    from wmxglycan.enumeration import DEFAULT_TREE_BUDGET
+
+    witness = enumerator.enumerate("Hex6HexNAc5NeuAc3")
+    assert not witness.capped, (
+        f"Hex6HexNAc5NeuAc3 no longer completes within the budget of {DEFAULT_TREE_BUDGET:,}"
+        f" ({witness.built:,} trees built). At 5,000 it returned zero candidates and a refusal that"
+        " blamed the curated rules; the budget exists at its current size to prevent that."
+    )
+    assert len(witness.candidates) > 10_000, len(witness.candidates)
+
+
+def test_the_served_shape_counts_are_derived_from_the_classes(prediction):
+    """Every count about the answer's shape, recomputed from the classes the same response carries."""
+    classes = {one["class_id"]: one for one in prediction["classes"]}
+    candidates = prediction["candidates"]
+    assert prediction["candidates_total"] == len(candidates)
+    assert prediction["classes_total"] == len(classes)
+    assert prediction["tied_candidates"] == sum(
+        1 for one in candidates if classes[one["class_id"]]["is_a_tie"]
+    )
+    assert prediction["largest_indistinguishable_class"] == max(
+        len(one["members"]) for one in classes.values()
+    )
+    assert sum(len(one["members"]) for one in classes.values()) == len(candidates)
+    for band in prediction["bands"]:
+        assert band["candidates"] == sum(
+            len(classes[class_id]["members"]) for class_id in band["classes"]
+        )
+        assert band["attested_structures"] == max(
+            classes[class_id]["attested_structures"] for class_id in band["classes"]
+        )
+        assert band["classes_order_is_not_meaningful"] is True
+    assert [band["rank"] for band in prediction["bands"]] == list(
+        range(1, len(prediction["bands"]) + 1)
+    )
+    for one in classes.values():
+        assert one["is_a_tie"] is (len(one["members"]) > 1)
+        assert one["members_order_is_not_meaningful"] is True
+    # is_a_ranking must track the refusal rather than being a constant.
+    assert prediction["is_a_ranking"] is (prediction.get("refusal") is None)
+
+
+def test_the_stamp_counts_are_the_indexs_own(client, shared):
+    stamp = client.get("/v1/models/current").json()["stamp"]
+    snapshot = shared["fingerprint"].snapshot
+    assert stamp["structures_indexed"] == snapshot.structures_indexed
+    assert stamp["distinct_structures"] == snapshot.distinct_structures
+    assert stamp["compositions_in_corpus"] == snapshot.compositions
+    # And they must be the index's, not a copy that drifted.
+    index = shared["index"]
+    assert stamp["distinct_structures"] == index.distinct_structures
+    assert stamp["distinct_structures"] < stamp["structures_indexed"], (
+        "distinct equals indexed, so the deduplication this figure exists to report is not happening"
+    )
+
+
+def test_a_prediction_is_frozen_on_creation_and_the_flag_is_not_a_constant(client):
+    """`frozen` and `predictions_frozen` measured, not asserted."""
+    before = client.get("/v1/models/current").json()["predictions_frozen"]
+    body = client.post(
+        "/v1/predictions", json={"composition": MAN5, "adduct": "[M-H]-", "charge": -1}
+    ).json()
+    assert body["frozen"] is True
+    after = client.get("/v1/models/current").json()["predictions_frozen"]
+    assert after == before + 1, (
+        f"predictions_frozen went {before} -> {after} after one create, so it is not counting them"
+    )
+    # A second write to the frozen prediction is refused, which is what `frozen` claims.
+    again = client.post(
+        f"/v1/predictions/{body['prediction_id']}/validation",
+        json={"measurements": [{
+            "ccs": 500.0, "uncertainty": 1.0, "uncertainty_type": "SD", "adduct": "[M-H]-",
+            "charge": -1, "ims_type": "DTIMS", "drift_gas": "N2", "source": "scalar register"}]},
+    )
+    assert again.status_code == 201
+    digest_unchanged = again.json()["prediction_unchanged"]
+    assert digest_unchanged is True, "attaching changed the frozen prediction"

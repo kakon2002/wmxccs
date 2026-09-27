@@ -177,7 +177,8 @@ Activating first (`.venv\Scripts\Activate.ps1`, or `source .venv/bin/activate`) 
 
 **`[glycan]` is not optional if you want the glycan service or the test suite.** Leaving it out
 installs a working CCS service and nothing else: `import wmxglycan` then fails on `networkx`,
-and `pytest` stops with 16 collection errors. That is exactly what happened when this section
+and `pytest` stops with collection errors before it runs a single test. That is exactly what
+happened when this section
 was checked against a clean clone, which is why the extra is in the command rather than in a
 footnote.
 
@@ -202,8 +203,10 @@ install carries no `numpy`. Installing `[glycan]` brings one in for `glycowork`,
 `tests/test_glycan_boundary.py` asserts that fitting the CCS model still loads none of it.
 
 **Optional: `node`.** Six tests execute the dashboard's own JavaScript to check what it renders.
-Without `node` on PATH they skip with that reason and the suite reports **4,082 passed,
-6 skipped**; with it, **4,088 passed**. Nothing else needs it and it is not a runtime dependency.
+Without `node` on PATH they skip with that reason; with it they run. **Six tests skip and nothing
+else does** — the totals are in the count line above, which is derived, and are deliberately not
+repeated here: the figures that used to sit in this sentence were two releases out of date within a
+day. Nothing else needs node and it is not a runtime dependency.
 
 ### Run
 
@@ -310,10 +313,10 @@ what the result may and may not be called. It asserts nothing; the assertions ar
 Run these from the repository root. Substitute `.venv/bin/python` on macOS and Linux.
 
 ```
-.venv/Scripts/python -m pytest -q                  # 4210 tests (2317 wmxccs, 1881 wmxglycan, 12 repository-level)
+.venv/Scripts/python -m pytest -q                  # 4230 tests (2317 wmxccs, 1901 wmxglycan, 12 repository-level)
                                                    # 6 of those skip without node; nothing else skips
-.venv/Scripts/python -m tools.mutation --check     # 358 anchors, about a second
-.venv/Scripts/python -m tools.mutation             # the full sweep: 358 mutations, several hours
+.venv/Scripts/python -m tools.mutation --check     # 362 anchors, about a second
+.venv/Scripts/python -m tools.mutation             # the full sweep: 362 mutations, several hours
 ```
 
 **The counts in that block are derived-checked, not maintained.** `tests/test_repository_counts.py`

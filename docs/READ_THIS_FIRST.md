@@ -27,10 +27,19 @@ document: a paragraph can go stale and a test cannot.
 Before the seven: the glycan layer is not a scaffold waiting for a model. These exist, they are
 tested, and they are what the platform does.
 
-**The enumerator** (`enumeration.py`) takes a composition and returns every N-glycan structure that
-the curated biosynthetic rules permit on a complete Man3GlcNAc2 core. For `Hex5HexNAc4Fuc1` it
-builds 1,012 trees and returns 167 candidates. It reports what it rejected and why, and it refuses
-compositions it cannot build rather than returning a shorter list.
+**The enumerator** (`enumeration.py`) takes a composition and returns the N-glycan structures the
+curated biosynthetic rules permit on a complete Man3GlcNAc2 core, **up to a stated tree budget of
+60,000 arrangements**. For `Hex5HexNAc4Fuc1` it builds 1,012 trees and returns 167 candidates, well
+inside the budget. It reports what it rejected and why.
+
+**The budget is a scope limit and the response always says whether it was hit** —
+`enumerator_built`, `enumerator_truncated`, and a refusal that names the budget rather than blaming
+the curated rules. Both halves of this paragraph were wrong until 28 September 2026: it claimed
+*every* permitted structure and claimed the enumerator refuses rather than truncating. Measured, a
+tri-antennary tri-sialylated composition exhausts 60,000 and yields nothing, while
+`Hex6HexNAc5NeuAc3` completes at 54,204 trees and returns 11,672 candidates in five bands — so no
+budget makes the space complete, and the old default of 5,000 was turning answerable compositions
+into refusals that blamed glycobiology.
 
 **The class algebra** (`ranking.py`) groups candidates that no feature the platform computes can
 separate. A class is a `frozenset` of candidate keys and a band is a `frozenset` of class ids, so an
@@ -61,7 +70,10 @@ share each position, and it numbers no candidate anywhere.
 
 Behind them: a test suite, and a mutation harness that breaks each guard one at a time and requires a
 test to notice. Both counts are in `README.md` § Checking it, where they are derived rather than
-written down; this file states no live figure of its own, which is item 6.
+written down. **This file states no live TEST, MUTATION or ANCHOR count** — that is the rule
+`tests/test_repository_counts.py` enforces, and it is item 6. It does carry other measured figures,
+candidate counts and corpus sizes among them, and those are checked by
+`tests/test_glycan_served_claims.py` and the ranking suite rather than by that guard.
 
 **The refusals are the deliverable, not an unfinished state.** A platform that says these four
 candidates are indistinguishable and will not guess between them is doing the job it was built for;
@@ -77,7 +89,11 @@ cross sections". **It does not.**
 What the CCS core actually is: 142 matched ions, all from one study
 (`DOI 10.1021/jasms.2c00196`). Eighteen strata, of which only the nine anchored on stepped-field
 DTIMS are ever applied. Its maturity is `provisional` and cannot be anything else while the corpus
-is one study — the maturity is derived from the data's provenance, not declared. The prediction
+is one study. The *scope* stamp is derived from the data's provenance and re-derived by a
+validator, so an interlaboratory claim is unrepresentable; the maturity LEVEL is a declared constant
+(`harmonization.py` returns `DataMaturity.PROVISIONAL` as a literal, under a docstring saying
+"Always provisional while the corpus is one study"). This said the maturity was derived rather than
+declared, which credited the wrong field — a second study would not move it. The prediction
 interval is guaranteed at 80 per cent and not 90, and measured coverage is arithmetically pinned
 so it is not evidence of anything.
 
@@ -118,8 +134,18 @@ deposited structures out of 34.
 
 Also: the curated rules **cannot order a candidate set at all.** Eleven of the fifteen reach
 N-glycan enumeration — nine MGAT rules on branching order and bisecting interference, FUT8 on core
-fucosylation, one class-agnostic blood group rule; the other four are O-glycan core rules — and not
-one of the eleven constrains what the candidates for a single composition differ in.
+fucosylation, one class-agnostic blood group rule; the other four are O-glycan core rules — and
+**not one of the eleven constrains galactosylation type, fucose position, chain extension or
+LacdiNAc**, which is what the candidates for one composition differ in.
+
+That is the served field's wording (`domain.rules_govern`) and it is deliberate. This said "not one
+of the eleven constrains what the candidates for a single composition differ in", which is stronger
+and false: the number of curated rules bearing on a candidate varies — measured over the 167
+`Hex5HexNAc4Fuc1` candidates, 1 rule on 41 of them, 2 on 31, 3 on 50, 4 on 39, 5 on 6 — and FUT8's
+ordering caveat separates 6 candidates from the other 161. Neither quantity is used as a score, and
+`ranking.py` says why in the code: *"a field documented as constant is a field a reader is told not
+to check."* The document was telling a reader not to check a quantity the code publishes per
+candidate.
 Attestation in the reference corpus carries the whole discriminating load, and where the corpus
 attests nothing, a tie is the honest output.
 
@@ -257,8 +283,9 @@ CCS core, verified at `v0.7.0-mvp`, and those over the glycan code written in th
 **The ported glycan tests are not covered by this repository's sweep at all.** They were
 mutation-verified in the repository they came from, and re-covering them here was declined on cost
 with the deadline three days out. `docs/GLYCAN_PORT.md` § 2 lists exactly which fifteen MODULES
-came across, with a digest each; **the ported test files are not listed anywhere**, and the prefix
-`test_glycan_` does not identify them either, because most files carrying it were written here. So a
+came across, with a digest each. **There is no list of the ported TEST files** — four are named in
+passing and the count is stated, but nothing enumerates them, and the prefix `test_glycan_` does not
+identify them either, because most files carrying it were written here. So a
 sentence like "every test in this repository is mutation-verified" would be false, and it is the
 claim most likely to be repeated without its qualifier.
 

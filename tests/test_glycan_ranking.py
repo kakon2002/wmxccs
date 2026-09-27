@@ -605,8 +605,14 @@ def test_a_truncated_candidate_set_says_so(enumerator, index):
     # A capped enumeration was published with a coverage line reading "N reference structures
     # are NOT among the candidates" as though the enumerator had considered and declined them,
     # when it had simply stopped.
-    result = enumerator.enumerate("Hex6HexNAc5Fuc1")
+    # WITNESS CHANGED 28 September 2026. This used Hex6HexNAc5Fuc1, which COMPLETES now: the tree
+    # budget was raised from 5,000 to 60,000 because at 5,000 that composition returned 242 of its
+    # 1,729 candidates, and two tri-antennary sialylated species were refused outright with a
+    # refusal blaming the curated rules. The test's own guard caught the stale witness, which is
+    # why it is written this way round.
+    result = enumerator.enumerate("Hex7HexNAc6Fuc1")
     assert result.capped, "this composition must exceed the tree budget or the test proves nothing"
+    assert result.candidates, "and it must still yield candidates, or this is the refusal path"
     ranked_capped = rank(result, index=index, enumerator=enumerator)
     assert ranked_capped.enumerator_capped is True
     assert any("TRUNCATED" in weakness for weakness in ranked_capped.weaknesses)

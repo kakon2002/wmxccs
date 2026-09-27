@@ -1246,6 +1246,14 @@ def _refused(
             rules_evaluated_by_the_check=0,
             rules_reported_as_ordering_caveats=enumerator.rules_skipped_as_order,
         ),
+        # THE REAL COUNTS, NOT THE DEFAULTS. This path passed none of these, so a refused
+        # composition served enumerator_built=0 and enumerator_truncated=false while 5,000 trees had
+        # been built and the cap had fired - two structured fields a client parses, both false, in
+        # the same response as a refusal that blamed the curated rules. Same shape as
+        # rules_in_scheme=0 on this path, and found the same way.
+        enumerator_built=result.built,
+        enumerator_rejected=result.rejected,
+        enumerator_capped=result.capped,
         ccs_evidence=evidence,
         decision=decision,
         decision_rules=rules,

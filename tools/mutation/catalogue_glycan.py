@@ -190,8 +190,12 @@ GLYCAN_MUTATIONS: tuple[Mutation, ...] = (
         label="[N] a truncated candidate set is published without saying so",
         file="ranking.py",
         package=GLYCAN,
-        find="        enumerator_capped=result.capped,",
-        replace="        enumerator_capped=False,",
+        # LENGTHENED 28 September 2026. `enumerator_capped=result.capped` now appears twice: the
+        # refusal path was made to publish the real counts, because it had been serving built=0 and
+        # truncated=false while the budget had fired. This anchor is the RANKED path - the one that
+        # returns candidates - and the refusal path has its own mutation in section [C].
+        find="        enumerator_capped=result.capped,\n        prior=POLICY_PRIOR,",
+        replace="        enumerator_capped=False,\n        prior=POLICY_PRIOR,",
     ),
     Mutation(
         label="[N] a lookup that raises is reported as an absence of evidence",
@@ -628,5 +632,34 @@ GLYCAN_MUTATIONS: tuple[Mutation, ...] = (
         package=GLYCAN,
         find="            residue.value for residue, count in budget.items() if count and residue not in placeable",
         replace="            residue.value for residue, count in budget.items() if count and False",
+    ),
+    # --- the tree budget: the ninth defect, which was two scalars and a misattributed refusal -----
+    Mutation(
+        label="[C] a budget exhaustion is reported as every arrangement breaking a rule",
+        file="enumeration.py",
+        package=GLYCAN,
+        find='            elif state["capped"]:',
+        replace="            elif False:",
+    ),
+    Mutation(
+        label="[C] a refused composition reports building no trees when it built the budget",
+        file="ranking.py",
+        package=GLYCAN,
+        find="        enumerator_built=result.built,\n        enumerator_rejected=result.rejected,\n        enumerator_capped=result.capped,\n        ccs_evidence=evidence,",
+        replace="        ccs_evidence=evidence,",
+    ),
+    Mutation(
+        label="[C] truncation is reported as not having happened",
+        file="api.py",
+        package=GLYCAN,
+        find='        "enumerator_truncated": result.enumerator_capped,',
+        replace='        "enumerator_truncated": False,',
+    ),
+    Mutation(
+        label="[C] the tree budget goes back to the value that turned answers into refusals",
+        file="enumeration.py",
+        package=GLYCAN,
+        find="DEFAULT_TREE_BUDGET = 60_000",
+        replace="DEFAULT_TREE_BUDGET = 5_000",
     ),
 )

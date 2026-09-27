@@ -149,7 +149,7 @@ def test_the_ported_modules_are_deliberately_not_covered_except_where_this_repo_
     ported_and_covered = covered - written_here()
     assert ported_and_covered == {"enumeration.py"}, ported_and_covered
 
-    # THE EXCEPTION IS NOW THREE LINES, NOT ONE, and each is code written in this repository
+    # THE EXCEPTION IS NOW FIVE MUTATIONS OVER FOUR LINES, NOT ONE, and each is code written in this repository
     # inside a ported file. Listed rather than counted, so adding a fourth is a decision someone
     # records here and not a number that drifts:
     #
@@ -165,10 +165,14 @@ def test_the_ported_modules_are_deliberately_not_covered_except_where_this_repo_
     # what was written here, which is the rule the owner set and not a widening of it.
     gate = [m for m in GLYCAN_MUTATIONS if m.file == "enumeration.py"]
     labels = sorted(m.label for m in gate)
-    assert len(gate) == 3, labels
+    assert len(gate) == 5, labels
     assert any("ordering caveat" in label for label in labels), labels
     assert any("applicability domain" in label for label in labels), labels
     assert any("unplaceable check" in label for label in labels), labels
+    #   the tree budget            - 28 September 2026, DEFAULT_TREE_BUDGET and the exhaustion
+    #                                refusal, added because a budget exhaustion was being reported
+    #                                as every arrangement breaking a biosynthetic rule
+    assert sum(1 for label in labels if "budget" in label) == 2, labels
 
 
 # --- the shadow covers both packages ----------------------------------------------------------------
