@@ -221,8 +221,15 @@ would have caught something. A mutation that survives is a behaviour with no tes
 treated here as a failure rather than as a note. The sweep of `c145eaf` ran 120 mutations and six
 survived, all six in code written that week; six tests were written and each was confirmed to kill
 its mutation before `v0.8.0-mvp` was tagged. `LIMITATIONS.md` section 4.5 records it as instance
-Thirteen, and it is the entry to read if you only read one — a defect was found, fixed, annotated
-with a comment at the site explaining exactly what it had been, and no test was written.
+Thirteen: a defect was found, fixed, annotated with a comment at the site explaining exactly what it
+had been, and no test was written.
+
+**And neither gate catches everything.** Instance Fourteen in the same section is the one to read
+first, because it is the only entry there that no amount of testing would have found — the test and
+the code it guarded were written in the same hour from the same wrong reading, so they agreed with
+each other and not with the function. *A suite checks that the code does what its author believed.
+It does not check the belief.* What found it was an independent reader, which is why that is now
+treated here as a category of tool rather than a nicety.
 
 The sweep refuses a working tree with uncommitted changes. It copies `src/` once at the start and
 reads `tests/` live, so an edit made mid-run changes the suite between one mutation and the next.

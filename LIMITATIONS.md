@@ -286,15 +286,18 @@ by hand should copy.
 
 ### 4.5 THE RECURRING CLASS: a guard that looks tested and is not
 
-Thirteen separate instances in this repository so far, in thirteen different shapes. They
+Fourteen separate instances in this repository so far, in fourteen different shapes. They
 are collected here rather than filed apart, because the shape is the point: in every
 one, the suite was green, the coverage looked complete, and a behaviour nobody was
 actually protecting could have been deleted without a single test going red.
 
-**Instance Thirteen is the one to read first if you only read one.** A defect was found,
-fixed, and annotated with a comment at the site explaining exactly what it had been - and
-no test was written. Nothing in this section is subtler than that, and nothing in it is
-more likely to happen again.
+**Instance Fourteen is the one to read first if you only read one**, because it is the only
+one in this section that no amount of testing would have caught:
+
+> **A suite checks that the code does what its author believed. It does not check the belief.**
+
+Instance Thirteen is the second: a defect was found, fixed, and annotated with a comment at
+the site explaining exactly what it had been - and no test was written.
 
 **One: a guard removed to make a test pass.** `runner.py`'s refusal on a filter that
 matches nothing was replaced with a fallback that runs everything. One test went
@@ -676,6 +679,69 @@ which layer it is bypassing and why doing so is legitimate.
   six were in one week's work, and they were found by a sweep run because the week was ending.
   The suite written alongside new code asserts what the code does; the sweep is what finds what
   nobody broke on purpose.
+
+**Fourteen: A TEST AND THE CODE IT GUARDS, BOTH WRITTEN FROM ONE WRONG BELIEF.** CLOSED
+27 September 2026, at commit `ec391fc`. Not found by the suite, not found by the mutation
+sweep, and neither could have found it.
+
+> **A suite checks that the code does what its author believed. It does not check the belief.**
+
+`Decision` has three values and only `IM_VALIDATION_REQUIRED` is ever served. On 27 September
+the reachability of the other two was moved out of a hand-written tuple in `api.py` and into
+`ranking.decision_reachability()`, which reads the two module-level gates `_decide` reads - a
+real improvement, and the thing it published about `IM_VALIDATION_RECOMMENDED` was false:
+
+    reachable_today     False
+    blocked_by          the completeness gate
+    what_would_reach_it a source that establishes completeness rather than recording depositions
+
+It is not gated at all. Its `return` is a fall-through, and reaching a fall-through means
+silencing every published rule - but the rule `no cross section is held for this structure`
+fires whenever the evidence is not structure-level, which is **the same condition the AI_ONLY
+branch one line above it tests**. So whenever every rule is silent, `AI_ONLY` is returned
+first, and no gate state and no input reaches the value at all. Only a change to the rules
+would.
+
+**WHY NOTHING IN THIS REPOSITORY WAS GOING TO CATCH IT.** The test written beside the
+derivation asserted the same thing the derivation asserted, because the same person wrote
+both in the same hour from the same reading of `_decide`:
+
+```
+monkeypatch.setattr(ranking, "CORPUS_CAN_ESTABLISH_COMPLETENESS", True)
+opened = {one.decision for one in decision_reachability() if one.reachable_today}
+assert Decision.IM_VALIDATION_RECOMMENDED in opened      # passed. And was wrong.
+```
+
+It passed. It would have passed for as long as the derivation and the test continued to agree,
+which is for as long as nobody re-read `_decide`. The 4,163-test suite was green. The mutation
+sweep killed every mutation aimed at that code, because a mutation asks "would a test notice
+this changing" and the answer was yes - the tests noticed changes perfectly well and were
+checking the wrong claim. **Every tool here measures agreement between code and tests, and both
+sides of that agreement came from one belief.**
+
+What found it: an adversarial read by an agent that had not written either, told to check the
+claims against the repository and report only what is false. What settled it: probing `_decide`
+over both gates, three evidence shapes, one and two classes, and refused-or-not - 48
+combinations giving 47 `IM_VALIDATION_REQUIRED`, 1 `AI_ONLY` and **0
+`IM_VALIDATION_RECOMMENDED`**. That probe is now the test, and it calls the decision function
+rather than restating its logic.
+
+- **a test written by the author of the code, in the same sitting, from the same reading, is
+  one claim and not two.** It is still worth writing - most defects are slips rather than
+  misreadings, and a test catches slips. But it is not independent evidence, and treating a
+  green suite as if it were is how this one survived.
+- **where a claim is about what code CAN do, obtain the answer by running it.** The corrected
+  `decision_reachability()` still reasons rather than probes, because a served endpoint should
+  not patch module globals - so the probe lives in the test and the two are COMPARED. Deriving
+  the test from the function is what failed; comparing them is what works.
+- **DISTINGUISH "a gate is shut" FROM "no input can reach this".** They read identically in a
+  response and they are completely different facts: the first is live code behind a fact about
+  the world, the second is a dead branch. `DecisionReachability.unreachable_under_any_gate`
+  exists because collapsing the two is what let the wrong claim sound reasonable.
+- **an independent reader is a category of tool, not a nicety.** Nothing else in this
+  repository - not the suite, not the sweep, not the anchors, not the type checker - can find a
+  defect of this shape, and it took one read to find it. Budget for it before a release rather
+  than after.
 
 ### 4.6 An unstated drift gas keyed records together; an unstated carrier did not
 
