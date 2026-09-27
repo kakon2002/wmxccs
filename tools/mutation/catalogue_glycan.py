@@ -568,4 +568,65 @@ GLYCAN_MUTATIONS: tuple[Mutation, ...] = (
         find="    holds_a_measured_cross_section_for_any_candidate: bool = False",
         replace="    holds_a_measured_cross_section_for_any_candidate: bool = True",
     ),
+    # --- [C] the served CLAIMS: what the platform supports, refuses, and has checked ------------
+    #
+    # Eight served strings were found on 27 September 2026 making claims that were wrong or
+    # overstated, and two of them were PINNED by tests that matched their text. These break the
+    # derivations the corrected strings are built on, so a test must notice by MEASUREMENT.
+    Mutation(
+        label="[C] the applicability domain advertises residues the enumerator cannot place",
+        file="enumeration.py",
+        package=GLYCAN,
+        find="        return frozenset(\n            residue\n            for residue in Residue\n            if any(",
+        replace="        return frozenset(Residue) or frozenset(\n            residue\n            for residue in Residue\n            if any(",
+    ),
+    Mutation(
+        label="[C] a coverage RANGE goes back into the served scope limit",
+        file="prediction.py",
+        package=GLYCAN,
+        find='        "the enumerator misses a large and HIGHLY VARIABLE fraction of the fully-resolved reference"',
+        replace='        "the enumerator misses between a third and four fifths of the fully-resolved reference"',
+    ),
+    Mutation(
+        label="[C] the check claims to have evaluated the whole curated scheme",
+        file="ranking.py",
+        package=GLYCAN,
+        find="        rules_evaluated_by_the_check=working.rules_the_check_evaluates,",
+        replace="        rules_evaluated_by_the_check=len(working.constraints),",
+    ),
+    Mutation(
+        label="[C] a refused composition publishes a scheme size of zero again",
+        file="ranking.py",
+        package=GLYCAN,
+        find="            rules_in_scheme=len(enumerator.constraints),\n            rules_violated=None,",
+        replace="            rules_in_scheme=0,\n            rules_violated=None,",
+    ),
+    Mutation(
+        label="[C] an absent violation count is published as a measured zero",
+        file="ranking.py",
+        package=GLYCAN,
+        find="            rules_violated=None,\n            rules_violated_verified_by_running_the_check=False,",
+        replace="            rules_violated=0,\n            rules_violated_verified_by_running_the_check=False,",
+    ),
+    Mutation(
+        label="[C] the share definition drops the catch-all from the space it describes",
+        file="ranking.py",
+        package=GLYCAN,
+        find='    " structure of this composition that no candidate matches PLUS one catch-all hypothesis for a"',
+        replace='    " structure of this composition that no candidate matches and nothing else, which is a"',
+    ),
+    Mutation(
+        label="[C] the model monitor stops being told why the decision is constant",
+        file="api.py",
+        package=GLYCAN,
+        find='            decision_constant_because=DecisionOut.model_fields[\n                "why_it_is_constant"\n            ].default,',
+        replace='            decision_constant_because="",',
+    ),
+    Mutation(
+        label="[C] the unplaceable check stops reading the advertised domain",
+        file="enumeration.py",
+        package=GLYCAN,
+        find="            residue.value for residue, count in budget.items() if count and residue not in placeable",
+        replace="            residue.value for residue, count in budget.items() if count and False",
+    ),
 )

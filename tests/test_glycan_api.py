@@ -534,15 +534,34 @@ def test_the_current_model_reports_the_pipeline_and_says_no_ccs_model_is_fitted(
     assert "independently known" in body["what_would_calibrate_it"]
 
 
-def test_the_domain_says_what_the_platform_will_not_answer_for(client):
+def test_the_domain_says_what_the_platform_will_not_answer_for(client, shared):
+    """THE SHAPE of the domain block. Its CLAIMS are verified in test_glycan_served_claims.py.
+
+    TWO ASSERTIONS WERE REMOVED FROM HERE ON 27 SEPTEMBER 2026, and they are the reason that file
+    exists. They read:
+
+        assert set(domain["residues_supported"]) == {"Hex", "HexNAc", "Fuc", "NeuAc", "NeuGc"}
+        assert "misses between a third and four fifths" in domain["known_coverage_limit"]
+
+    The first pinned a field that advertised NeuGc, which the enumerator refuses every composition
+    for. The second pinned a range that 76 of 145 measured compositions fall outside. Both passed
+    because they compared the served string to a copy of itself: a test that matches text can only
+    notice that someone changed it, never that it is false. They are replaced by measurements -
+    `test_every_residue_the_domain_advertises_can_actually_be_placed` submits a composition needing
+    each residue, and the coverage figures are recomputed from the index.
+    """
     domain = client.get("/v1/models/current").json()["domain"]
     assert domain["glycan_class"] == "N-linked"
     assert domain["predicts_ccs"] is False
     assert "complete branched Man3GlcNAc2 core" in domain["builds_on"]
     assert "mammalian" in domain["species_assumption"]
-    assert set(domain["residues_supported"]) == {"Hex", "HexNAc", "Fuc", "NeuAc", "NeuGc"}
-    assert domain["biosynthetic_rules"] == 15
-    assert "misses between a third and four fifths" in domain["known_coverage_limit"]
+    # DERIVED, not listed: what the enumerator can place is what the domain must advertise.
+    assert set(domain["residues_supported"]) == {
+        residue.value for residue in shared["enumerator"].placeable_residues
+    }
+    assert domain["biosynthetic_rules"] == len(shared["enumerator"].constraints)
+    # The block must still carry a coverage statement; what it says is checked by measurement.
+    assert domain["known_coverage_limit"]
 
 
 def test_the_reachable_decisions_are_reported_as_one(client):

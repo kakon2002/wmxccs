@@ -278,12 +278,20 @@ class DecisionOut(BaseModel):
     rules: tuple[DecisionRuleOut, ...]
     constant_today: bool = True
     why_it_is_constant: str = (
-        "Two of the rules below fire on every possible input, so IM_VALIDATION_REQUIRED is the"
-        " only reachable value: no validated model exists, and the completeness of a candidate"
-        " set cannot be established from a corpus that records depositions rather than existence."
-        " This is not a defect to be fixed. What would move it is a model validated against"
-        " independently known structures, and a cross section that resolves to one structure"
-        " rather than to a composition and an ion."
+        "TWO of the rules below fire on every possible input whatever the data or configuration,"
+        " so IM_VALIDATION_REQUIRED is the only reachable value: no validated model exists, and the"
+        " completeness of a candidate set cannot be established from a corpus that records"
+        " depositions rather than existence. A THIRD - no cross section is held for this structure -"
+        " fires for every input in THIS RELEASE, because no measurement in the corpus resolves to a"
+        " structure; that one is a fact about the data rather than a gate, which is why it is"
+        " counted separately. So a response typically shows three or four of the five firing."
+        " This is not a defect to be fixed. What would move it is ALL THREE of: a way to"
+        " establish that a candidate set is COMPLETE, which no corpus of depositions can provide;"
+        " a model validated against independently known structures; and a cross section that"
+        " resolves to one structure rather than to a composition and an ion. This field listed only"
+        " the last two until 27 September 2026, dropping the completeness blocker it had just named"
+        " - and neither of the two satisfies it, so a caller planning work off the old wording would"
+        " have funded both and seen the field not move."
     )
 
 
@@ -292,8 +300,26 @@ class RuleAccountingOut(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    rules_in_scheme: int
-    rules_violated: int
+    rules_in_scheme: int = Field(
+        description="The size of the curated table, which does not depend on this request having"
+        " produced candidates. It was served as 0 on the refusal path until 27 September 2026."
+    )
+    rules_violated: int | None = Field(
+        description="NULL means the check was not run - the refusal path has no candidates to run"
+        " it over. 0 means it ran and found none. A required int could only say 0, which reads as"
+        " the second when it meant the first."
+    )
+    rules_evaluated_by_the_check: int = Field(
+        default=0,
+        description="How many of `rules_in_scheme` the violation check actually consulted. Fewer:"
+        " O-glycan rows never reach N-glycan enumeration, and order rules are reported as caveats"
+        " rather than evaluated as violations. Derived from the list the check walks.",
+    )
+    rules_reported_as_ordering_caveats: int = Field(
+        default=0,
+        description="Curated rules that travel with a candidate as a caveat instead of excluding"
+        " it, so they are never counted in `rules_violated`.",
+    )
     verified_by_running_the_check: bool
     rules_applicable_range: tuple[int, ...] = Field(
         default=(),
@@ -559,10 +585,31 @@ class DomainOut(BaseModel):
     glycan_class: str = "N-linked"
     builds_on: str = (
         "the complete branched Man3GlcNAc2 core. A truncated core cannot be represented, so"
-        " paucimannose species, endoglycosidase products keeping one core GlcNAc, and"
-        " degradation products are out of reach BY CONSTRUCTION rather than by rule"
+        " TRUNCATED paucimannosidic species (Man1-2GlcNAc2), endoglycosidase products keeping one"
+        " core GlcNAc, and degradation products are out of reach BY CONSTRUCTION rather than by"
+        " rule. Man3GlcNAc2 and Man3GlcNAc2Fuc1 ARE enumerated - one candidate each - and both are"
+        " paucimannosidic under the usual Man1-3GlcNAc2 definition, so the limit is the truncated"
+        " core and not the word. (This field said 'paucimannose species' without the qualifier"
+        " until 27 September 2026, which was false for those two.)"
     )
-    residues_supported: tuple[str, ...] = ()
+    residues_supported: tuple[str, ...] = Field(
+        default=(),
+        description="Residues the enumerator can actually ATTACH, derived from"
+        " `Enumerator.placeable_residues` - the same set `enumerate` refuses a composition for"
+        " needing anything outside. Until 27 September 2026 this was the composition PARSER's"
+        " alphabet, which includes NeuGc: the field advertised a residue every request containing"
+        " it was refused for.",
+    )
+    residues_recognised_but_not_placeable: tuple[str, ...] = Field(
+        default=(),
+        description="Residues a composition may legally CONTAIN and the enumerator cannot place, so"
+        " a composition needing one is refused rather than answered. Derived, not listed.",
+    )
+    residues_not_placeable_because: str = (
+        "no site in the kept placement vocabulary attaches them, because no enzyme in the curated"
+        " glycoenzyme table licenses one. A composition needing one is refused with that reason"
+        " rather than answered with a shorter candidate list"
+    )
     biosynthetic_rules: int = Field(
         default=0,
         description="The SIZE OF THE CURATED TABLE the enumerator loads, which is 15. Eleven of"
@@ -603,10 +650,16 @@ class DomainOut(BaseModel):
         " measurement resolving to one structure rather than to a composition and an ion"
     )
     known_coverage_limit: str = (
-        "the enumerator misses between a third and four fifths of the fully-resolved reference"
-        " structures of a given composition - 17 of 34 for Hex5HexNAc4Fuc1, 22 of 28 for"
-        " Hex5HexNAc2. Diagnosed: the mammalian scope, structures the curated rules deliberately"
-        " reject, and five monolinks the placement vocabulary cannot make"
+        "the enumerator misses a large and HIGHLY VARIABLE fraction of the fully-resolved reference"
+        " structures of a given composition: 17 of 34 for Hex5HexNAc4Fuc1 and 22 of 28 for"
+        " Hex5HexNAc2, but 0 of 6 for Hex3HexNAc6Fuc2 and 3 of 3 - all of them - for Hex9HexNAc4."
+        " NO RANGE IS QUOTED HERE ON PURPOSE. This field said 'between a third and four fifths'"
+        " until 27 September 2026, and measured over the 145 compositions holding at least three"
+        " reference structures that enumerate, 76 of them fell outside that range. Use the"
+        " per-composition figures in `coverage` (reference_structures, attested_by_a_candidate,"
+        " not_enumerated), which are computed for the composition you asked about. Diagnosed: the"
+        " mammalian scope, structures the curated rules deliberately reject, and monolinks the"
+        " placement vocabulary cannot make"
     )
 
 
@@ -616,6 +669,13 @@ class CurrentModelResponse(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     stamp: ModelStamp
+    decision_constant_because: str = Field(
+        default="",
+        description="Why the decision field has one reachable value, in the same words the"
+        " prediction response uses. Served here so the dashboard's Model Monitor reads it rather"
+        " than hardcoding a sentence - it hardcoded 'Two rules fire on every possible input',"
+        " which undercounted what a caller sees firing.",
+    )
     ccs_model_fitted: bool = False
     ccs_model_note: str = (
         "There is no fitted glycan CCS model. The fingerprint above is of a DETERMINISTIC"

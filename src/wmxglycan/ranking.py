@@ -76,10 +76,14 @@ NOT a probability that a candidate is correct, and three separate things stop it
 being one:
 
 1. THE HYPOTHESIS SPACE IS NOT THE CANDIDATE SET. Normalising over the candidates
-   alone asserts the answer is among them, and that is measured false between a
-   third and four fifths of the time: 17 of 34 fully-resolved reference
+   alone asserts the answer is among them, and that is measured false for a large
+   and HIGHLY VARIABLE fraction of compositions: 17 of 34 fully-resolved reference
    structures of Hex5HexNAc4Fuc1 are not among the 167 candidates, and 22 of 28
-   for Hex5HexNAc2. So every reference structure of the composition that no
+   for Hex5HexNAc2 - but 0 of 6 for Hex3HexNAc6Fuc2 and 3 of 3 for Hex9HexNAc4.
+   (This said "between a third and four fifths" until 27 September 2026; measured
+   over the 145 compositions with at least three reference structures that
+   enumerate, 76 fell outside that range. No range is quoted now, here or in the
+   served field, because a summary statistic nothing checks is how it went wrong.) So every reference structure of the composition that no
    candidate matches is carried as its own hypothesis, and the share of the mass
    sitting on them is reported as `share_not_enumerated`. For Hex5HexNAc2 that is
    about four fifths, which is the honest headline for that composition.
@@ -166,7 +170,11 @@ POLICY_PRIOR = "uniform_1"
 SHARE_MEANS = (
     "evidence_share is the share of a weighted hypothesis space held by this indistinguishable"
     " class, where the space is every candidate class PLUS every fully-resolved reference"
-    " structure of this composition that no candidate matches, and the weight is the number of"
+    " structure of this composition that no candidate matches PLUS one catch-all hypothesis for a"
+    " structure neither proposed here nor deposited anywhere - THREE groups, which is what the"
+    " denominator actually counts (space = classes + missing + 1). This definition named only the"
+    " first two until 27 September 2026, so a caller reproducing the number from it used a"
+    " denominator one smaller than the served one. The weight is the number of"
     " distinct reference structures attesting it plus a declared prior pseudocount. THE EVENT IT"
     " DESCRIBES IS A LITERATURE DEPOSITION, NOT A MOLECULE IN YOUR SAMPLE: SugarBase records that"
     " a structure has been reported, with no abundance, no tissue and for most rows no species."
@@ -432,8 +440,18 @@ class RuleAccounting:
     rules_in_scheme: int
     # VERIFIED, not assumed: computed by running the rule check over every candidate rather
     # than trusting that the enumerator rejected the violators.
-    rules_violated: int
+    #
+    # None means ABSENT, not zero. The refusal path has no candidates to run the check over, and
+    # publishing 0 there read as "checked, and nothing was violated". A required int cannot say
+    # "absent", so this is optional and the refusal path leaves it None.
+    rules_violated: int | None
     rules_violated_verified_by_running_the_check: bool = True
+    # HOW MANY RULES THE CHECK ACTUALLY EVALUATED, which is not the scheme size. Four of the fifteen
+    # are O-glycan core rules that never reach N-glycan enumeration, and four are order rules that
+    # `_broken_rules` skips and reports as caveats instead - so a "0 violated" verified across
+    # fifteen was an overstatement by eight. Reported rather than implied.
+    rules_evaluated_by_the_check: int = 0
+    rules_reported_as_ordering_caveats: int = 0
     # canonical key -> how many curated rules actually bear on that candidate. Varies.
     rules_applicable: Mapping[str, int] = field(default_factory=dict)
     ordering_caveats: Mapping[str, int] = field(default_factory=dict)
@@ -445,13 +463,19 @@ class RuleAccounting:
     def summary(self) -> str:
         if not self.rules_violated_verified_by_running_the_check:
             return (
-                "the rule check was NOT run: there were no candidates to run it over, so these"
-                " counts are absent rather than zero"
+                f"{self.rules_in_scheme} curated rules in the scheme, and the check was NOT RUN:"
+                " there were no candidates to run it over, so the violated count is absent (null)"
+                " rather than zero. The scheme size does not depend on there being candidates"
             )
         counts = sorted(set(self.rules_applicable.values()))
+        caveated = sum(1 for value in self.ordering_caveats.values() if value)
         return (
-            f"{self.rules_in_scheme} curated rules in the scheme; {self.rules_violated} violated"
-            f" (verified by running the check, not inferred); rules bearing on a candidate:"
+            f"{self.rules_in_scheme} curated rules in the scheme, of which"
+            f" {self.rules_evaluated_by_the_check} were EVALUATED by the violation check;"
+            f" {self.rules_violated} of those violated (verified by running the check, not"
+            f" inferred). {self.rules_reported_as_ordering_caveats} order rule(s) are not evaluated"
+            f" as violations at all: they are reported as caveats, and"
+            f" {caveated} candidate(s) here carry one. Rules bearing on a candidate:"
             f" {counts or [0]}"
             + ("  <- VARIES, and is deliberately not a score" if self.applicable_varies else "")
         )
@@ -733,6 +757,9 @@ def rank(
     """
     index = default_attestation_index() if index is None else index
     composition_text = result.composition.canonical
+    # RESOLVED BEFORE THE REFUSAL BRANCH, because the refusal publishes the curated scheme size and
+    # that is a fact about the table rather than about this request. It used to publish 0 there.
+    working = enumerator if enumerator is not None else Enumerator()
 
     evidence = _ccs_evidence(result.composition, ccs, adduct, charge)
 
@@ -745,6 +772,7 @@ def rank(
             ),
             evidence,
             index,
+            working,
         )
 
     # --- the classes, and the evidence pooled to them ---------------------------------------------
@@ -954,8 +982,8 @@ def _unattested_mass(by_count: Mapping[int, float | None], counts: Sequence[int]
 def _rule_accounting(
     candidates: Iterable[GlycanCandidate], enumerator: Enumerator | None
 ) -> RuleAccounting:
-    candidates = tuple(candidates)
     working = enumerator if enumerator is not None else Enumerator()
+    candidates = tuple(candidates)
     violated = 0
     applicable: dict[str, int] = {}
     caveats: dict[str, int] = {}
@@ -972,6 +1000,8 @@ def _rule_accounting(
         )
     return RuleAccounting(
         rules_in_scheme=len(working.constraints),
+        rules_evaluated_by_the_check=working.rules_the_check_evaluates,
+        rules_reported_as_ordering_caveats=working.rules_skipped_as_order,
         rules_violated=violated,
         rules_applicable=applicable,
         ordering_caveats=caveats,
@@ -1167,7 +1197,10 @@ def _refused(
     reason: str,
     evidence: CCSEvidence,
     index: AttestationIndex,
+    enumerator: "Enumerator",
 ) -> RankedSet:
+    # THE ENUMERATOR IS PASSED so the refusal can publish the real scheme size. It used to publish
+    # rules_in_scheme=0, which is a claim about the curated table and not about this request.
     # THE INDEX IS CONSULTED. The first version hardcoded an UNEVALUABLE coverage with
     # reference_structures=0, so a composition the enumerator declines was reported as one the
     # corpus knows nothing about. 49 of the 687 indexed compositions fail the enumerator's
@@ -1201,10 +1234,17 @@ def _refused(
         # its default True, so a response read "0 curated rules in the scheme; 0 violated
         # (verified by running the check)" when nothing had been checked and the scheme holds
         # fifteen. There were no candidates to run the check over, so the counts are ABSENT.
+        # CORRECTED 27 September 2026. This published rules_in_scheme=0 while the comment above
+        # said the scheme holds fifteen and the same deployment served 15 at /v1/models/current. The
+        # scheme size does not depend on whether there were candidates, so it is the real size; what
+        # is genuinely absent is the VIOLATED count, and `None` is how a response says absent. A
+        # required int could only say 0, which reads as "checked, and nothing was violated".
         rule_accounting=RuleAccounting(
-            rules_in_scheme=0,
-            rules_violated=0,
+            rules_in_scheme=len(enumerator.constraints),
+            rules_violated=None,
             rules_violated_verified_by_running_the_check=False,
+            rules_evaluated_by_the_check=0,
+            rules_reported_as_ordering_caveats=enumerator.rules_skipped_as_order,
         ),
         ccs_evidence=evidence,
         decision=decision,

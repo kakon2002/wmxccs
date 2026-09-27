@@ -274,6 +274,10 @@ def _render(
         "rules": RuleAccountingOut(
             rules_in_scheme=result.rule_accounting.rules_in_scheme,
             rules_violated=result.rule_accounting.rules_violated,
+            rules_evaluated_by_the_check=result.rule_accounting.rules_evaluated_by_the_check,
+            rules_reported_as_ordering_caveats=(
+                result.rule_accounting.rules_reported_as_ordering_caveats
+            ),
             verified_by_running_the_check=(
                 result.rule_accounting.rules_violated_verified_by_running_the_check
             ),
@@ -800,6 +804,11 @@ def create_app(
 
         return CurrentModelResponse(
             stamp=stamp(request),
+            # THE SAME WORDS the prediction response uses, from the model default, so the page and
+            # the prediction cannot disagree and the page need not hardcode a count.
+            decision_constant_because=DecisionOut.model_fields[
+                "why_it_is_constant"
+            ].default,
             calibration=Calibration.NEVER_CALIBRATED,
             what_would_calibrate_it=(
                 "a set of compositions whose true structure is independently known, enumerated"
@@ -821,7 +830,19 @@ def create_app(
                 if not one.reachable_today
             },
             domain=DomainOut(
-                residues_supported=tuple(residue.value for residue in Residue),
+                # FROM THE ENUMERATOR, not from the composition parser's alphabet. The two differ by
+                # NeuGc, and serving the parser's alphabet here advertised a residue every request
+                # containing it is refused for.
+                residues_supported=tuple(
+                    sorted(residue.value for residue in enumerator.placeable_residues)
+                ),
+                residues_recognised_but_not_placeable=tuple(
+                    sorted(
+                        residue.value
+                        for residue in Residue
+                        if residue not in enumerator.placeable_residues
+                    )
+                ),
                 biosynthetic_rules=len(enumerator.constraints),
             ),
             predictions_frozen=len(store.predictions(limit=1_000_000)),

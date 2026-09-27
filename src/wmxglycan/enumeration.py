@@ -14,15 +14,24 @@ what is possible, and both ship with glycowork:
 What this enumerator does not do, stated plainly:
 
 - It builds on the complete branched Man3GlcNAc2 core and cannot represent a
-  truncated one, so paucimannose and degradation species are outside its reach
-  by construction rather than by rule. This is a stated scope limit for an
+  truncated one, so TRUNCATED paucimannosidic species (Man1-2GlcNAc2) and
+  degradation species are outside its reach by construction rather than by rule.
+  Man3GlcNAc2 and Man3GlcNAc2Fuc1 DO enumerate - one candidate each - and both
+  are paucimannosidic under the usual Man1-3GlcNAc2 definition, so the limit is
+  the truncated core and not the word. This is a stated scope limit for an
   antibody platform, where paucimannose is rare on the Fc: 421 of the 4,001
   fully resolved reference structures lack a complete core, so no coverage
   figure above 89.5 per cent is reachable without changing the design.
 
-- The curated rules govern branching order and bisecting interference only.
-  Nothing in them constrains galactosylation type, fucose position, chain
-  extension or LacdiNAc, so the antenna space is unconstrained. The 167
+- Of the fifteen curated rules, ELEVEN reach N-glycan enumeration: nine MGAT
+  rules governing branching order and bisecting interference, FUT8 on core
+  fucosylation, and one class-agnostic blood group rule. The other four are
+  O-glycan core rules and are filtered out before enumeration. (This paragraph
+  said "the curated rules govern branching order and bisecting interference
+  only" until 27 September 2026 - the sixth copy of that sentence, and the one a
+  search for "15 curated rules" could not find, because it states the claim with
+  no number in it.) Nothing in the eleven constrains galactosylation type, fucose
+  position, chain extension or LacdiNAc, so the antenna space is unconstrained. The 167
   candidates for Hex5HexNAc4Fuc1 are what an unbounded elaboration vocabulary
   produces; the figure is not tuned to any expectation. Excluding type-1 LacNAc
   and poly-LacNAc would bring it to 39, but no curated rule licenses that
@@ -279,6 +288,30 @@ class Enumerator:
         self.dropped_sites = tuple(dropped)
         return kept
 
+    @property
+    def placeable_residues(self) -> frozenset[Residue]:
+        """The residues this enumerator can actually attach, read off the site vocabulary.
+
+        THE APPLICABILITY DOMAIN, and the single source for it. `enumerate` refuses a composition
+        needing anything outside this set, and `api.py` serves it as `residues_supported`, so the
+        advertised domain and the refusal are the same fact. Deriving it also means that adding a
+        site for a residue makes it supported in both places at once rather than in one of them.
+
+        NeuGc is in the composition parser's alphabet and is NOT in here: no site in the kept
+        vocabulary attaches it, because no enzyme in the curated table licenses one. Until
+        27 September 2026 `residues_supported` was filled from the parser's alphabet, so the
+        response advertised NeuGc while `enumerate` refused every composition containing it.
+        """
+        return frozenset(
+            residue
+            for residue in Residue
+            if any(
+                RESIDUE_CLASS.get(site.residue) is residue
+                for options in self.sites.values()
+                for site in options
+            )
+        )
+
     def enumerate(self, composition: Composition | str, limit: int = 5000) -> EnumerationResult:
         """Every candidate for `composition`, deduplicated on canonical structure identity."""
         composition = composition if isinstance(composition, Composition) else Composition.parse(composition)
@@ -293,12 +326,13 @@ class Enumerator:
             Residue.NEUAC: composition.neuac,
             Residue.NEUGC: composition.neugc,
         }
+        # DERIVED FROM `placeable_residues`, which is also what the API serves as the
+        # applicability domain. Until 27 September 2026 this expression was inline here and the
+        # served field was filled from the composition parser's alphabet instead, so the response
+        # advertised NeuGc while this check refused every composition containing it.
+        placeable = self.placeable_residues
         unplaceable = [
-            residue.value
-            for residue, count in budget.items()
-            if count and not any(
-                RESIDUE_CLASS.get(site.residue) is residue for options in self.sites.values() for site in options
-            )
+            residue.value for residue, count in budget.items() if count and residue not in placeable
         ]
         if unplaceable:
             return EnumerationResult(
@@ -391,6 +425,26 @@ class Enumerator:
         one is the sort that stays true right up until it does not.
         """
         return self._broken_rules(graph)
+
+    @property
+    def rules_the_check_evaluates(self) -> int:
+        """How many curated rules `_broken_rules` actually consults.
+
+        NOT the scheme size, and not the N-linked subset either: order rules cannot exclude a
+        finished structure, so `_broken_rules` skips them and they are reported as caveats instead.
+        Derived from the same list that method walks, and by the same predicate, so a response
+        saying "N evaluated" cannot disagree with what was evaluated.
+
+        The response used to assert "0 violated, verified" beside the SCHEME size, which overstated
+        the check by eight rules - four O-glycan rows that never reach N-glycan enumeration and four
+        order rules that are never evaluated as violations at all.
+        """
+        return sum(1 for rule, _product, _contexts in self._rules if not is_order_constraint(rule))
+
+    @property
+    def rules_skipped_as_order(self) -> int:
+        """Curated rules reported as ordering caveats rather than evaluated as violations."""
+        return sum(1 for rule, _product, _contexts in self._rules if is_order_constraint(rule))
 
     def _broken_rules(self, graph: GlycanGraph) -> tuple[str, ...]:
         """Every curated rule this structure breaks, in words. Empty if it breaks none.

@@ -53,7 +53,8 @@ So attestation carries the whole discriminating load, and it is thin:
   fully-resolved reference structures of that composition are not among the 167
   candidates; for Hex5HexNAc2 it is 22 of 28. Any number normalised over the
   candidate set alone would assert the truth is in the set, which is measured
-  false between a third and four fifths of the time.
+  false for a large and highly variable fraction of compositions: 0 to 100 per cent across those
+  holding at least three reference structures, so no range is quoted.
 
 WHY AN EMPTY INDEX IS REFUSED RATHER THAN RETURNED
 

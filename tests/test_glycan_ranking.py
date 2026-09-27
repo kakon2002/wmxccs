@@ -398,7 +398,7 @@ def test_coverage_is_unevaluable_when_the_corpus_holds_nothing_for_the_compositi
 
 def test_nothing_sums_to_one_over_the_candidate_set_alone(ranked):
     # Normalising over the candidates asserts the answer is among them, which is measured false
-    # between a third and four fifths of the time. Two reserved masses make the shares honest:
+    # for a large and highly variable fraction of compositions. Two reserved masses make the shares honest:
     # the reference structures no candidate matches, and the catch-all for a structure nobody
     # proposed at all.
     for composition in (G0F, G1F, G2F):

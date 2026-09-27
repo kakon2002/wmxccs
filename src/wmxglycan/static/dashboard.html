@@ -521,7 +521,10 @@ async function loadModel(){
       + '<p class="footer-note">' + esc(m.what_would_calibrate_it) + "</p></div>"
       + '<div class="card"><h2>Applicability domain</h2><dl class="kv">'
       + kv("Glycan class", d.glycan_class) + kv("Residues", d.residues_supported.join(", "))
-      + kv("Curated rules", d.biosynthetic_rules) + kv("Predicts CCS", d.predicts_ccs ? "yes" : "no")
+      + kv("Curated rules (scheme size; fewer reach N-glycan enumeration &mdash; see below)", d.biosynthetic_rules)
+      + kv("Residues the enumerator can place", (d.residues_supported || []).join(", "))
+      + kv("Recognised but NOT placeable", (d.residues_recognised_but_not_placeable || []).join(", ") || "none")
+      + kv("Predicts CCS", d.predicts_ccs ? "yes" : "no")
       + "</dl><div class=\"section-label\">Builds on</div><p class=\"why\">" + esc(d.builds_on) + "</p>"
       + '<div class="section-label">What the rules govern</div><p class="why">' + esc(d.rules_govern) + "</p>"
       + '<div class="section-label">Species assumption</div><p class="why">' + esc(d.species_assumption) + "</p>"
@@ -540,7 +543,10 @@ async function loadModel(){
             + "is derived from those gates rather than written by hand &mdash; so a gate that opens changes this "
             + "page.</p>"
           : "")
-      + '<div class="status" style="margin-top:12px"><b>One reachable value is the true state, not a broken field.</b><br>Two rules fire on every possible input: no validated model exists, and the completeness of a candidate set cannot be established from a corpus that records depositions rather than existence.</div></div>'
+      // FROM THE RESPONSE, not hardcoded. This sentence said "Two rules fire on every possible
+      // input" - three do in this release, and the page rendered a "4 of 5 rules fire" pill two
+      // cards away. The API already serves the authoritative wording.
+      + '<div class="status" style="margin-top:12px"><b>One reachable value is the true state, not a broken field.</b><br>' + esc(m.decision_constant_because || "See the decision card on a prediction: the rules that fire on every input are published there with what each applies to.") + "</div></div>"
       + stampCard(m.stamp) + "</div></div>";
   } catch (error) {
     $("monitorBody").innerHTML = '<div class="err">' + esc(error.message) + "</div>";

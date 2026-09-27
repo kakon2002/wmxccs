@@ -148,9 +148,27 @@ def test_the_ported_modules_are_deliberately_not_covered_except_where_this_repo_
     covered = {mutation.file for mutation in GLYCAN_MUTATIONS}
     ported_and_covered = covered - written_here()
     assert ported_and_covered == {"enumeration.py"}, ported_and_covered
+
+    # THE EXCEPTION IS NOW THREE LINES, NOT ONE, and each is code written in this repository
+    # inside a ported file. Listed rather than counted, so adding a fourth is a decision someone
+    # records here and not a number that drifts:
+    #
+    #   the ordering-note context gate   - 26 September 2026, the port's one adapted line
+    #   placeable_residues              - 27 September 2026, the applicability domain, added
+    #                                     because `residues_supported` was served from the
+    #                                     composition parser's alphabet and advertised NeuGc,
+    #                                     which the enumerator refuses every composition for
+    #   the unplaceable check            - the same day, made to READ placeable_residues so the
+    #                                     advertised domain and the refusal are one fact
+    #
+    # The ported BEHAVIOUR of this module is still deliberately uncovered; what is covered is
+    # what was written here, which is the rule the owner set and not a widening of it.
     gate = [m for m in GLYCAN_MUTATIONS if m.file == "enumeration.py"]
-    assert len(gate) == 1
-    assert "ordering caveat" in gate[0].label
+    labels = sorted(m.label for m in gate)
+    assert len(gate) == 3, labels
+    assert any("ordering caveat" in label for label in labels), labels
+    assert any("applicability domain" in label for label in labels), labels
+    assert any("unplaceable check" in label for label in labels), labels
 
 
 # --- the shadow covers both packages ----------------------------------------------------------------

@@ -159,8 +159,14 @@ Two limits fall straight out of the first table and both are load-bearing:
    literature database is not evidence of absence, so a score that assigns them zero asserts
    something the data does not support. See § 4 on the weight they get and why it is a declared
    policy rather than a derived fact.
-2. **The enumerator misses between a third and four fifths of the attested structures of a
-   composition, and it is DIAGNOSED rather than open.** For `Hex5HexNAc4Fuc1`, 17 of the 34
+2. **The enumerator misses a large and HIGHLY VARIABLE fraction of the attested structures of a
+   composition, and it is DIAGNOSED rather than open.** (This said "between a third and four
+   fifths" until 27 September 2026. Measured over the 145 compositions holding at least three
+   fully-resolved reference structures that enumerate at all, the miss fraction runs from 0 per
+   cent (Hex3HexNAc6Fuc2, 0 of 6) to 100 per cent (Hex9HexNAc4, 3 of 3), median 69 per cent, with
+   26 below a third and 50 above four fifths - 76 of 145 outside the range that was published. No
+   range is quoted now, here or in the served field, and a test verifies the four figures that are
+   quoted rather than matching the sentence.) For `Hex5HexNAc4Fuc1`, 17 of the 34
    fully-resolved reference structures of that composition are not among its 167 candidates; for
    `Hex5HexNAc2` it is 22 of 28. **This was new in this repository and was not measured in
    `Project2`.**
@@ -233,8 +239,7 @@ correct**, and it is graded as such. The distinction is the same one
 confidence grades are rules and have never been calibrated".
 
 **It is not normalised over the candidate set.** Normalising over the candidates alone asserts
-the answer is among them, and § 3 measures that false between a third and four fifths of the
-time. The hypothesis space is therefore every candidate class PLUS every fully-resolved
+the answer is among them, and § 3 measures that false for a large and highly variable fraction of compositions. The hypothesis space is therefore every candidate class PLUS every fully-resolved
 reference structure of the composition that no candidate matches, and the share sitting on that
 second group is reported. For `Hex5HexNAc2` it is **77.2%**, which is the honest headline for
 that composition: over three quarters of the evidence is on structures the platform did not
