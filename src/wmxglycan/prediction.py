@@ -563,11 +563,21 @@ class DomainOut(BaseModel):
         " degradation products are out of reach BY CONSTRUCTION rather than by rule"
     )
     residues_supported: tuple[str, ...] = ()
-    biosynthetic_rules: int = 0
+    biosynthetic_rules: int = Field(
+        default=0,
+        description="The SIZE OF THE CURATED TABLE the enumerator loads, which is 15. Eleven of"
+        " those reach N-glycan enumeration and four never do, so this is the scheme size and NOT"
+        " the number of rules that can bear on a candidate. See `rules_govern`.",
+    )
     rules_govern: str = (
-        "MGAT branching order and bisecting interference, and nothing else. Not one of them"
-        " constrains galactosylation type, fucose position, chain extension or LacdiNAc - which"
-        " is what the candidates for one composition differ in"
+        "ELEVEN of the 15 curated rules reach N-glycan enumeration: nine MGAT rules on branching"
+        " order and bisecting interference, FUT8 on core fucosylation, and one class-agnostic blood"
+        " group rule. The other four are O-glycan core rules and never apply here. NOT ONE of the"
+        " eleven constrains galactosylation type, fucose position, chain extension or LacdiNAc -"
+        " which is what the candidates for one composition differ in, and is why the curated rules"
+        " cannot order a candidate set. (This field said all fifteen govern MGAT branching and"
+        " bisecting until 27 September 2026. It was the last of five copies of that sentence and"
+        " the only one served over HTTP.)"
     )
     species_assumption: str = (
         "mammalian. Insect and plant N-glycans carrying a core alpha1,3-fucose are outside it,"

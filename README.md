@@ -115,8 +115,9 @@ Both are in `LIMITATIONS.md` section 7E, with what each one still needs.
 ## Status of the glycan layer: enumerated, banded, served, and not fitted
 
 Nothing in the section above carries across the wall. `src/wmxglycan` has a candidate enumerator
-working under 15 curated mammalian rules, an attestation index over **3,640 distinct reference
-structures** deduplicated from 4,001 rows, a ranker that bands candidates and refuses to order
+working under the curated mammalian rules — the table holds 15 and **11 of them reach N-glycan
+enumeration**, the other four being O-glycan core rules — an attestation index over **3,640 distinct
+reference structures** deduplicated from 4,001 rows, a ranker that bands candidates and refuses to order
 what nothing separates, six endpoints, a store in which a frozen prediction cannot be rewritten,
 and a dashboard wired to all six.
 
